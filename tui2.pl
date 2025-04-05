@@ -7,6 +7,7 @@
 :- use_module(local(core/core)).
 :- use_module(library(ansi_term)).
 :- use_module(library(ansi_termx)).
+:- use_module(local(core/domain)).
 
 
 :- op(601, xfy, '.>').
@@ -236,12 +237,10 @@ render_commands(Drawables, Deduped) :-
     keylist_deduped_prioritize_last(Commands, Deduped).
 
 render(Drawables, EventMap) :-
-    cursor_save,
     render_commands(Drawables, Commands),
     commands_end(Commands, X-Y),
     % my_clear_screen,
-    render_commands_eventmap(Commands, EventMap), !,
-    cursor_unsave.
+    render_commands_eventmap(Commands, EventMap), !.
 
 onscreen(X-Y) :-
     X > 0,
@@ -292,6 +291,7 @@ char_from_to_line(C, X-Y1, X-Y2, [(X-Y1)-C|L]) :-
     Next is Y1 + 1,
     char_from_to_line(C, X-Next, X-Y2, L).
 
+
 :- discontiguous style_corner_char/3.
 :- discontiguous style_horizontal/2.
 :- discontiguous style_vertical/2.
@@ -303,12 +303,12 @@ style_corner_char(thick, br, '\u251b').
 style_horizontal(thick, '\u2501').
 style_vertical(thick, '\u2503').
 
-style_corner_char(thin, tl, '\u250c').
-style_corner_char(thin, bl, '\u2514').
-style_corner_char(thin, tr, '\u2510').
-style_corner_char(thin, br, '\u2518').
+style_corner_char(thin, tl,  '\u250c').
+style_corner_char(thin, bl,  '\u2514').
+style_corner_char(thin, tr,  '\u2510').
+style_corner_char(thin, br,  '\u2518').
 style_horizontal(thin, '\u2500').
-style_vertical(thin, '\u2502').
+style_vertical(thin,   '\u2502').
 
 
 style_corner_char(double, tl, '\u2554').
@@ -368,21 +368,26 @@ alias_drawable(box(W0-H0, Style), [Top, Bottom, Left, Right, Corners]) :-
     char_from_to_line(Vrt, W-1,  W-HM, Right).
 
 
-alias_drawable(frame(W-H, Style, Contents), [Clear, Box, Port]) :-
-  Box = box(W-H, Style),
+alias_drawable(frame(W-H, Contents), [Clear, Box, Port]) :-
+  Box = box(W-H, thin),
   PW is W - 2,
   PH is H - 2,
   Clear = 1-1-clear(PW-PH),
   Port =  1-1-port(PW-PH, Contents).
 
-alias_drawable(frame(W-H, Style, Title, Contents), [FramePart, 1-0-TitlePart]) :-
-    FramePart = frame(W-H, Style, Contents),
+title_l('\u2574').
+title_r('\u2576').
+
+alias_drawable(frame(W-H, Title, Contents), [FramePart, 1-0-TitlePart]) :-
+    title_l(TL),
+    title_r(TR),
+    FramePart = frame(W-H, Contents),
     string_length(Title, TitleLength),
     MaxTitleLength is W - 2,
     (  TitleLength > MaxTitleLength
     -> string_length_adjusted(Title, MaxTitleLength, TitleText),
-       TitlePart = style([bold], TitleText)
-    ;  TitlePart = style([bold], Title)
+       TitlePart = TL .> style([bold], TitleText) .> TR
+    ;  TitlePart = TL .> style([bold], Title) .> TR
     ).
 
 portd_contentd_contento_style_drawable(PD, CD, _, S, D) :-
@@ -414,7 +419,7 @@ scroll_char(v, f, s, '\u257f').
 
 nofm_seg_style_drawable(M/M, _, _, []) :- !.
 nofm_seg_style_drawable(N/M, P1-P2, S, [X-Y-H|T]) :-
-    % 0-based cell spans from N - N + 1
+% 0-based cell spans from N - N + 1
     % if N+0   to N+0.5 OVERLAPS seg, it's indicated
     % if N+0.5 to N+1   OVARLAPS seg, THAT part is indicated
     N0 is N/M,
@@ -445,11 +450,11 @@ alias_drawable(scroll(W-H, X-Y-Content), [FramePart, 1-HM1-HScroll, WM1-1-VScrol
     WM1 is W - 1,
     drawable_command(Content, CC),
     commands_end(CC, CW-CH),
-    FramePart = frame(W-H, thin, X-Y-raw(CC)),
+    FramePart = frame(W-H, X-Y-raw(CC)),
     PH is H - 2,
     PW is W - 2,
-    @ portd_contentd_contento_style_drawable(PW, CW, X, h, HScroll),
-    @ portd_contentd_contento_style_drawable(PH, CH, Y, v, VScroll).
+    portd_contentd_contento_style_drawable(PW, CW, X, h, HScroll),
+    portd_contentd_contento_style_drawable(PH, CH, Y, v, VScroll).
 
 
 alias_drawable(clear(W-H), style([reset], Spaces)) :-
@@ -472,6 +477,13 @@ alias_drawable(A .\/ B, Drawable) :-
     Y1 is Y + 1,
     Drawable = [raw(AC), translate(0-Y1, B)].
 
+
+
+
+
+                /*******************************
+                *           TESTING            *
+                *******************************/
 
 init(M) :-
     list_to_assoc(
@@ -502,7 +514,7 @@ update(s1:D, M0, M1) :-
     Y1 =< 0,
     put_assoc(offset, M0, X1-Y1, M1), !.
 
-update(s1:_, M, M).
+%update(s1:_, M, M).
 
 q(113).
 c(99).
