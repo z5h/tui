@@ -1,40 +1,74 @@
-:- module(example, [go/0
+:- module(example, [go/0,
+                    discrete/1
                    ]).
 
-:- use_module(tui).
+:- reexport(tui).
+:- use_module(components).
 
-go :- step_app(init, step, view).
+:- public(alias_drawable/2).
+:- public(at_event_is/3).
 
-view(xywh(X,Y,W,H), Rs) :-
-    findall(Re,
-            (between(1, W, C),
-             between(1, H, R),
-             render(C,R, xywh(X,Y,W,H), Re)
-            ),
-            Rs
-           ).
+tui:tui_module(example).
 
-render(X,Y, xywh(X,Y,W,H), X:Y:red:white:"@") :- !.
-render(C,R, xywh(X,Y,W,H), C:R:red:"+") :-
-    \+ (C = X, R = Y).
+init_checks(Checks) :-
+    findall(N-true, between(1, 50, N), Checks).
 
+init(M) :-
+    init_checks(Cs),
+    M =
+        [ cursor-(1-1),
+          checks-Cs,
+          scroll_offset1-(0-0),
+          scroll_offset2-(0-0),
+          scroll_offset3-(0-0)
 
-init(xywh(1,1,70,30)).
-
-step(left,  xywh(1,Y,W,H), xywh(1,Y,W,H)) :- !.
-step(right, xywh(W,Y,W,H), xywh(W,Y,W,H)) :- !.
-
-step(left,  xywh(X,Y,W,H), xywh(X1,Y,W,H)) :- !,
-    X1 is X - 1.
-step(right, xywh(X,Y,W,H), xywh(X1,Y,W,H)) :- !,
-    X1 is X + 1.
-
-step(up,    xywh(X,1,W,H), xywh(X,1,W,H)) :- !.
-step(down,  xywh(X,H,W,H), xywh(X,H,W,H)) :- !.
-
-step(up,    xywh(X,Y,W,H), xywh(X,Y1,W,H)) :- !,
-    Y1 is Y - 1.
-step(down,  xywh(X,Y,W,H), xywh(X,Y1,W,H)) :- !,
-    Y1 is Y + 1.
+        ].
 
 
+app(M0) :-
+    on(~>M1, app(M1)),
+    assocs(M0 ~> M1) <-.. cursor-(C0 ~> C1),
+    assocs(M0 ~> M1) <-.. scroll_offset1-(SO10 ~> SO11),
+    assocs(M0 ~> M1) <-.. scroll_offset2-(SO20 ~> SO21),
+    assocs(M0 ~> M1) <-.. scroll_offset3-(SO30 ~> SO31),
+
+    assocs(M0 ~> M1) <-.. checks-(CH0 ~> CH1),
+    list(CH0 ~> CH1) <-.. CheckTriggers,
+
+    maplist(checktrigger_check, CheckTriggers, Checks),
+
+
+    View = frame(40-11, "My App",
+                 %scroll(18-9, SO30 ~> SO31,
+                        [style([fg(red)],
+                              scroll(15-9, SO10 ~> SO11,
+                                     column(Checks)
+                                    ))
+                        .>
+                        style([fg(green)],
+                              scroll(15-9, SO20 ~> SO21,
+                                     column(Checks)
+                                    ))
+                         , style([hfg(blue)], 8-4-frame(10-3, "Float", abc))
+                        ]
+
+
+                ),
+    cursor_drawables_render(C0 ~> C1, View), !.
+
+checktrigger_check(T, check(T)).
+
+% check
+alias_drawable(check((Id-Bool) ~> _), View) :-
+    atomic_list_concat([Id], IdAtom),
+    View = check_box(IdAtom, Bool).
+
+at_event_is(check((Id-_) ~> CH1), toggle(T), goal(CH1 = Id-T)).
+
+% scroll
+
+go :-
+    reset,
+    tui_init,
+    init(M),
+    with_tty_raw(app(M)).
