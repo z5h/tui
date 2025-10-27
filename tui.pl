@@ -103,8 +103,8 @@ show_cursor :-
 clear_screen :-
     reset.
 
-set_cursor(X,Y) :-
-    format('\e[~w;~wH',[Y,X]).
+set_cursor(X, Y) :-
+    format('\e[~w;~wH', [Y, X]).
 
 is_stlye_attribute(A) :-
     member(A, [reset,
@@ -195,7 +195,7 @@ translate_command_translated(DX-DY, (X-Y)-(Stack-Attr-C), (X1-Y1)-(Stack-Attr-C)
 %   Calculates the result of C0s attributes in the context of
 %   surrounding attributes AttrsOuter, and stores the result in
 %   the attributes of C1.
-attrs_command_styled(Attrs, (X-Y)-(Stack-Inner-C), (X-Y)-(Stack-[Attrs | Inner]-C)).
+attrs_command_styled(Attrs, (X-Y)-(Stack-Inner-C), (X-Y)-(Stack-[Attrs  |Inner]-C)).
 
 %!  port_visible(+Bounds, +Command).
 %
@@ -206,12 +206,12 @@ port_visible(W-H, (X-Y)-(_-_-_)) :-
 
 :- meta_predicate mapnestedlist(2, ?, ?).
 mapnestedlist(F, [H|T], [FH|FT]) :- !,
-    mapnestedlist(F, H,FH),
-    mapnestedlist(F, T,FT).
+    mapnestedlist(F, H, FH),
+    mapnestedlist(F, T, FT).
 
 mapnestedlist(_, [], []) :- !.
 mapnestedlist(F, D, FD) :-
-    call(F,D,FD), !.
+    call(F, D, FD), !.
 
 
 %!  drawable_command(+D, -C).
@@ -229,28 +229,27 @@ mapnestedlist(F, D, FD) :-
 %   Alias is drawable, if alias_drawable(Alias,Drawable)is true, and Drawable
 %   is srawable.
 :- discontiguous(drawable_command/2).
-
 drawable_command(V, _) :-
     var(V), !,
     instantiation_error(drawable_command).
 
 drawable_command([H|T], [CH|CT]) :- !,
-    drawable_command(H,CH),
+    drawable_command(H, CH),
     drawable_command(T, CT).
 
 drawable_command([], []) :- !.
 
 drawable_command((X-Y)-A, Command) :-
     ( atom(A), atom_chars(A, Chars)
-    ; string(A), string_chars(A, Chars)
-    ; number(A), number_chars(A, Chars)
+      ; string(A), string_chars(A, Chars)
+        ; number(A), number_chars(A, Chars)
     ),
     sequence_at_command(Chars, X-Y, Command), !.
 
 drawable_command(A, Command) :-
     ( atom(A), atom_chars(A, Chars)
-    ; string(A), string_chars(A, Chars)
-    ; number(A), number_chars(A, Chars)
+      ; string(A), string_chars(A, Chars)
+        ; number(A), number_chars(A, Chars)
     ),
     sequence_at_command(Chars, 0-0, Command), !.
 
@@ -299,12 +298,11 @@ drawable_command(A .\/ B, Drawable) :- !,
 
 drawable_command(A, C) :-
     tui_module(M),
-    clause(M:alias_drawable(_,_), _),
+    clause(M:alias_drawable(_, _), _),
     M:alias_drawable(A, D), !,
+    % append_output_to_file('debug.log', writeln(M:alias_drawable(A, _))),
     drawable_command(D, C0),
-    mapnestedlist(push_stack(A), C0, C).
-
-drawable_command(X-Y-D, translate(X-Y, D)) :- !.
+    mapnestedlist(push_stack(A), C0, C), !.
 
 
 drawable_command(D, _) :-
@@ -330,8 +328,8 @@ raw_attributes_attributes([], []).
 raw_attributes_attributes([style_hovergroup(_, false)|T], Attr) :-
     raw_attributes_attributes(T, Attr).
 
-raw_attributes_attributes([style_hovergroup(S, true)|T],  Attr) :-
-    append(S,T,ST),
+raw_attributes_attributes([style_hovergroup(S, true)|T], Attr) :-
+    append(S, T, ST),
     raw_attributes_attributes(ST, Attr).
 
 raw_attributes_attributes([H|T], [H|A]) :-
@@ -413,11 +411,11 @@ render_commands(Cursor, [((X-Y)-(_-A-C))|T]) :-
     (  onscreen(X-Y)
     -> set_cursor(X, Y),
        flatten(A, A1),
-       raw_attributes_attributes(A1, A2),!,
+       raw_attributes_attributes(A1, A2), !,
        (   Cursor = X-Y
        ->  append(A2, [negative], A3)
        ;   A3 = A2
-       ),
+    ),
        location_style_char(X-Y, A3, C)
     ;  true
     ),
@@ -434,7 +432,7 @@ location_style_char(X-Y, Style, C) :-
 location_style_char(X-Y, Style, C) :-
     retractall(location_style_char_(X-Y, _, _)),
     set_cursor(X, Y),
-    ansi_format(Style,'~s', [C]),
+    ansi_format(Style, '~s', [C]),
     assertz(location_style_char_(X-Y, Style, C)), !.
 
 
@@ -444,24 +442,18 @@ location_style_char(X-Y, Style, C) :-
                 *******************************/
 
 char_from_to_line(C, X1-Y, X2-Y, L) :-
-    X1 > X2, !,
-    char_from_to_line(C, X2-Y, X1-Y, L).
+    (  X1 > X2
+    -> From = X2, To = X1
+    ;  From = X1, To = X2
+    ),
+    findall((X-Y)-C, between(From, To, X), L), !.
 
-char_from_to_line(C, X-Y, X-Y, [(X-Y)-C]) :- !.
-
-char_from_to_line(C, X1-Y, X2-Y, [(X1-Y)-C|L]) :-
-    Next is X1 + 1,
-    char_from_to_line(C, Next-Y, X2-Y, L).
-
-
-char_from_to_line(C, X-Y1, X-Y2, L) :-
-    Y1 > Y2, !,
-    char_from_to_line(C, X-Y2, X-Y1, L).
-
-char_from_to_line(C, X-Y1, X-Y2, [(X-Y1)-C|L]) :-
-    Next is Y1 + 1,
-    char_from_to_line(C, X-Next, X-Y2, L).
-
+char_from_to_line(C, X-Y1, X-Y2, L) :- !,
+    (  Y1 > Y2
+    -> From = Y2, To = Y1
+    ;  From = Y1, To = Y2
+    ),
+    findall((X-Y)-C, between(From, To, Y), L), !.
 
 :- discontiguous style_corner_char/3.
 :- discontiguous style_horizontal/2.
@@ -474,12 +466,12 @@ style_corner_char(thick, br, '\u251b').
 style_horizontal(thick, '\u2501').
 style_vertical(thick, '\u2503').
 
-style_corner_char(thin, tl,  '\u250c').
-style_corner_char(thin, bl,  '\u2514').
-style_corner_char(thin, tr,  '\u2510').
-style_corner_char(thin, br,  '\u2518').
+style_corner_char(thin, tl, '\u250c').
+style_corner_char(thin, bl, '\u2514').
+style_corner_char(thin, tr, '\u2510').
+style_corner_char(thin, br, '\u2518').
 style_horizontal(thin, '\u2500').
-style_vertical(thin,   '\u2502').
+style_vertical(thin, '\u2502').
 
 
 style_corner_char(double, tl, '\u2554').
@@ -495,6 +487,7 @@ style_vertical(double, '\u2551').
                 *******************************/
 
 :- public(alias_drawable/2).
+
 alias_drawable(V, _) :-
     var(V), !,
     instantiation_error(alias_drawable).
@@ -520,22 +513,22 @@ alias_drawable(box(W0-H0, Style), [Top, Bottom, Left, Right, Corners]) :-
     Corners = [(0-0)-TL, (W-0)-TR, (0-H)-BL, (W-H)-BR],
     WM is W - 1,
     HM is H - 1,
-    char_from_to_line(Hoz, 1-0, WM-0,  Top),
-    char_from_to_line(Hoz, 1-H, WM-H,  Bottom),
-    char_from_to_line(Vrt, 0-1,  0-HM, Left),
-    char_from_to_line(Vrt, W-1,  W-HM, Right).
+    char_from_to_line(Hoz, 1-0, WM-0, Top),
+    char_from_to_line(Hoz, 1-H, WM-H, Bottom),
+    char_from_to_line(Vrt, 0-1, 0-HM, Left),
+    char_from_to_line(Vrt, W-1, W-HM, Right).
 
 
 alias_drawable(clear(W-H), style([reset, bg(default)], Spaces)) :-
     findall((X-Y)-' ',
             ( between(0, W, X),
-              between(0,H,Y)),
+              between(0, H, Y) ),
             Spaces).
 
 codes_value(I, V) :-
     escape_codes_value(I, V).
 
-escape_codes_value([27, 91 | Codes], V) :-
+escape_codes_value([27, 91  |Codes], V) :-
     atom_codes(Atom, Codes),
     escaped_atom_value(Atom, V).
 
@@ -545,16 +538,16 @@ escaped_atom_value('3~', delete).
 escaped_atom_value('4~', end).
 escaped_atom_value('5~', page_up).
 escaped_atom_value('6~', page_down).
-escaped_atom_value('A',  up).
-escaped_atom_value('B',  down).
-escaped_atom_value('C',  right).
-escaped_atom_value('D',  left).
-escaped_atom_value('F',  end).
-escaped_atom_value('H',  home).
-escaped_atom_value('OP',  f1).
-escaped_atom_value('OQ',  f2).
-escaped_atom_value('OR',  f3).
-escaped_atom_value('OS',  f4).
+escaped_atom_value('A', up).
+escaped_atom_value('B', down).
+escaped_atom_value('C', right).
+escaped_atom_value('D', left).
+escaped_atom_value('F', end).
+escaped_atom_value('H', home).
+escaped_atom_value('OP', f1).
+escaped_atom_value('OQ', f2).
+escaped_atom_value('OR', f3).
+escaped_atom_value('OS', f4).
 escaped_atom_value('15~', f5).
 escaped_atom_value('17~', f6).
 escaped_atom_value('18~', f7).
@@ -568,34 +561,34 @@ escaped_atom_value('26~', f14).
 escaped_atom_value('28~', f15).
 escaped_atom_value('29~', f16).
 
-code_cntrl(1,   start_of_heading).
-code_cntrl(2,   start_of_text).
-code_cntrl(3,   interrupt).
-code_cntrl(4,   eof).
-code_cntrl(5,   enquiry).
-code_cntrl(6,   acknowledge).
-code_cntrl(7,   bell).
-code_cntrl(8,   backspace).
-code_cntrl(9,   tab).
-code_cntrl(10,  linefeed).
-code_cntrl(11,  vertical_tab).
-code_cntrl(12,  formfeed).
-code_cntrl(13,  return).
-code_cntrl(24,  cancel).
-code_cntrl(14,  shift_out).
-code_cntrl(15,  shift_in).
-code_cntrl(19,  device_control_3).
-code_cntrl(20,  device_control_4).
-code_cntrl(27,  escape).
+code_cntrl(1, start_of_heading).
+code_cntrl(2, start_of_text).
+code_cntrl(3, interrupt).
+code_cntrl(4, eof).
+code_cntrl(5, enquiry).
+code_cntrl(6, acknowledge).
+code_cntrl(7, bell).
+code_cntrl(8, backspace).
+code_cntrl(9, tab).
+code_cntrl(10, linefeed).
+code_cntrl(11, vertical_tab).
+code_cntrl(12, formfeed).
+code_cntrl(13, return).
+code_cntrl(24, cancel).
+code_cntrl(14, shift_out).
+code_cntrl(15, shift_in).
+code_cntrl(19, device_control_3).
+code_cntrl(20, device_control_4).
+code_cntrl(27, escape).
 code_cntrl(127, delete).
 
-code_value(C,V) :- code_cntrl(C, V).
+code_value(C, V) :- code_cntrl(C, V).
 
 code_value(C, V) :-
     \+ code_type(C, cntrl),
     char_code(V, C).
 
-code_value(C,V) :-
+code_value(C, V) :-
     is_list(C),
     atom_codes(V, C).
 
@@ -612,7 +605,7 @@ limits_direction_from_to(MX-_, right, X0-Y, X-Y) :-
 limits_direction_from_to(_-MY, down, X-Y0, X-Y) :-
     Y is min(MY, Y0 + 1).
 
-direction(E):- member(E, [up,down,left,right]).
+direction(E) :- member(E, [up, down, left, right]).
 
 
 
@@ -621,7 +614,7 @@ wait_for_input :-
 
 :- dynamic(last_tick/1).
 input_or_tick(E) :-
-    ( last_tick(Last), ! ; Last = 0),
+    ( last_tick(Last), ! ; Last = 0 ),
     get_time(Now),
     (  Now - Last < 1, get_single_input(E, false)
     -> true
@@ -640,7 +633,7 @@ get_single_input(I, Wait) :-
     -> catch(call_with_time_limit(1, get_single_char(H)),
              time_limit_exceeded,
              true
-            )
+    )
     ;  get_single_char(H)
     ),
     (  H = -1
@@ -655,9 +648,9 @@ get_single_input(I, Wait) :-
        -> get_code(_),
           code_value(27, I)
 
-       ;  read_escseq([ 27 | T ]-T, I)
+       ;  read_escseq([ 27  |T ]-T, I)
        -> true
-       )
+    )
     ), !.
 
 
@@ -666,7 +659,7 @@ read_escseq(L-T, Code) :-
     ( T = [C], codes_value(L, Code)
     -> true
     ;  wait_for_input([user_input], [user_input], -1)
-    -> T = [C | T2],
+    -> T = [C  |T2],
        read_escseq(L-T2, Code)
     ;  T = [],
        Code = L
@@ -678,30 +671,25 @@ stack_event_is(_, V, _) :- var(V), domain_error(stack_event_is, event:V).
 
 stack_event_is([H|T], E, Is) :-
     (  (tui_module(M),
-        clause(M:at_event_is(_,_,_), _),
+        clause(M:at_event_is(_, _, _), _),
         M:at_event_is(H, E, Next)
        )
     -> (  Next = goal(G)
        -> Is = goal(G)
        ;  stack_event_is([H|T], Next, Is)
-       )
+    )
     ;  stack_event_is(T, E, Is)
     ).
 
 stack_event_is([], E, Is) :-
     (  (tui_module(M),
-        clause(M:at_event_is(_,_,_), _),
+        clause(M:at_event_is(_, _, _), _),
         M:at_event_is([], E, Next)
        )
     -> (  Next = goal(G)
        -> Is = goal(G)
        ;  stack_event_is([], Next, Is)
-       )
+    )
     ;  Is = E
     ).
-
-
-
-
-
 

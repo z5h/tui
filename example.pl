@@ -24,13 +24,11 @@ init(M) :-
 
         ].
 
-
 app(M0) :-
     on(~>M1, app(M1)),
     assocs(M0 ~> M1) <-.. cursor-(C0 ~> C1),
     assocs(M0 ~> M1) <-.. scroll_offset1-(SO10 ~> SO11),
     assocs(M0 ~> M1) <-.. scroll_offset2-(SO20 ~> SO21),
-    assocs(M0 ~> M1) <-.. scroll_offset3-(SO30 ~> SO31),
 
     assocs(M0 ~> M1) <-.. checks-(CH0 ~> CH1),
     list(CH0 ~> CH1) <-.. CheckTriggers,
