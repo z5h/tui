@@ -56,13 +56,13 @@ on(From ~> To, Goal) :-
     on(~>To, Goal).
 
 assoc(A1 ~> A2)  <-.. Key-(V1 ~> V2) :-
-    del_assoc(Key, A1, V1, A1_5),
+    del_assoc(Key, A1, V1, A1_5), !,
     on(V1 ~> V2,
        (put_assoc(Key, A1_5, V2, A2t), A2 = A2t)
       ).
 
 assocs(A1 ~> A2)  <-.. Key-(V1 ~> V2) :-
-    assocs_pair(A1, Key-V1),
+    assocs_pair(A1, Key-V1), !,
     on(V1 ~> V2,
        ( pair_pair_assocs_assocs(Key-V1, Key-V2, A1, A2t),!,
          A2 = A2t
@@ -229,12 +229,13 @@ mapnestedlist(F, D, FD) :-
 %   Alias is drawable, if alias_drawable(Alias,Drawable)is true, and Drawable
 %   is srawable.
 :- discontiguous(drawable_command/2).
-drawable_command(V, _) :-
-    var(V), !,
+:- det(drawable_command/2).
+drawable_command('<<<<<undrawable>>>>', _) :-
+%    var(V), !,
     instantiation_error(drawable_command).
 
 drawable_command([H|T], [CH|CT]) :- !,
-    drawable_command(H, CH),
+    drawable_command(H, CH), !,
     drawable_command(T, CT).
 
 drawable_command([], []) :- !.
@@ -295,10 +296,13 @@ drawable_command(A .\/ B, Drawable) :- !,
     drawable_command(translate(0-Y1, B), BC),
     Drawable = [AC, BC].
 
+:- table(module_with_alias_drawable/1).
+module_with_alias_drawable(M) :-
+    tui_module(M),
+    clause(M:alias_drawable(_,_), _).
 
 drawable_command(A, C) :-
-    tui_module(M),
-    clause(M:alias_drawable(_, _), _),
+    module_with_alias_drawable(M),
     M:alias_drawable(A, D), !,
     % append_output_to_file('debug.log', writeln(M:alias_drawable(A, _))),
     drawable_command(D, C0),
@@ -375,7 +379,7 @@ bubble_event_cursor_end_assoc(E, (C0 ~> C1), EX-EY, EventAssoc) :-
     -> reverse(List, Stack)
     ;  Stack = []
     ),
-    @ stack_event_is(Stack, E, Bubbled),
+    stack_event_is(Stack, E, Bubbled),
     (  Bubbled = true
     -> true
 
@@ -530,7 +534,7 @@ codes_value(I, V) :-
 
 escape_codes_value([27, 91  |Codes], V) :-
     atom_codes(Atom, Codes),
-    escaped_atom_value(Atom, V).
+    once(escaped_atom_value(Atom, V)).
 
 escaped_atom_value('1~', home).
 escaped_atom_value('2~', insert).

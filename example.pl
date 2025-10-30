@@ -8,6 +8,12 @@
 :- public(alias_drawable/2).
 :- public(at_event_is/3).
 
+:- op(602, yfx, ~>).
+:- op(602, fy, ~>).
+:- op(601, xfy, '.>').
+:- op(601, xfy, '.\\/').
+:- op(601, xfy, '<-..').
+
 tui:tui_module(example).
 
 init_checks(Checks) :-
