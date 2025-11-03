@@ -17,7 +17,7 @@
             stack_event_is/3,
             locatables_end/2,
             limits_direction_from_to/4,
-            drawable_command/2,
+            drawable_raw/2,
 
             % event stuff
             on/2,
@@ -28,11 +28,13 @@
             op(601, xfy, '<<..'),
             '<-..'/2,
             '<<..'/2,
-            tui_module/1
+            tui_module/1,
+            drawable//5
           ]).
 :- use_module(local(core/assocs)).
 :- use_module(local(core/core)).
 :- use_module(library(ansi_term)).
+:- use_module(watch).
 
 :- multifile(tui_module/1).
 tui_module(tui).
@@ -48,8 +50,8 @@ discrete(G) :-
     G = G0.
 
 :- meta_predicate(on(+, 0)).
-on(~>To, Goal) :-
-    freeze(To, Goal), !.
+on(~>To, Goal) :- !,
+    freeze(To, Goal).
 
 on(From ~> To, Goal) :-
     assertion(\+ var(From)),
@@ -172,17 +174,6 @@ locatables_end([H|T], X3-Y3) :-
     Y3 is max(Y1, Y2),
     X3 is max(X1, X2).
 
-locatables_start((X-Y)-(_-_-_), X-Y) :- !.
-locatables_start((X-Y), X-Y) :- !.
-
-locatables_start([], 0-0) :- !.
-locatables_start([H|T], X3-Y3) :-
-    locatables_start(H, X1-Y1),
-    locatables_start(T, X2-Y2),
-    Y3 is min(Y1, Y2),
-    X3 is min(X1, X2).
-
-
 %!  translate_command_translated(+Delta, +C0, -C1).
 %
 %   Translates a drawing command by Delta in the form of DX-DY.
@@ -227,90 +218,136 @@ mapnestedlist(F, D, FD) :-
 %   style(Attrs, Drawable) is drawable if Drawable is drawable.
 %   raw(Drawable) is drawable if Drawable is drawable.
 %   Alias is drawable, if alias_drawable(Alias,Drawable)is true, and Drawable
-%   is srawable.
-:- discontiguous(drawable_command/2).
-:- det(drawable_command/2).
-drawable_command('<<<<<undrawable>>>>', _) :-
-%    var(V), !,
-    instantiation_error(drawable_command).
+%   is drawable.
 
-drawable_command([H|T], [CH|CT]) :- !,
-    drawable_command(H, CH), !,
-    drawable_command(T, CT).
+:- discontiguous(drawable//5).
+:- det(drawable//5).
+drawable(_, _, '<<<<<undrawable>>>>') -->
+    { instantiation_error(drawable) }.
 
-drawable_command([], []) :- !.
+drawable(chars([]), _, _, XY, XY) --> !,
+    [].
 
-drawable_command((X-Y)-A, Command) :-
-    ( atom(A), atom_chars(A, Chars)
-      ; string(A), string_chars(A, Chars)
-        ; number(A), number_chars(A, Chars)
-    ),
-    sequence_at_command(Chars, X-Y, Command), !.
+drawable(chars([C|T]), Stack, Attr, X-Y, MX-MY) --> !,
+    [ (X-Y)-(Stack-Attr-C)],
+    drawable(chars_tail(T), Stack, Attr, X-Y, MX-MY), !.
 
-drawable_command(A, Command) :-
-    ( atom(A), atom_chars(A, Chars)
-      ; string(A), string_chars(A, Chars)
-        ; number(A), number_chars(A, Chars)
-    ),
-    sequence_at_command(Chars, 0-0, Command), !.
+drawable(chars_tail([]), _, _, XY, XY) --> !,
+    [].
 
-drawable_command(raw(C), C) :- !.
+drawable(chars_tail(T), Stack, Attr, X-Y, MX-MY) --> !,
+    { NX is X + 1 },
+    drawable(chars(T), Stack, Attr, NX-Y, MX-MY), !.
+
+
+drawable(raw([]), _, _, XY, XY) --> !,
+    [].
+
+drawable(raw([H|T]), Stack, Attr, DX-DY, MX-MY) --> !,
+    {H = (X-Y)-(StackH-AttrH-C),
+    X1 is X + DX,
+    Y1 is Y + DY,
+    append(AttrH, Attr, Attr1),
+    append(StackH, Stack, Stack1),
+    H1 = (X1-Y1)-(Stack1-Attr1-C)
+    }, !,
+    [H1],
+    drawable(raw(T), Stack, Attr, DX-DY, MTX-MTY),
+    { MX is max(X1, MTX),
+      MY is max(Y1, MTY)
+    }.
+
+
+
+%drawable((X0-Y0)-A, Stack, Attr, DX-DY, MX-MY) -->
+%    { atom(A), atom_chars(A, Chars)
+%    ; string(A), string_chars(A, Chars)
+%    ; number(A), number_chars(A, Chars)
+%    }, !,
+%    { X is X0 + DX, Y is Y0 + DY },
+%    drawable(chars(Chars), Stack, Attr, X-Y, MX-MY).
+
+drawable(A, Stack, Attr, X-Y, MX-MY) -->
+    { atom(A), atom_chars(A, Chars)
+    ; string(A), string_chars(A, Chars)
+    ; number(A), number_chars(A, Chars)
+    }, !,
+    drawable(chars(Chars), Stack, Attr, X-Y, MX-MY).
+
+drawable([H|T], Stack, Attr, XY, MX-MY) --> !,
+    drawable(H, Stack, Attr, XY, MX1-MY1),
+    drawable(T, Stack, Attr, XY, MX2-MY2),
+    { MX is max(MX1, MX2), MY is max(MY1, MY2) }, !.
+
+drawable([], _, _, XY, XY) --> !, [].
+
 
 sequence_at_command([], _, []).
 sequence_at_command([C|R], X-Y, [(X-Y)-([]-[]-C)|SR]) :-
     X1 is X + 1,
     sequence_at_command(R, X1-Y, SR).
 
+capture(Phrase, C, A, A2) :-
+    phrase(Phrase, C, []), !,
+    A = A2.
 
-drawable_command(translate(DX-DY, Drawables), Translated) :- !,
-    mapnestedlist(drawable_command, Drawables, Commands),
-    flatten(Commands, Flattened),
-    maplist(translate_command_translated(DX-DY), Flattened, Translated).
+excluding(Pred, Phrase) -->
+    capture(Phrase, C),
+    { exclude(Pred, C, E) },
+    E.
 
-drawable_command(port(W-H, Drawables), Visible) :- !,
-    mapnestedlist(drawable_command, Drawables, Commands),
-    flatten(Commands, Flattened),
-    include(port_visible(W-H), Flattened, Visible).
+zone_out(X0-Y0, W-H, X-Y-_) :-
+     once(( X < X0
+     ; Y < Y0
+     ; X >= X0 + W
+     ; Y >= Y0 + H
+     )).
 
-drawable_command(style(Attrs, Drawables), Styled) :- !,
-    mapnestedlist(drawable_command, Drawables, Commands),
-    flatten(Commands, Flattened),
-    maplist(attrs_command_styled(Attrs), Flattened, Styled).
+drawable(translate(TX-TY, Drawables), Stack, Attr, DX-DY, MX-MY) --> !,
+    { NDX is DX + TX, NDY is DY + TY},
+    drawable(Drawables, Stack, Attr, NDX-NDY, MX-MY).
+
+drawable(TX-TY-Drawable, Stack, Attr, DX-DY, MX-MY) --> !,
+    drawable(translate(TX-TY, Drawable), Stack, Attr, DX-DY, MX-MY).
+
+drawable(port(W-H, Drawables), Stack, Attr, DX-DY, MX-MY) --> !,
+    drawable(port(W-H, Drawables, _MPX-_MPY), Stack, Attr, DX-DY, MX-MY).
+
+drawable(port(W-H, Drawables, MPX-MPY), Stack, Attr, DX-DY, MX-MY) --> !,
+    excluding(zone_out(DX-DY, W-H), drawable(Drawables, Stack, Attr, DX-DY, MPX-MPY)),
+    { MX is DX + W - 1, MY is DY + H - 1}.
+
+drawable(style(Style, Drawables), Stack, Attr, DX-DY, MX-MY) --> !,
+    drawable(Drawables, Stack, [Style | Attr ], DX-DY, MX-MY).
 
 push_stack(R, (X-Y)-(Stack-Attr-C), (X-Y)-([R|Stack]-Attr-C)).
 
+drawable(A .> B, Stack, Attr, DX-DY, MX-MY) --> !,
+    drawable(A, Stack, Attr, DX-DY, AMX-AMY),
+    { WidthA is AMX - DX + 1 },
+    drawable(translate(WidthA-0, B), Stack, Attr, DX-DY, BMX-BMY),
+    { MX is max(AMX, BMX), MY is max(AMY, BMY) }.
 
-drawable_command(A .> B, Drawable) :- !,
-    drawable_command(A, AC),
-    locatables_end(AC, X-_),
-    X1 is X + 1,
 
-    drawable_command(translate(X1-0, B), BC),
-    Drawable = [AC, BC].
-
-drawable_command(A .\/ B, Drawable) :- !,
-    drawable_command(A, AC),
-    locatables_end(AC, _X-Y),
-    Y1 is Y + 1,
-
-    drawable_command(translate(0-Y1, B), BC),
-    Drawable = [AC, BC].
+drawable(A .\/ B, Stack, Attr, DX-DY, MX-MY) --> !,
+    drawable(A, Stack, Attr, DX-DY, AMX-AMY),
+    { HeightA is AMY - DY + 1 },
+    drawable(translate(0-HeightA, B), Stack, Attr, DX-DY, BMX-BMY),
+    { MX is max(AMX, BMX), MY is max(AMY, BMY) }.
 
 :- table(module_with_alias_drawable/1).
 module_with_alias_drawable(M) :-
     tui_module(M),
     clause(M:alias_drawable(_,_), _).
 
-drawable_command(A, C) :-
-    module_with_alias_drawable(M),
-    M:alias_drawable(A, D), !,
-    % append_output_to_file('debug.log', writeln(M:alias_drawable(A, _))),
-    drawable_command(D, C0),
-    mapnestedlist(push_stack(A), C0, C), !.
+drawable(A, Stack, Attr, DX-DY, MX-MY) -->
+    { module_with_alias_drawable(M),
+      M:alias_drawable(A, D), !
+    },
+    drawable(D, [A | Stack], Attr, DX-DY, MX-MY).
 
-
-drawable_command(D, _) :-
-    domain_error(drawable_command, D).
+drawable(D, _, _, _, _) -->
+    { domain_error(drawable, D) }.
 
                 /*******************************
                 *            RENDER            *
@@ -346,8 +383,12 @@ apply_focus(X-Y, Commands) :-
 
 apply_focus(_, _).
 
+drawable_raw(Drawable, raw(Raw)) :-
+    phrase(drawable(Drawable, [], [], 0-0, _), Raw, []).
+
 drawable__normalized_commands(Drawables, Deduped) :-
-    drawable_command(translate(1-1, Drawables), Commands),
+    phrase(drawable(Drawables, [], [], 1-1, _), Commands, []),
+    !,
     keylist_deduped_prioritize_last(Commands, Deduped).
 
 render(Drawables) :-
@@ -364,22 +405,22 @@ render(Drawables) :-
 cursor_drawables_render((C0 ~> C1), Drawables) :-
     C0 = X-Y,
     hide_cursor,
-    drawable__normalized_commands(Drawables, Commands),
-    once(apply_focus(X-Y, Commands)),
-    render_commands(X-Y, Commands),
-    commands_eventmap(Commands, EventMap),
-    list_to_assoc(EventMap, EventAssoc),
-    locatables_end(Commands, EX-EY),
-    on(~>(E), bubble_event_cursor_end_assoc(E, (C0 ~> C1), EX-EY, EventAssoc)),
-    get_single_input(E).
+    drawable__normalized_commands(Drawables, Commands), !,
+    once(apply_focus(X-Y, Commands)), !,
+    render_commands(X-Y, Commands),! ,
+    commands_eventmap(Commands, EventMap), !,
+    list_to_assoc(EventMap, EventAssoc), !,
+    locatables_end(Commands, EX-EY), !,
+    on(~>(E), bubble_event_cursor_end_assoc(E, (C0 ~> C1), EX-EY, EventAssoc)), !,
+    get_single_input(E), !.
 
 bubble_event_cursor_end_assoc(E, (C0 ~> C1), EX-EY, EventAssoc) :-
     C0 = X-Y,
-    (  get_assoc(X-Y, EventAssoc, List)
-    -> reverse(List, Stack)
+    (  get_assoc(X-Y, EventAssoc, Stack)
+    -> true
     ;  Stack = []
     ),
-    stack_event_is(Stack, E, Bubbled),
+    stack_event_is(Stack, E, Bubbled), !,
     (  Bubbled = true
     -> true
 
@@ -395,7 +436,7 @@ bubble_event_cursor_end_assoc(E, (C0 ~> C1), EX-EY, EventAssoc) :-
 
     ;  bell,
        C1 = C0
-    ).
+    ), !.
 
 
 
@@ -419,7 +460,7 @@ render_commands(Cursor, [((X-Y)-(_-A-C))|T]) :-
        (   Cursor = X-Y
        ->  append(A2, [negative], A3)
        ;   A3 = A2
-    ),
+       ),
        location_style_char(X-Y, A3, C)
     ;  true
     ),
@@ -437,7 +478,8 @@ location_style_char(X-Y, Style, C) :-
     retractall(location_style_char_(X-Y, _, _)),
     set_cursor(X, Y),
     ansi_format(Style, '~s', [C]),
-    assertz(location_style_char_(X-Y, Style, C)), !.
+    assertz(location_style_char_(X-Y, Style, C)),
+   !.
 
 
 
@@ -683,7 +725,7 @@ stack_event_is([H|T], E, Is) :-
        ;  stack_event_is([H|T], Next, Is)
     )
     ;  stack_event_is(T, E, Is)
-    ).
+    ), !.
 
 stack_event_is([], E, Is) :-
     (  (tui_module(M),
@@ -695,5 +737,5 @@ stack_event_is([], E, Is) :-
        ;  stack_event_is([], Next, Is)
     )
     ;  Is = E
-    ).
+    ), !.
 

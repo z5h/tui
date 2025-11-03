@@ -1,12 +1,18 @@
-:- module(example, [go/0,
-                    discrete/1
+:- module(example, [go/0
                    ]).
 
 :- reexport(tui).
 :- use_module(components).
+:- use_module(local(core/core)).
+
+tui:tui_module(example).
 
 :- public(alias_drawable/2).
+:- discontiguous(alias_drawable/2).
+
 :- public(at_event_is/3).
+:- discontiguous(at_event_is/3).
+
 
 :- op(602, yfx, ~>).
 :- op(602, fy, ~>).
@@ -14,10 +20,9 @@
 :- op(601, xfy, '.\\/').
 :- op(601, xfy, '<-..').
 
-tui:tui_module(example).
 
 init_checks(Checks) :-
-    findall(N-true, between(1, 50, N), Checks).
+    findall(N-true, between(1, 300, N), Checks).
 
 init(M) :-
     init_checks(Cs),
@@ -30,8 +35,21 @@ init(M) :-
 
         ].
 
-app(M0) :-
-    on(~>M1, app(M1)),
+wait_for(V) :-
+    \+ var(V), !.
+
+wait_for(V) :- !,
+    sleep(0),
+    wait_for(V).
+
+:- meta_predicate(trampoline_loop(2, ?)).
+trampoline_loop(Pred, In) :-
+    call_time(call(Pred, In, Out), T),
+    append_output_to_file('bench.log', writeln(T)),
+    wait_for(Out),
+    trampoline_loop(Pred, Out).
+
+app(M0, M1) :-
     assocs(M0 ~> M1) <-.. cursor-(C0 ~> C1),
     assocs(M0 ~> M1) <-.. scroll_offset1-(SO10 ~> SO11),
     assocs(M0 ~> M1) <-.. scroll_offset2-(SO20 ~> SO21),
@@ -42,22 +60,20 @@ app(M0) :-
     maplist(checktrigger_check, CheckTriggers, Checks),
 
 
-    View = frame(40-11, "My App",
-                 %scroll(18-9, SO30 ~> SO31,
+    View = titled_frame(80-21, "My App",
                         [style([fg(red)],
-                              scroll(15-9, SO10 ~> SO11,
-                                     column(Checks)
-                                    ))
-                        .>
-                        style([fg(green)],
-                              scroll(15-9, SO20 ~> SO21,
-                                     column(Checks)
-                                    ))
-                         , style([hfg(blue)], 8-4-frame(10-3, "Float", abc))
+                               scroll(10-19, SO10 ~> SO11,
+                                      column(Checks)
+                               ))
+                         .>
+                             style([fg(green)],
+                                   scroll(10-19, SO20 ~> SO21,
+                                          column(Checks)
+                                   )), style([hfg(blue)], 8-4-titled_frame(10-3, "Float", abc))
                         ]
 
 
-                ),
+           ),
     cursor_drawables_render(C0 ~> C1, View), !.
 
 checktrigger_check(T, check(T)).
@@ -75,4 +91,4 @@ go :-
     reset,
     tui_init,
     init(M),
-    with_tty_raw(app(M)).
+    with_tty_raw(trampoline_loop(app, M)).

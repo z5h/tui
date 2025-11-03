@@ -2,13 +2,14 @@
 
 :- reexport(tui).
 
+tui:tui_module(components).
+
 :- public(alias_drawable/2).
 :- discontiguous(alias_drawable/2).
 
 :- public(at_event_is/3).
-:- discontiguous(alias_drawable/2).
+:- discontiguous(at_event_is/3).
 
-tui:tui_module(components).
 
 :- op(601, xfy, '.>').
 :- op(601, xfy, '.\\/').
@@ -49,8 +50,9 @@ alias_drawable(input(W, PlaceholderA, ValueA), D) :-
          2-0-Field].
 
 
+alias_drawable(frame(W-H, Contents), frame(W-H, Contents, _)).
 
-alias_drawable(frame(W-H, Contents), [Clear, Box, Port]) :-
+alias_drawable(frame(W-H, Contents, Extent), [Clear, Box, Port]) :-
     (  W > 1, H > 1
     -> true
     ;  domain_error(valid_window_size, W-H)
@@ -59,7 +61,7 @@ alias_drawable(frame(W-H, Contents), [Clear, Box, Port]) :-
     PW is W - 2,
     PH is H - 2,
     Clear = 1-1-clear(PW-PH),
-    Port =  1-1-port(PW-PH, Contents).
+    Port =  1-1-port(PW-PH, Contents, Extent).
 
 
 repeat_char_string(N, C, S) :-
@@ -86,10 +88,12 @@ string_length_adjusted(S, L, A) :-
 title_l('\u2574').
 title_r('\u2576').
 
-alias_drawable(frame(W-H, Title, Contents), [FramePart, 1-0-TitlePart]) :-
+alias_drawable(titled_frame(W-H, Title, Contents), titled_frame(W-H, Title, Contents, _)).
+
+alias_drawable(titled_frame(W-H, Title, Contents, Extent), [FramePart, 1-0-TitlePart]) :-
     title_l(TL),
     title_r(TR),
-    FramePart = frame(W-H, Contents),
+    FramePart = frame(W-H, Contents, Extent),
     string_length(Title, TitleLength),
     MaxTitleLength is W - 2,
     (  TitleLength > MaxTitleLength
@@ -170,11 +174,12 @@ alias_drawable(scroll(W-H, (X-Y ~> _), Content),
                    ]) :-
     HM1 is H - 1,
     WM1 is W - 1,
-    drawable_command(Content, CC),
-    locatables_end(CC, CW0-CH0),
-    CW is CW0 + 1,
-    CH is CH0 + 1,
-    FramePart = frame(W-H, X-Y-raw(CC)),
+
+    drawable_raw(frame(W-H, X-Y-Content, EX-EY), FramePart),
+
+    CW is EX - X + 1,
+    CH is EY - Y + 1,
+
     PH is H - 2,
     PW is W - 2,
 
@@ -187,7 +192,6 @@ alias_drawable(scroll(W-H, (X-Y ~> _), Content),
 alias_drawable(vscroll(C, _), C).
 alias_drawable(hscroll(C, _), C).
 
-:- discontiguous components:at_event_is/3.
 at_event_is(vscroll(_, Max), up, scroll_up(Max)).
 at_event_is(vscroll(_, Max), down, scroll_down(Max)).
 
