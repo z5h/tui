@@ -1,7 +1,5 @@
 :- module(tui,
-          [ cursor_drawables_render/2,
-            render/1,
-            op(601, xfy, '.>'),
+          [ op(601, xfy, '.>'),
             op(601, xfy, '.\\/'),
             discrete/1,
             clear_screen/0,
@@ -29,7 +27,8 @@
             '<-..'/2,
             '<<..'/2,
             tui_module/1,
-            drawable//5
+            drawable//5,
+            app/4
           ]).
 :- use_module(local(core/assocs)).
 :- use_module(local(core/core)).
@@ -386,60 +385,119 @@ apply_focus(_, _).
 drawable_raw(Drawable, raw(Raw)) :-
     phrase(drawable(Drawable, [], [], 0-0, _), Raw, []).
 
-drawable__normalized_commands(Drawables, Deduped) :-
-    phrase(drawable(Drawables, [], [], 1-1, _), Commands, []),
+drawable__normalized_commands__end(Drawables, Deduped, MXY) :-
+    phrase(drawable(Drawables, [], [], 1-1, MXY), Commands, []),
     !,
     keylist_deduped_prioritize_last(Commands, Deduped).
 
-render(Drawables) :-
-    reset,
-    tui_init,
-    drawable__normalized_commands(Drawables, Commands),
-    locatables_end(Commands, EX-EY),
-    render_commands((-1)-(-1), Commands),
-    set_cursor(EX, EY), nl,
-    tui_init,
-    show_cursor.
+/*
+need a way to draw
+view(Model, Drawables)
+
+need a way to update
+update(Event, Model0, Model1)
+
+need initial state
+init(Model)
+
+so can be
+app(Init, View, Update)
+*/
 
 
-cursor_drawables_render((C0 ~> C1), Drawables) :-
-    C0 = X-Y,
-    hide_cursor,
-    drawable__normalized_commands(Drawables, Commands), !,
-    once(apply_focus(X-Y, Commands)), !,
-    render_commands(X-Y, Commands),! ,
-    commands_eventmap(Commands, EventMap), !,
-    list_to_assoc(EventMap, EventAssoc), !,
-    locatables_end(Commands, EX-EY), !,
-    on(~>(E), bubble_event_cursor_end_assoc(E, (C0 ~> C1), EX-EY, EventAssoc)), !,
-    get_single_input(E), !.
+:- meta_predicate(app(?, 2, 3, ?)).
+:- det(app/4).
+app(S0, View, Update, Result) :-
+    @ hide_cursor,
+    @ (X-Y)-M0 = S0,
 
-bubble_event_cursor_end_assoc(E, (C0 ~> C1), EX-EY, EventAssoc) :-
-    C0 = X-Y,
+    @ call(View, S0, Drawable),
+    @ drawable__normalized_commands__end(Drawable, Commands, EX-EY),
+    @ once(apply_focus(X-Y, Commands)),
+    @ render_commands(X-Y, Commands),
+
+
+
+
+    @ commands_eventmap(Commands, EventMap),
+    @ list_to_assoc(EventMap, EventAssoc), !,
+
+    get_single_input(E0), !,
+    state_event_assoc_bubbled(S0, E0, EventAssoc, E1),
+    (  E1 = result(Result)
+    -> true
+
+    ;  direction(E1)
+    -> (  limits_direction_from_to(EX-EY, E1, X-Y, NX-NY)
+       -> state_event_assoc_bubbled((X-Y)-M0, moved(E1, X-Y, NX-NY), EventAssoc, E2),
+          (  E2 = moved(E1, X-Y, NX-NY)
+          -> app((NX-NY)-M0, View, Update, Result)
+          ;  call(Update, E2, (NX-NY)-M0, S1),
+             app(S1, View, Update, Result)
+          )
+       ;  bell,
+          app(S0, View, Update, Result)
+       )
+
+    ;  call(Update, E1, S0, S1),
+       app(S1, View, Update, Result)
+    ).
+
+
+%render(Drawables) :-
+%    reset,
+%    tui_init,
+%    drawable__normalized_commands(Drawables, Commands),
+%    locatables_end(Commands, EX-EY),
+%    render_commands((-1)-(-1), Commands),
+%    set_cursor(EX, EY), nl,
+%    tui_init,
+%    show_cursor.
+
+
+%cursor_drawables_render((C0 ~> C1), Drawables) :-
+%    C0 = X-Y,
+%    hide_cursor,
+%    drawable__normalized_commands(Drawables, Commands), !,
+%    once(apply_focus(X-Y, Commands)), !,
+%    render_commands(X-Y, Commands),! ,
+%    commands_eventmap(Commands, EventMap), !,
+%    list_to_assoc(EventMap, EventAssoc), !,
+%    locatables_end(Commands, EX-EY), !,
+%%    on(~>(E), bubble_event_cursor_end_assoc(E, (C0 ~> C1), EX-EY, EventAssoc)), !,
+%    get_single_input(E), !,
+%    bubble_event_cursor_end_assoc(E, (C0 ~> C1), EX-EY, EventAssoc), !.
+
+%bubble_event_cursor_end_assoc(E, (C0 ~> C1), EX-EY, EventAssoc) :-
+%    C0 = X-Y,
+%    (  get_assoc(X-Y, EventAssoc, Stack)
+%    -> true
+%    ;  Stack = []
+%    ),
+%    stack_event_is(Stack, E, Bubbled), !,
+%    (  Bubbled = true
+%    -> true
+%
+%    ;  Bubbled = goal(G)
+%    -> call(G)
+%
+%    ;  direction(Bubbled)
+%    -> limits_direction_from_to(EX-EY, Bubbled, X-Y, NX-NY),
+%       C1 = NX-NY
+%
+%    ;  E = q
+%    -> show_cursor, nl, !
+%
+%    ;  bell,
+%       C1 = C0
+%    ), !.
+state_event_assoc_bubbled(S0, E0, EventAssoc, E1) :-
+    (X-Y)-_ = S0,
     (  get_assoc(X-Y, EventAssoc, Stack)
     -> true
     ;  Stack = []
     ),
-    stack_event_is(Stack, E, Bubbled), !,
-    (  Bubbled = true
-    -> true
-
-    ;  Bubbled = goal(G)
-    -> call(G)
-
-    ;  direction(Bubbled)
-    -> limits_direction_from_to(EX-EY, Bubbled, X-Y, NX-NY),
-       C1 = NX-NY
-
-    ; E = q
-    -> show_cursor, nl, !
-
-    ;  bell,
-       C1 = C0
-    ), !.
-
-
-
+    stack_event_is(Stack, E0, E1).
 
 commands_eventmap([], []).
 commands_eventmap([((X-Y)-(S-_-_))|T], EM) :-
@@ -454,7 +512,7 @@ commands_eventmap([((X-Y)-(S-_-_))|T], EM) :-
 render_commands(_, []).
 render_commands(Cursor, [((X-Y)-(_-A-C))|T]) :-
     (  onscreen(X-Y)
-    -> set_cursor(X, Y),
+    -> %set_cursor(X, Y),
        flatten(A, A1),
        raw_attributes_attributes(A1, A2), !,
        (   Cursor = X-Y
@@ -720,10 +778,7 @@ stack_event_is([H|T], E, Is) :-
         clause(M:at_event_is(_, _, _), _),
         M:at_event_is(H, E, Next)
        )
-    -> (  Next = goal(G)
-       -> Is = goal(G)
-       ;  stack_event_is([H|T], Next, Is)
-    )
+    -> stack_event_is([H|T], Next, Is)
     ;  stack_event_is(T, E, Is)
     ), !.
 
@@ -732,10 +787,7 @@ stack_event_is([], E, Is) :-
         clause(M:at_event_is(_, _, _), _),
         M:at_event_is([], E, Next)
        )
-    -> (  Next = goal(G)
-       -> Is = goal(G)
-       ;  stack_event_is([], Next, Is)
-    )
+    -> stack_event_is([], Next, Is)
     ;  Is = E
     ), !.
 

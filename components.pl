@@ -16,11 +16,13 @@ tui:tui_module(components).
 :- op(602, yfx, ~>).
 :- op(602, fy, ~>).
 
+alias_drawable(column([H]), H) :- !.
 
-alias_drawable(column([H|T]), (H .\/ CT)) :-
+alias_drawable(column([]), []) :- !.
+
+alias_drawable(column([H|T]), (H .\/ CT)) :- !,
     alias_drawable(column(T), CT).
 
-alias_drawable(column([]), []).
 
 
 alias_drawable(check_box(Title, Bool), CheckWithHover) :-
@@ -33,8 +35,8 @@ alias_drawable(check_box(Title, Bool), CheckWithHover) :-
 not(true, false).
 not(false, true).
 
-at_event_is(check_box(_Title, Bool), ' ', toggle(T)) :- not(Bool, T).
-at_event_is(check_box(_Title, Bool), return, toggle(T)) :- not(Bool, T).
+at_event_is(check_box(_Title, Bool), ' ', check_box-T) :- not(Bool, T).
+at_event_is(check_box(_Title, Bool), return, check_box-T) :- not(Bool, T).
 
 
 alias_drawable(input(W, PlaceholderA, ValueA), D) :-
@@ -102,13 +104,23 @@ alias_drawable(titled_frame(W-H, Title, Contents, Extent), [FramePart, 1-0-Title
     ;  TitlePart = TL .> style([bold], Title) .> TR
     ).
 
-overlap(A-B, C-D) :-
-    ( A >= C, A =< D
-    ; B >= C, B =< D
-    ; C >= A, C =< B
-    ; D >= A, D =< B
-    ), !.
+overlap(A-B, C-D, O) :-
+    B < A, !,
+    overlap(B-A, C-D, O).
 
+overlap(A-B, C-D, O) :-
+    D < C, !,
+    overlap(A-B, D-C, O).
+
+overlap(A-B, C-D, O) :-
+    C < A, !,
+    overlap(C-D, A-B, O).
+
+overlap(_-B, C-D, O) :-
+    (  C < B
+    -> O is min(B-C, D-C)
+    ;  O is 0
+    ).
 
 scroll_char(h, s, s, '\u2500').
 scroll_char(h, f, f, '\u2501').
@@ -135,17 +147,17 @@ scroll_char(v, f, s, '\u2575').
 
 nofm_seg_style_drawable(M/M, _, _, []) :- !.
 nofm_seg_style_drawable(N/M, P1-P2, S, [X-Y-H|T]) :-
-% 0-based cell spans from N - N + 1
+    % 0-based cell spans from N - N + 1
     % if N+0   to N+0.5 OVERLAPS seg, it's indicated
     % if N+0.5 to N+1   OVARLAPS seg, THAT part is indicated
     N0 is N/M,
     Np5 is (N + 0.5)/M,
     N1 is (N + 1)/M,
-    (  overlap(N0-Np5, P1-P2)
+    (  overlap(N0-Np5, P1-P2, O1), O1 > 0
     -> A = f
     ;  A = s
     ),
-    (  overlap(Np5-N1, P1-P2)
+    (  overlap(Np5-N1, P1-P2, O2), O2 > 0
     -> B = f
     ;  B = s
     ),
@@ -167,7 +179,7 @@ portd_contentd_contento_style_drawable(PD, CD, CO, S, D) :-
     nofm_seg_style_drawable(0/PD, P1-P2, S, D).
 
 
-alias_drawable(scroll(W-H, (X-Y ~> _), Content),
+alias_drawable(scroll(W-H, X-Y, Content),
                    [FramePart,
                     hscroll(1-HM1-HScroll, MaxScrollH),
                     vscroll(WM1-1-VScroll, MaxScrollV)
@@ -183,8 +195,8 @@ alias_drawable(scroll(W-H, (X-Y ~> _), Content),
     PH is H - 2,
     PW is W - 2,
 
-    MaxScrollH is CW - PW,
-    MaxScrollV is CH - PH,
+    MaxScrollH is CW - W + 1,
+    MaxScrollV is CH - H + 1,
 
     portd_contentd_contento_style_drawable(PW, CW, X, h, HScroll),
     portd_contentd_contento_style_drawable(PH, CH, Y, v, VScroll).
@@ -198,7 +210,7 @@ at_event_is(vscroll(_, Max), down, scroll_down(Max)).
 at_event_is(hscroll(_, Max), right, scroll_right(Max)).
 at_event_is(hscroll(_, Max), left, scroll_left(Max)).
 
-at_event_is(scroll(_-_, (X-Y ~> XY1), _), ScrollD, goal(XY1 = X1-Y1)) :-
+at_event_is(scroll(_-_, X-Y, _), ScrollD, scroll-(X1-Y1)) :-
     ( ScrollD = scroll_down(Max),
       Y1 is max(Y - 1, -Max),
       X1 = X

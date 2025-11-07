@@ -4,6 +4,8 @@
 :- reexport(tui).
 :- use_module(components).
 :- use_module(local(core/core)).
+:- use_module(local(core/assocs)).
+
 
 tui:tui_module(example).
 
@@ -22,73 +24,151 @@ tui:tui_module(example).
 
 
 init_checks(Checks) :-
-    findall(N-true, between(1, 300, N), Checks).
+    findall(true, between(1, 100, N), Checks).
 
 init(M) :-
     init_checks(Cs),
     M =
-        [ cursor-(1-1),
-          checks-Cs,
-          scroll_offset1-(0-0),
-          scroll_offset2-(0-0),
-          scroll_offset3-(0-0)
+        5-5-[ checks-Cs,
+              scroll(1)-(0-0),
+              scroll(2)-(0-0),
+              scroll(3)-(0-0),
+              moveable(1)-(0-0-false),
+              moveable(2)-(0-0-false),
+              moveable(3)-(0-0-false)
+            ].
 
-        ].
+:- det(update/3).
+update(C, S0, (X-Y)-M1) :-
+    (X-Y)-M0 = S0,
+    (  C = Key-Change
+    -> pair_pair_assocs_assocs(Key-_, Key-Change, M0, M1)
+    ;  atom(C)
+    -> M1 = M0
+    ), !.
 
-wait_for(V) :-
-    \+ var(V), !.
+update(C, S0, (X-Y)-M1) :-
+    writeln(bad_update),
+    writeln(C),
+    writeln(S0),
+    fail.
 
-wait_for(V) :- !,
-    sleep(0),
-    wait_for(V).
+:- table(int_text(I, T)).
+int_text(I, T) :-
+    M is (I - 1) mod 9,
+    nth0(M, [lorem, ipsum, dolor, sit, amet, consectetur, adipiscing, elit, 'sed do eiusmod tempor'], W),
+    atomic_list_concat([I, ' ', W], T), !.
 
-:- meta_predicate(trampoline_loop(2, ?)).
-trampoline_loop(Pred, In) :-
-    call_time(call(Pred, In, Out), T),
-    append_output_to_file('bench.log', writeln(T)),
-    wait_for(Out),
-    trampoline_loop(Pred, Out).
+alldif(_, []).
+alldif(A, [H|T]) :-
+    dif(A, H),
+    alldif(A, T),
+    alldif([H|T]).
 
-app(M0, M1) :-
-    assocs(M0 ~> M1) <-.. cursor-(C0 ~> C1),
-    assocs(M0 ~> M1) <-.. scroll_offset1-(SO10 ~> SO11),
-    assocs(M0 ~> M1) <-.. scroll_offset2-(SO20 ~> SO21),
+alldif([H|T]) :- alldif(H, T).
 
-    assocs(M0 ~> M1) <-.. checks-(CH0 ~> CH1),
-    list(CH0 ~> CH1) <-.. CheckTriggers,
+:- det(view/2).
+view((_X-_Y)-M0, View) :-
+    alldif([A, B, C]),
+    assocs_pairs(M0,
+                 [
+                     moveable(A)-MVA,
+                     moveable(B)-MVB,
+                     moveable(C)-MVC,
+                     scroll(A)-SOA,
+                     scroll(B)-SOB,
+                     scroll(C)-SOC,
+                     checks-Checks
+                 ]), !,
 
-    maplist(checktrigger_check, CheckTriggers, Checks),
+    moveable_color(A, CA),
+    moveable_color(B, CB),
+    moveable_color(C, CC),
+    View =
+        titled_frame(80-30, "My App",
+                     [ id(C, moveable, MVC,
+                          1-1-style([fg(CC)],
+                                    id(C, scroll, 20-15, SOC,
+                                       checks(Checks)
+                                    ))
+                       ),
+                       id(B, moveable, MVB,
+                          1-1-style([fg(CB)],
+                                    id(B, scroll, 20-15, SOB,
+                                       checks(Checks)
+                                    ))
+                       ),
+
+                       id(A, moveable, MVA,
+                          1-1-style([fg(CA)],
+                                    id(A, scroll, 20-15, SOA,
+                                       checks(Checks)
+                                    ))
+                       )
+                     ]
+        ).
+
+moveable_color(1, red).
+moveable_color(2, green).
+moveable_color(3, blue).
 
 
-    View = titled_frame(80-21, "My App",
-                        [style([fg(red)],
-                               scroll(10-19, SO10 ~> SO11,
-                                      column(Checks)
-                               ))
-                         .>
-                             style([fg(green)],
-                                   scroll(10-19, SO20 ~> SO21,
-                                          column(Checks)
-                                   )), style([hfg(blue)], 8-4-titled_frame(10-3, "Float", abc))
-                        ]
+alias_drawable(IDed, Drawable) :-
+    IDed =.. [id, _Id, Alias  |Parameters],
+    Drawable =.. [Alias  |Parameters].
+
+at_event_is(IDedAlias, Alias-Updated, IDed-Updated) :-
+    IDedAlias =.. [id, Id, Alias  |_],
+    IDed =.. [Alias, Id].
 
 
-           ),
-    cursor_drawables_render(C0 ~> C1, View), !.
+to_ided_checkbox(I, T, id(I, check_box, L, T)) :- int_text(I, L).
 
-checktrigger_check(T, check(T)).
+alias_drawable(checks(Checks), View) :-
+    mapindexed(to_ided_checkbox, Checks, IndexedChecks),
+    View = column(IndexedChecks).
 
-% check
-alias_drawable(check((Id-Bool) ~> _), View) :-
-    atomic_list_concat([Id], IdAtom),
-    View = check_box(IdAtom, Bool).
+alias_drawable(indexed_check(I, Bool), View) :-
+    View = check_box(I, Bool).
 
-at_event_is(check((Id-_) ~> CH1), toggle(T), goal(CH1 = Id-T)).
+list_index_is_updated([_|T], 1, H, [H|T]) :- !.
+list_index_is_updated([H|T], N, Is, [H|U]) :-
+    N > 1,
+    Next is N - 1,
+    list_index_is_updated(T, Next, Is, U).
 
-% scroll
+at_event_is(checks(Checks), check_box(I)-T, checks-Updated) :-
+    list_index_is_updated(Checks, I, T, Updated).
+
+% moveable
+alias_drawable(moveable(DX-DY-Moving, Drawable), View) :-
+    (  Moving
+    -> View = [
+                  1-1-style([fg(black), bg(black)], translate(DX-DY, Drawable)),
+                  0-0-style([faint], translate(DX-DY, Drawable))
+              ]
+    ;  View = translate(DX-DY, Drawable)
+    ).
+
+not(true, false).
+not(false, true).
+
+at_event_is(moveable(DX-DY-Moving, _), ' ', moveable-(DX-DY-MovingToggle)) :-
+    not(Moving, MovingToggle), !.
+
+at_event_is(moveable(DX-DY-true, _), moved(D, _, _), moveable-(DX1-DY1-true)) :-
+    ( D = left, DX1 is DX - 1, DY1 is DY
+    ; D = right, DX1 is DX + 1, DY1 is DY
+    ; D = up, DX1 is DX, DY1 is DY - 1
+    ; D = down, DX1 is DX, DY1 is DY + 1
+    ), !.
 
 go :-
     reset,
     tui_init,
     init(M),
-    with_tty_raw(trampoline_loop(app, M)).
+    with_tty_raw(
+        app(M, view, update, Result)),
+    show_cursor,
+    clear_screen,
+    writeln(Result).
