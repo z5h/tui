@@ -2,30 +2,18 @@
 
 :- reexport(tui).
 
-tui:tui_module(components).
-
-:- public(alias_drawable/2).
-:- discontiguous(alias_drawable/2).
-
-:- public(at_event_is/3).
-:- discontiguous(at_event_is/3).
-
-
 :- op(601, xfy, '.>').
 :- op(601, xfy, '.\\/').
-:- op(602, yfx, ~>).
-:- op(602, fy, ~>).
 
-alias_drawable(column([H]), H) :- !.
+tui:alias_drawable(column([H]), H) :- !.
+tui:alias_drawable(column([]), []) :- !.
+tui:alias_drawable(column([H|T]), (H .\/ column(T))) :- !.
 
-alias_drawable(column([]), []) :- !.
+tui:alias_drawable(row([H]), H) :- !.
+tui:alias_drawable(row([]), []) :- !.
+tui:alias_drawable(row([H|T]), (H .> row(T))) :- !.
 
-alias_drawable(column([H|T]), (H .\/ CT)) :- !,
-    alias_drawable(column(T), CT).
-
-
-
-alias_drawable(check_box(Title, Bool), CheckWithHover) :-
+tui:alias_drawable(check_box(Title, Bool), CheckWithHover) :-
     (  Bool = true
     -> Check = style([     ], ('[x]' .> ': ' .> Title))
     ;  Check = style([faint], ('[ ]' .> ': ' .> Title))
@@ -35,11 +23,11 @@ alias_drawable(check_box(Title, Bool), CheckWithHover) :-
 not(true, false).
 not(false, true).
 
-at_event_is(check_box(_Title, Bool), ' ', check_box-T) :- not(Bool, T).
-at_event_is(check_box(_Title, Bool), return, check_box-T) :- not(Bool, T).
+tui:at_event_is(check_box(_Title, Bool), ' ', check_box-T) :- not(Bool, T).
+tui:at_event_is(check_box(_Title, Bool), return, check_box-T) :- not(Bool, T).
 
 
-alias_drawable(input(W, PlaceholderA, ValueA), D) :-
+tui:alias_drawable(input(W, PlaceholderA, ValueA), D) :-
     atomics_to_string([PlaceholderA], Placeholder),
     (  var(ValueA)
     -> string_length_adjusted(Placeholder, W, Displayed),
@@ -52,9 +40,9 @@ alias_drawable(input(W, PlaceholderA, ValueA), D) :-
          2-0-Field].
 
 
-alias_drawable(frame(W-H, Contents), frame(W-H, Contents, _)).
+tui:alias_drawable(frame(W-H, Contents), frame(W-H, Contents, _)).
 
-alias_drawable(frame(W-H, Contents, Extent), [Clear, Box, Port]) :-
+tui:alias_drawable(frame(W-H, Contents, Extent), [Clear, Box, Port]) :-
     (  W > 1, H > 1
     -> true
     ;  domain_error(valid_window_size, W-H)
@@ -90,9 +78,9 @@ string_length_adjusted(S, L, A) :-
 title_l('\u2574').
 title_r('\u2576').
 
-alias_drawable(titled_frame(W-H, Title, Contents), titled_frame(W-H, Title, Contents, _)).
+tui:alias_drawable(titled_frame(W-H, Title, Contents), titled_frame(W-H, Title, Contents, _)).
 
-alias_drawable(titled_frame(W-H, Title, Contents, Extent), [FramePart, 1-0-TitlePart]) :-
+tui:alias_drawable(titled_frame(W-H, Title, Contents, Extent), [FramePart, 1-0-TitlePart]) :-
     title_l(TL),
     title_r(TR),
     FramePart = frame(W-H, Contents, Extent),
@@ -179,7 +167,7 @@ portd_contentd_contento_style_drawable(PD, CD, CO, S, D) :-
     nofm_seg_style_drawable(0/PD, P1-P2, S, D).
 
 
-alias_drawable(scroll(W-H, X-Y, Content),
+tui:alias_drawable(scroll(W-H, X-Y, Content),
                    [FramePart,
                     hscroll(1-HM1-HScroll, MaxScrollH),
                     vscroll(WM1-1-VScroll, MaxScrollV)
@@ -201,16 +189,16 @@ alias_drawable(scroll(W-H, X-Y, Content),
     portd_contentd_contento_style_drawable(PW, CW, X, h, HScroll),
     portd_contentd_contento_style_drawable(PH, CH, Y, v, VScroll).
 
-alias_drawable(vscroll(C, _), C).
-alias_drawable(hscroll(C, _), C).
+tui:alias_drawable(vscroll(C, _), C).
+tui:alias_drawable(hscroll(C, _), C).
 
-at_event_is(vscroll(_, Max), up, scroll_up(Max)).
-at_event_is(vscroll(_, Max), down, scroll_down(Max)).
+tui:at_event_is(vscroll(_, Max), up, scroll_up(Max)).
+tui:at_event_is(vscroll(_, Max), down, scroll_down(Max)).
 
-at_event_is(hscroll(_, Max), right, scroll_right(Max)).
-at_event_is(hscroll(_, Max), left, scroll_left(Max)).
+tui:at_event_is(hscroll(_, Max), right, scroll_right(Max)).
+tui:at_event_is(hscroll(_, Max), left, scroll_left(Max)).
 
-at_event_is(scroll(_-_, X-Y, _), ScrollD, scroll-(X1-Y1)) :-
+tui:at_event_is(scroll(_-_, X-Y, _), ScrollD, scroll-(X1-Y1)) :-
     ( ScrollD = scroll_down(Max),
       Y1 is max(Y - 1, -Max),
       X1 = X

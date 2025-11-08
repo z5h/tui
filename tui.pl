@@ -16,28 +16,15 @@
             locatables_end/2,
             limits_direction_from_to/4,
             drawable_raw/2,
-
-            % event stuff
-            on/2,
-            op(602, yfx, ~>),
-            op(602, fy, ~>),
-            op(601, xfy, '..->'),
-            op(601, xfy, '<-..'),
-            op(601, xfy, '<<..'),
-            '<-..'/2,
-            '<<..'/2,
-            tui_module/1,
             drawable//5,
             app/4
           ]).
 :- use_module(local(core/assocs)).
 :- use_module(local(core/core)).
 :- use_module(library(ansi_term)).
-:- use_module(watch).
 
-:- multifile(tui_module/1).
-tui_module(tui).
-
+:- multifile at_event_is/3.
+:- multifile alias_drawable/2.
 
                 /*******************************
                 *       MORPH RELATIONS        *
@@ -47,44 +34,6 @@ discrete(G) :-
     copy_term_nat(G, G0),
     call(G0),
     G = G0.
-
-:- meta_predicate(on(+, 0)).
-on(~>To, Goal) :- !,
-    freeze(To, Goal).
-
-on(From ~> To, Goal) :-
-    assertion(\+ var(From)),
-    on(~>To, Goal).
-
-assoc(A1 ~> A2)  <-.. Key-(V1 ~> V2) :-
-    del_assoc(Key, A1, V1, A1_5), !,
-    on(V1 ~> V2,
-       (put_assoc(Key, A1_5, V2, A2t), A2 = A2t)
-      ).
-
-assocs(A1 ~> A2)  <-.. Key-(V1 ~> V2) :-
-    assocs_pair(A1, Key-V1), !,
-    on(V1 ~> V2,
-       ( pair_pair_assocs_assocs(Key-V1, Key-V2, A1, A2t),!,
-         A2 = A2t
-       )).
-
-
-list(L0 ~> L1) <-.. Triggers :-
-    findall(H-V-T, append([H, [V], T], L0), HVTs),
-    maplist(list_hvt_trigger(L1), HVTs, Triggers).
-
-list_hvt_trigger(L1, H-V0-T, (V0 ~> V1)) :-
-    on(V0 ~> V1,
-       (append([H, [V1], T], L1t), L1 = L1t)
-      ).
-
-A <<.. C :-
-    ( tui_module(M), M:'<-..'(A, C)
-    ; tui_module(M), M:'<-..'(A, B),
-      B <<.. C
-    ).
-
 
                 /*******************************
                 *          UTILITIES           *
@@ -203,26 +152,12 @@ mapnestedlist(_, [], []) :- !.
 mapnestedlist(F, D, FD) :-
     call(F, D, FD), !.
 
-
-%!  drawable_command(+D, -C).
-%
-%   Converts a drawable (which may recursively consist of lists of
-%   drawables) to a command (which may be a unit command or nested list
-%   of commands).
-%
-%   X-Y-A is a drawable, where A is an atom, string or number.
-%   A is a drawable equivalent to 0-0-A.
-%   translate(DX-DY, Drawable) is drawable if Drawable is drawable.
-%   port(W-H, Drawable) is drawable if Drawable is drawable.
-%   style(Attrs, Drawable) is drawable if Drawable is drawable.
-%   raw(Drawable) is drawable if Drawable is drawable.
-%   Alias is drawable, if alias_drawable(Alias,Drawable)is true, and Drawable
-%   is drawable.
-
 :- discontiguous(drawable//5).
 :- det(drawable//5).
-drawable(_, _, '<<<<<undrawable>>>>') -->
-    { instantiation_error(drawable) }.
+drawable(Var, _, _, _, _) -->
+    { var(Var), !,
+      domain_error(drawable, Var)
+    }.
 
 drawable(chars([]), _, _, XY, XY) --> !,
     [].
@@ -237,7 +172,6 @@ drawable(chars_tail([]), _, _, XY, XY) --> !,
 drawable(chars_tail(T), Stack, Attr, X-Y, MX-MY) --> !,
     { NX is X + 1 },
     drawable(chars(T), Stack, Attr, NX-Y, MX-MY), !.
-
 
 drawable(raw([]), _, _, XY, XY) --> !,
     [].
@@ -256,16 +190,6 @@ drawable(raw([H|T]), Stack, Attr, DX-DY, MX-MY) --> !,
       MY is max(Y1, MTY)
     }.
 
-
-
-%drawable((X0-Y0)-A, Stack, Attr, DX-DY, MX-MY) -->
-%    { atom(A), atom_chars(A, Chars)
-%    ; string(A), string_chars(A, Chars)
-%    ; number(A), number_chars(A, Chars)
-%    }, !,
-%    { X is X0 + DX, Y is Y0 + DY },
-%    drawable(chars(Chars), Stack, Attr, X-Y, MX-MY).
-
 drawable(A, Stack, Attr, X-Y, MX-MY) -->
     { atom(A), atom_chars(A, Chars)
     ; string(A), string_chars(A, Chars)
@@ -279,12 +203,6 @@ drawable([H|T], Stack, Attr, XY, MX-MY) --> !,
     { MX is max(MX1, MX2), MY is max(MY1, MY2) }, !.
 
 drawable([], _, _, XY, XY) --> !, [].
-
-
-sequence_at_command([], _, []).
-sequence_at_command([C|R], X-Y, [(X-Y)-([]-[]-C)|SR]) :-
-    X1 is X + 1,
-    sequence_at_command(R, X1-Y, SR).
 
 capture(Phrase, C, A, A2) :-
     phrase(Phrase, C, []), !,
@@ -319,8 +237,6 @@ drawable(port(W-H, Drawables, MPX-MPY), Stack, Attr, DX-DY, MX-MY) --> !,
 drawable(style(Style, Drawables), Stack, Attr, DX-DY, MX-MY) --> !,
     drawable(Drawables, Stack, [Style | Attr ], DX-DY, MX-MY).
 
-push_stack(R, (X-Y)-(Stack-Attr-C), (X-Y)-([R|Stack]-Attr-C)).
-
 drawable(A .> B, Stack, Attr, DX-DY, MX-MY) --> !,
     drawable(A, Stack, Attr, DX-DY, AMX-AMY),
     { WidthA is AMX - DX + 1 },
@@ -334,15 +250,8 @@ drawable(A .\/ B, Stack, Attr, DX-DY, MX-MY) --> !,
     drawable(translate(0-HeightA, B), Stack, Attr, DX-DY, BMX-BMY),
     { MX is max(AMX, BMX), MY is max(AMY, BMY) }.
 
-:- table(module_with_alias_drawable/1).
-module_with_alias_drawable(M) :-
-    tui_module(M),
-    clause(M:alias_drawable(_,_), _).
-
 drawable(A, Stack, Attr, DX-DY, MX-MY) -->
-    { module_with_alias_drawable(M),
-      M:alias_drawable(A, D), !
-    },
+    { tui:alias_drawable(A, D) }, !,
     drawable(D, [A | Stack], Attr, DX-DY, MX-MY).
 
 drawable(D, _, _, _, _) -->
@@ -390,23 +299,11 @@ drawable__normalized_commands__end(Drawables, Deduped, MXY) :-
     !,
     keylist_deduped_prioritize_last(Commands, Deduped).
 
-/*
-need a way to draw
-view(Model, Drawables)
-
-need a way to update
-update(Event, Model0, Model1)
-
-need initial state
-init(Model)
-
-so can be
-app(Init, View, Update)
-*/
-
 
 :- meta_predicate(app(?, 2, 3, ?)).
 :- det(app/4).
+app(result(Result), _, _, Result) :- !.
+
 app(S0, View, Update, Result) :-
     @ hide_cursor,
     @ (X-Y)-M0 = S0,
@@ -422,7 +319,8 @@ app(S0, View, Update, Result) :-
     @ commands_eventmap(Commands, EventMap),
     @ list_to_assoc(EventMap, EventAssoc), !,
 
-    get_single_input(E0), !,
+%    get_single_input(E0), !,
+    input_or_tick(E0), !,
     state_event_assoc_bubbled(S0, E0, EventAssoc, E1),
     (  E1 = result(Result)
     -> true
@@ -443,54 +341,6 @@ app(S0, View, Update, Result) :-
        app(S1, View, Update, Result)
     ).
 
-
-%render(Drawables) :-
-%    reset,
-%    tui_init,
-%    drawable__normalized_commands(Drawables, Commands),
-%    locatables_end(Commands, EX-EY),
-%    render_commands((-1)-(-1), Commands),
-%    set_cursor(EX, EY), nl,
-%    tui_init,
-%    show_cursor.
-
-
-%cursor_drawables_render((C0 ~> C1), Drawables) :-
-%    C0 = X-Y,
-%    hide_cursor,
-%    drawable__normalized_commands(Drawables, Commands), !,
-%    once(apply_focus(X-Y, Commands)), !,
-%    render_commands(X-Y, Commands),! ,
-%    commands_eventmap(Commands, EventMap), !,
-%    list_to_assoc(EventMap, EventAssoc), !,
-%    locatables_end(Commands, EX-EY), !,
-%%    on(~>(E), bubble_event_cursor_end_assoc(E, (C0 ~> C1), EX-EY, EventAssoc)), !,
-%    get_single_input(E), !,
-%    bubble_event_cursor_end_assoc(E, (C0 ~> C1), EX-EY, EventAssoc), !.
-
-%bubble_event_cursor_end_assoc(E, (C0 ~> C1), EX-EY, EventAssoc) :-
-%    C0 = X-Y,
-%    (  get_assoc(X-Y, EventAssoc, Stack)
-%    -> true
-%    ;  Stack = []
-%    ),
-%    stack_event_is(Stack, E, Bubbled), !,
-%    (  Bubbled = true
-%    -> true
-%
-%    ;  Bubbled = goal(G)
-%    -> call(G)
-%
-%    ;  direction(Bubbled)
-%    -> limits_direction_from_to(EX-EY, Bubbled, X-Y, NX-NY),
-%       C1 = NX-NY
-%
-%    ;  E = q
-%    -> show_cursor, nl, !
-%
-%    ;  bell,
-%       C1 = C0
-%    ), !.
 state_event_assoc_bubbled(S0, E0, EventAssoc, E1) :-
     (X-Y)-_ = S0,
     (  get_assoc(X-Y, EventAssoc, Stack)
@@ -507,7 +357,6 @@ commands_eventmap([((X-Y)-(S-_-_))|T], EM) :-
     ;  EM = EMT
     ),
     commands_eventmap(T, EMT).
-
 
 render_commands(_, []).
 render_commands(Cursor, [((X-Y)-(_-A-C))|T]) :-
@@ -545,19 +394,19 @@ location_style_char(X-Y, Style, C) :-
                 *     UNICODE LINES/BOXES      *
                 *******************************/
 
-char_from_to_line(C, X1-Y, X2-Y, L) :-
+char_from_to_line(C, X1-Y, X2-Y, L) :- !,
     (  X1 > X2
     -> From = X2, To = X1
     ;  From = X1, To = X2
     ),
-    findall((X-Y)-C, between(From, To, X), L), !.
+    findall((X-Y)-C, between(From, To, X), L).
 
 char_from_to_line(C, X-Y1, X-Y2, L) :- !,
     (  Y1 > Y2
     -> From = Y2, To = Y1
     ;  From = Y1, To = Y2
     ),
-    findall((X-Y)-C, between(From, To, Y), L), !.
+    findall((X-Y)-C, between(From, To, Y), L).
 
 :- discontiguous style_corner_char/3.
 :- discontiguous style_horizontal/2.
@@ -589,8 +438,6 @@ style_vertical(double, '\u2551').
                 /*******************************
                 *     ALIASES (COMPONENTS)     *
                 *******************************/
-
-:- public(alias_drawable/2).
 
 alias_drawable(V, _) :-
     var(V), !,
@@ -774,19 +621,13 @@ stack_event_is(V, _, _) :- var(V), domain_error(stack_event_is, stack:V).
 stack_event_is(_, V, _) :- var(V), domain_error(stack_event_is, event:V).
 
 stack_event_is([H|T], E, Is) :-
-    (  (tui_module(M),
-        clause(M:at_event_is(_, _, _), _),
-        M:at_event_is(H, E, Next)
-       )
+    (  tui:at_event_is(H, E, Next)
     -> stack_event_is([H|T], Next, Is)
     ;  stack_event_is(T, E, Is)
     ), !.
 
 stack_event_is([], E, Is) :-
-    (  (tui_module(M),
-        clause(M:at_event_is(_, _, _), _),
-        M:at_event_is([], E, Next)
-       )
+    (  tui:at_event_is([], E, Next)
     -> stack_event_is([], Next, Is)
     ;  Is = E
     ), !.

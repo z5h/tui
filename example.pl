@@ -6,21 +6,8 @@
 :- use_module(local(core/core)).
 :- use_module(local(core/assocs)).
 
-
-tui:tui_module(example).
-
-:- public(alias_drawable/2).
-:- discontiguous(alias_drawable/2).
-
-:- public(at_event_is/3).
-:- discontiguous(at_event_is/3).
-
-
-:- op(602, yfx, ~>).
-:- op(602, fy, ~>).
 :- op(601, xfy, '.>').
 :- op(601, xfy, '.\\/').
-:- op(601, xfy, '<-..').
 
 
 init_checks(Checks) :-
@@ -34,21 +21,25 @@ init(M) :-
               scroll(2)-(0-0),
               scroll(3)-(0-0),
               moveable(1)-(0-0-false),
-              moveable(2)-(0-0-false),
-              moveable(3)-(0-0-false)
+              moveable(2)-(20-0-false),
+              moveable(3)-(40-0-false),
+              time-_
             ].
 
 :- det(update/3).
+update(q, S0, result(S0)) :- !.
 update(C, S0, (X-Y)-M1) :-
     (X-Y)-M0 = S0,
     (  C = Key-Change
     -> pair_pair_assocs_assocs(Key-_, Key-Change, M0, M1)
     ;  atom(C)
     -> M1 = M0
+    ;  C = time(T)
+    -> pair_pair_assocs_assocs(time-_, time-T, M0, M1)
     ), !.
 
-update(C, S0, (X-Y)-M1) :-
-    writeln(bad_update),
+update(C, S0, _) :-
+    writeln("Bad Update"),
     writeln(C),
     writeln(S0),
     fail.
@@ -68,67 +59,65 @@ alldif(A, [H|T]) :-
 alldif([H|T]) :- alldif(H, T).
 
 :- det(view/2).
-view((_X-_Y)-M0, View) :-
+view((_X-_Y)-M, View) :-
+
+    % we want the most recently updated movable to be rendered last (over the others)
+    % so this is just to establist A,B,C as the IDs in the order we want.
     alldif([A, B, C]),
-    assocs_pairs(M0,
-                 [
-                     moveable(A)-MVA,
-                     moveable(B)-MVB,
-                     moveable(C)-MVC,
-                     scroll(A)-SOA,
-                     scroll(B)-SOB,
-                     scroll(C)-SOC,
-                     checks-Checks
+    assocs_pairs(M,
+                 [ moveable(A)-_,
+                   moveable(B)-_,
+                   moveable(C)-_,
+                   time-T
                  ]), !,
 
-    moveable_color(A, CA),
-    moveable_color(B, CB),
-    moveable_color(C, CC),
     View =
-        titled_frame(80-30, "My App",
-                     [ id(C, moveable, MVC,
-                          1-1-style([fg(CC)],
-                                    id(C, scroll, 20-15, SOC,
-                                       checks(Checks)
-                                    ))
-                       ),
-                       id(B, moveable, MVB,
-                          1-1-style([fg(CB)],
-                                    id(B, scroll, 20-15, SOB,
-                                       checks(Checks)
-                                    ))
-                       ),
+        titled_frame(80-25, "My App",
+                     clock(T) .\/
+                     [ my_scrolled_checks(C, M)
+                     , my_scrolled_checks(B, M)
+                     , my_scrolled_checks(A, M)
+                     ]).
 
-                       id(A, moveable, MVA,
-                          1-1-style([fg(CA)],
-                                    id(A, scroll, 20-15, SOA,
-                                       checks(Checks)
-                                    ))
-                       )
-                     ]
-        ).
+tui:alias_drawable(clock(T), View) :-
+    ignore(T = ' '),
+    View = style([bg('#FFF')], titled_frame(10-3,"Time", T)).
 
-moveable_color(1, red).
-moveable_color(2, green).
-moveable_color(3, blue).
+tui:alias_drawable(my_scrolled_checks(Id, M), View) :-
+    assocs_pairs(M,
+                 [ moveable(Id)-MV,
+                   scroll(Id)-SO,
+                   checks-Checks
+                 ]),
+    moveable_style(Id, Style),
+    View = id(Id, moveable, MV,
+              1-1-style(Style,
+                        id(Id, scroll, 20-15, SO,
+                           checks(Checks)
+                        ))
+           ).
 
 
-alias_drawable(IDed, Drawable) :-
+moveable_style(1, [fg(red)]).
+moveable_style(2, [fg(green)]).
+moveable_style(3, [fg(blue)]).
+
+
+tui:alias_drawable(IDed, Drawable) :-
     IDed =.. [id, _Id, Alias  |Parameters],
     Drawable =.. [Alias  |Parameters].
 
-at_event_is(IDedAlias, Alias-Updated, IDed-Updated) :-
+tui:at_event_is(IDedAlias, Alias-Updated, IDed-Updated) :-
     IDedAlias =.. [id, Id, Alias  |_],
     IDed =.. [Alias, Id].
 
-
 to_ided_checkbox(I, T, id(I, check_box, L, T)) :- int_text(I, L).
 
-alias_drawable(checks(Checks), View) :-
+tui:alias_drawable(checks(Checks), View) :-
     mapindexed(to_ided_checkbox, Checks, IndexedChecks),
     View = column(IndexedChecks).
 
-alias_drawable(indexed_check(I, Bool), View) :-
+tui:alias_drawable(indexed_check(I, Bool), View) :-
     View = check_box(I, Bool).
 
 list_index_is_updated([_|T], 1, H, [H|T]) :- !.
@@ -137,11 +126,11 @@ list_index_is_updated([H|T], N, Is, [H|U]) :-
     Next is N - 1,
     list_index_is_updated(T, Next, Is, U).
 
-at_event_is(checks(Checks), check_box(I)-T, checks-Updated) :-
+tui:at_event_is(checks(Checks), check_box(I)-T, checks-Updated) :-
     list_index_is_updated(Checks, I, T, Updated).
 
 % moveable
-alias_drawable(moveable(DX-DY-Moving, Drawable), View) :-
+tui:alias_drawable(moveable(DX-DY-Moving, Drawable), View) :-
     (  Moving
     -> View = [
                   1-1-style([fg(black), bg(black)], translate(DX-DY, Drawable)),
@@ -153,22 +142,27 @@ alias_drawable(moveable(DX-DY-Moving, Drawable), View) :-
 not(true, false).
 not(false, true).
 
-at_event_is(moveable(DX-DY-Moving, _), ' ', moveable-(DX-DY-MovingToggle)) :-
+tui:at_event_is(moveable(DX-DY-Moving, _), ' ', moveable-(DX-DY-MovingToggle)) :-
     not(Moving, MovingToggle), !.
 
-at_event_is(moveable(DX-DY-true, _), moved(D, _, _), moveable-(DX1-DY1-true)) :-
+tui:at_event_is(moveable(DX-DY-true, _), moved(D, _, _), moveable-(DX1-DY1-true)) :-
     ( D = left, DX1 is DX - 1, DY1 is DY
     ; D = right, DX1 is DX + 1, DY1 is DY
     ; D = up, DX1 is DX, DY1 is DY - 1
     ; D = down, DX1 is DX, DY1 is DY + 1
     ), !.
 
+indent(X) :- write('  '), writeln(X).
 go :-
     reset,
     tui_init,
     init(M),
     with_tty_raw(
-        app(M, view, update, Result)),
+        app(M, view, update, (X-Y)-Result)),
     show_cursor,
     clear_screen,
-    writeln(Result).
+    writeln("User Quit"),
+    writeln("Last Model:"),
+    writeln((X-Y)-'['),
+    maplist(indent, Result),
+    writeln(']').
