@@ -1,6 +1,6 @@
 :- module(components, []).
 
-:- reexport(tui).
+:- use_module(tui).
 
 :- op(601, xfy, '.>').
 :- op(601, xfy, '.\\/').
@@ -38,7 +38,6 @@ tui:alias_drawable(input(W, PlaceholderA, ValueA), D) :-
     ),
     D = [style([faint], 0-0-'> '),
          2-0-Field].
-
 
 tui:alias_drawable(frame(W-H, Contents), frame(W-H, Contents, _)).
 
@@ -119,19 +118,6 @@ scroll_char(v, s, s, '\u2502').
 scroll_char(v, f, f, '\u2503').
 scroll_char(v, s, f, '\u257d').
 scroll_char(v, f, s, '\u257f').
-
-/*
-scroll_char(h, s, s, ' ').
-scroll_char(h, f, f, '\u2500').
-scroll_char(h, s, f, '\u2576').
-scroll_char(h, f, s, '\u2574').
-
-scroll_char(v, s, s, ' ').
-scroll_char(v, f, f, '\u2502').
-scroll_char(v, s, f, '\u2577').
-scroll_char(v, f, s, '\u2575').
-*/
-
 
 nofm_seg_style_drawable(M/M, _, _, []) :- !.
 nofm_seg_style_drawable(N/M, P1-P2, S, [X-Y-H|T]) :-

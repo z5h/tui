@@ -6,6 +6,7 @@
             hide_cursor/0,
             show_cursor/0,
             set_cursor/2,
+            terminal_size/2,
             wait_for_input/0,
             get_single_input/1,
             input_or_tick/1,
@@ -13,15 +14,13 @@
             reset/0,
             tui_init/0,
             stack_event_is/3,
-            locatables_end/2,
             limits_direction_from_to/4,
             drawable_raw/2,
             drawable//5,
             app/4
           ]).
-:- use_module(local(core/assocs)).
-:- use_module(local(core/core)).
-:- use_module(library(ansi_term)).
+
+:- use_module(library(dcg/basics)).
 
 :- multifile at_event_is/3.
 :- multifile alias_drawable/2.
@@ -49,6 +48,54 @@ hide_cursor :-
 
 show_cursor :-
     format('\e[?25h').
+
+save_cursor :-
+    format('\e[s').
+
+restore_cursor :-
+    format('\e[s').
+
+report_cursor(X,Y) :-
+        format('\e[6n'),
+        flush_output,
+        get_single_input(Sequence),
+        is_list(Sequence),
+        phrase(([27,91], integer(Y), [59], integer(X)), Sequence, []).
+
+:- dynamic terminal_size_/2.
+update_terminal_size :-
+    retractall(terminal_size_(_, _)),
+    save_cursor,
+    set_cursor(1000,1000),
+    report_cursor(Cols, Rows),
+    restore_cursor,
+    asserta(terminal_size_(Cols, Rows)).
+
+
+terminal_size(Cols, Rows) :-
+    terminal_size_(Cols, Rows), !.
+
+terminal_size(Cols, Rows) :-
+    update_terminal_size,
+    terminal_size_(Cols, Rows), !.
+
+
+:- dynamic location_style_char_/3.
+
+tui_init :-
+    clear_screen,
+    retractall(location_style_char_(_, _, _)),
+    update_terminal_size.
+
+location_style_char(X-Y, Style, C) :-
+    location_style_char_(X-Y, Style, C), !.
+
+location_style_char(X-Y, Style, C) :-
+    retractall(location_style_char_(X-Y, _, _)),
+    set_cursor(X, Y),
+    ansi_format(Style, '~s', [C]),
+    assertz(location_style_char_(X-Y, Style, C)),
+   !.
 
 clear_screen :-
     reset.
@@ -105,52 +152,6 @@ command((X-Y)-(Stack-Attrs-C)) :-
     maplist(is_attribute, Attrs),
     atom(C),
     atom_length(C, 1).
-
-
-%!  commands_end(+Commands, -End)
-%
-%   End = X-Y where
-%   X is the max X found in Commands, and
-%   Y is the max Y found in Commands.
-locatables_end((X-Y)-(_-_-_), X-Y) :- !.
-locatables_end((X-Y), X-Y) :- !.
-
-locatables_end([], 0-0) :- !.
-locatables_end([H|T], X3-Y3) :-
-    locatables_end(H, X1-Y1),
-    locatables_end(T, X2-Y2),
-    Y3 is max(Y1, Y2),
-    X3 is max(X1, X2).
-
-%!  translate_command_translated(+Delta, +C0, -C1).
-%
-%   Translates a drawing command by Delta in the form of DX-DY.
-translate_command_translated(DX-DY, (X-Y)-(Stack-Attr-C), (X1-Y1)-(Stack-Attr-C)) :-
-    X1 is X + DX,
-    Y1 is Y + DY.
-
-%!  attrs_command_styled(+AttrsOuter, +C0, -C1).
-%
-%   Calculates the result of C0s attributes in the context of
-%   surrounding attributes AttrsOuter, and stores the result in
-%   the attributes of C1.
-attrs_command_styled(Attrs, (X-Y)-(Stack-Inner-C), (X-Y)-(Stack-[Attrs  |Inner]-C)).
-
-%!  port_visible(+Bounds, +Command).
-%
-%   True if the Command is for a location within the W-H Boundaries.
-port_visible(W-H, (X-Y)-(_-_-_)) :-
-    X > -1, X < W,
-    Y > -1, Y < H.
-
-:- meta_predicate mapnestedlist(2, ?, ?).
-mapnestedlist(F, [H|T], [FH|FT]) :- !,
-    mapnestedlist(F, H, FH),
-    mapnestedlist(F, T, FT).
-
-mapnestedlist(_, [], []) :- !.
-mapnestedlist(F, D, FD) :-
-    call(F, D, FD), !.
 
 :- discontiguous(drawable//5).
 :- det(drawable//5).
@@ -263,25 +264,21 @@ drawable(D, _, _, _, _) -->
 
 onscreen(X-Y) :-
     X > 0,
-    Y > 0.
-
-better_delete(L0, E, L1) :-
-    append([Pre, [E], Post], L0),
-    append(Pre, Post, L1), !.
-
-apply_hover([H|T], [H|HovT]) :-
-    apply_hover(T, HovT).
+    Y > 0,
+    terminal_size(Cols, Rows), !,
+    X =< Cols,
+    Y =< Rows.
 
 raw_attributes_attributes([], []).
 
-raw_attributes_attributes([style_hovergroup(_, false)|T], Attr) :-
+raw_attributes_attributes([style_hovergroup(_, false)|T], Attr) :- !,
     raw_attributes_attributes(T, Attr).
 
-raw_attributes_attributes([style_hovergroup(S, true)|T], Attr) :-
+raw_attributes_attributes([style_hovergroup(S, true)|T], Attr) :- !,
     append(S, T, ST),
     raw_attributes_attributes(ST, Attr).
 
-raw_attributes_attributes([H|T], [H|A]) :-
+raw_attributes_attributes([H|T], [H|A]) :- !,
     raw_attributes_attributes(T, A).
 
 apply_focus(X-Y, Commands) :-
@@ -299,25 +296,26 @@ drawable__normalized_commands__end(Drawables, Deduped, MXY) :-
     !,
     keylist_deduped_prioritize_last(Commands, Deduped).
 
-
 :- meta_predicate(app(?, 2, 3, ?)).
 :- det(app/4).
 app(result(Result), _, _, Result) :- !.
 
 app(S0, View, Update, Result) :-
-    @ hide_cursor,
-    @ (X-Y)-M0 = S0,
+    (X-Y)-M0 = S0,
+    call(View, S0, Drawable),
+    drawable__normalized_commands__end(Drawable, Commands, EX-EY),
+    once(apply_focus(X-Y, Commands)),
+    hide_cursor,
+    render_commands(X-Y, Commands),
+%    set_cursor(X,Y),
+%    show_cursor,
+    flush_output,
 
-    @ call(View, S0, Drawable),
-    @ drawable__normalized_commands__end(Drawable, Commands, EX-EY),
-    @ once(apply_focus(X-Y, Commands)),
-    @ render_commands(X-Y, Commands),
 
 
 
-
-    @ commands_eventmap(Commands, EventMap),
-    @ list_to_assoc(EventMap, EventAssoc), !,
+    commands_eventmap(Commands, EventMap),
+    list_to_assoc(EventMap, EventAssoc), !,
 
 %    get_single_input(E0), !,
     input_or_tick(E0), !,
@@ -326,15 +324,19 @@ app(S0, View, Update, Result) :-
     -> true
 
     ;  direction(E1)
-    -> (  limits_direction_from_to(EX-EY, E1, X-Y, NX-NY)
-       -> state_event_assoc_bubbled((X-Y)-M0, moved(E1, X-Y, NX-NY), EventAssoc, E2),
-          (  E2 = moved(E1, X-Y, NX-NY)
-          -> app((NX-NY)-M0, View, Update, Result)
-          ;  call(Update, E2, (NX-NY)-M0, S1),
-             app(S1, View, Update, Result)
-          )
-       ;  bell,
-          app(S0, View, Update, Result)
+    -> (  limits_direction_from_to(EX-EY, E1, X-Y, NX-NY),
+          (  X-Y = NX-NY
+          -> app(S0, View, Update, Result)
+
+          ;  state_event_assoc_bubbled((X-Y)-M0, moved(E1, X-Y, NX-NY), EventAssoc, E2),
+              (  E2 = moved(E1, X-Y, NX-NY)
+              -> app((NX-NY)-M0, View, Update, Result)
+              ;  call(Update, E2, (NX-NY)-M0, S1),
+                 app(S1, View, Update, Result)
+              )
+%       ;  bell,
+%          app(S0, View, Update, Result)
+       )
        )
 
     ;  call(Update, E1, S0, S1),
@@ -373,20 +375,16 @@ render_commands(Cursor, [((X-Y)-(_-A-C))|T]) :-
     ),
     render_commands(Cursor, T).
 
-:- dynamic location_style_char_/3.
+render_commands([]).
+render_commands([((X-Y)-(_-A-C))|T]) :-
+    (  onscreen(X-Y)
+    -> flatten(A, A1),
+       raw_attributes_attributes(A1, A2), !,
+       location_style_char(X-Y, A2, C)
+    ;  true
+    ),
+    render_commands(T).
 
-tui_init :-
-    retractall(location_style_char_(_, _, _)).
-
-location_style_char(X-Y, Style, C) :-
-    location_style_char_(X-Y, Style, C), !.
-
-location_style_char(X-Y, Style, C) :-
-    retractall(location_style_char_(X-Y, _, _)),
-    set_cursor(X, Y),
-    ansi_format(Style, '~s', [C]),
-    assertz(location_style_char_(X-Y, Style, C)),
-   !.
 
 
 
@@ -478,6 +476,9 @@ alias_drawable(clear(W-H), style([reset, bg(default)], Spaces)) :-
 
 codes_value(I, V) :-
     escape_codes_value(I, V).
+
+%escape_codes_value([27, 91  | Codes], report_size(X,Y)) :-
+%   phrase((integer(Y), [59], integer(X)), Codes, []).
 
 escape_codes_value([27, 91  |Codes], V) :-
     atom_codes(Atom, Codes),
@@ -581,10 +582,8 @@ get_single_input(I) :-
 
 get_single_input(I, Wait) :-
     (  Wait = false
-    -> catch(call_with_time_limit(1, get_single_char(H)),
-             time_limit_exceeded,
-             true
-    )
+    -> wait_for_input([user_input], [user_input], 0),
+       get_single_char(H)
     ;  get_single_char(H)
     ),
     (  H = -1
@@ -632,3 +631,16 @@ stack_event_is([], E, Is) :-
     ;  Is = E
     ), !.
 
+pair_key_pred(Delta, K1-_, K2-_) :- compare(Delta, K1, K2).
+
+keylist_deduped_prioritize_last(L0, LN) :-
+    reverse(L0, R),
+    predsort(pair_key_pred, R, LN).
+
+keylist_deduped_prioritize_last_(L0, L1) :-
+    forced_list_to_assoc(L0, A),
+    assoc_to_list(A, L1).
+
+forced_list_to_assoc(L, A) :-
+    empty_assoc(E),
+    foldl(list_to_assoc_fold_goal, L, E, A).

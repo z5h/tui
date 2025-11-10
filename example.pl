@@ -1,7 +1,7 @@
 :- module(example, [go/0
                    ]).
 
-:- reexport(tui).
+:- use_module(tui).
 :- use_module(components).
 :- use_module(local(core/core)).
 :- use_module(local(core/assocs)).
@@ -155,10 +155,11 @@ tui:at_event_is(moveable(DX-DY-true, _), moved(D, _, _), moveable-(DX1-DY1-true)
 indent(X) :- write('  '), writeln(X).
 go :-
     reset,
-    tui_init,
     init(M),
     with_tty_raw(
-        app(M, view, update, (X-Y)-Result)),
+        (tui_init,
+        app(M, view, update, (X-Y)-Result))
+        ),
     show_cursor,
     clear_screen,
     writeln("User Quit"),
