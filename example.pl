@@ -7,7 +7,9 @@
 :- use_module(local(core/assocs)).
 
 :- op(601, xfy, '.>').
+:- op(601, xfy, '.<').
 :- op(601, xfy, '.\\/').
+:- op(601, xfy, './\\').
 
 
 init_checks(Checks) :-
@@ -23,7 +25,7 @@ init(M) :-
               moveable(1)-(0-0-false),
               moveable(2)-(20-0-false),
               moveable(3)-(40-0-false),
-              time-_
+              time-' '
             ].
 
 :- det(update/3).
@@ -34,8 +36,6 @@ update(C, S0, (X-Y)-M1) :-
     -> pair_pair_assocs_assocs(Key-_, Key-Change, M0, M1)
     ;  atom(C)
     -> M1 = M0
-    ;  C = time(T)
-    -> pair_pair_assocs_assocs(time-_, time-T, M0, M1)
     ), !.
 
 update(C, S0, _) :-
@@ -73,14 +73,13 @@ view((_X-_Y)-M, View) :-
 
     View =
         titled_frame(80-25, "My App",
-                     clock(T) .\/
                      [ my_scrolled_checks(C, M)
                      , my_scrolled_checks(B, M)
                      , my_scrolled_checks(A, M)
-                     ]).
+                     ] ./\ clock(T)
+                     ).
 
 tui:alias_drawable(clock(T), View) :-
-    ignore(T = ' '),
     View = style([bg('#FFF')], titled_frame(10-3,"Time", T)).
 
 tui:alias_drawable(my_scrolled_checks(Id, M), View) :-
@@ -96,7 +95,6 @@ tui:alias_drawable(my_scrolled_checks(Id, M), View) :-
                            checks(Checks)
                         ))
            ).
-
 
 moveable_style(1, [fg(red)]).
 moveable_style(2, [fg(green)]).
@@ -154,14 +152,8 @@ tui:at_event_is(moveable(DX-DY-true, _), moved(D, _, _), moveable-(DX1-DY1-true)
 
 indent(X) :- write('  '), writeln(X).
 go :-
-    reset,
     init(M),
-    with_tty_raw(
-        (tui_init,
-        app(M, view, update, (X-Y)-Result))
-        ),
-    show_cursor,
-    clear_screen,
+    app(M, view, update, (X-Y)-Result),
     writeln("User Quit"),
     writeln("Last Model:"),
     writeln((X-Y)-'['),

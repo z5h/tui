@@ -1,18 +1,14 @@
 :- module(tui,
-          [ op(601, xfy, '.>'),
+          [
+            op(601, xfy, '.>'),
+            op(601, xfy, '.<'),
             op(601, xfy, '.\\/'),
-            discrete/1,
-            clear_screen/0,
-            hide_cursor/0,
-            show_cursor/0,
-            set_cursor/2,
+            op(601, xfy, './\\'),
             terminal_size/2,
             wait_for_input/0,
             get_single_input/1,
             input_or_tick/1,
             direction/1,
-            reset/0,
-            tui_init/0,
             stack_event_is/3,
             limits_direction_from_to/4,
             drawable_raw/2,
@@ -21,86 +17,92 @@
           ]).
 
 :- use_module(library(dcg/basics)).
+:- use_module(library(ansi_term)).
 
 :- multifile at_event_is/3.
 :- multifile alias_drawable/2.
 
                 /*******************************
-                *       MORPH RELATIONS        *
-                *******************************/
-
-discrete(G) :-
-    copy_term_nat(G, G0),
-    call(G0),
-    G = G0.
-
-                /*******************************
                 *          UTILITIES           *
                 *******************************/
-bell :-
+ansi_bell :-
     format('\007').
 
-reset :-
-    format('\ec').
+ansi_csi(Escaped) :-
+    format("~s~s", [[27, 91], Escaped]).
 
-hide_cursor :-
-    format('\e[?25l').
+ansi_reset :-
+    format("\ec").
 
-show_cursor :-
-    format('\e[?25h').
+ansi_hide_cursor :-
+    ansi_csi("?25l").
 
-save_cursor :-
-    format('\e[s').
+ansi_show_cursor :-
+    ansi_csi("?25h").
 
-restore_cursor :-
-    format('\e[s').
+ansi_save_cursor :-
+    ansi_csi("s").
 
-report_cursor(X,Y) :-
-        format('\e[6n'),
-        flush_output,
-        get_single_input(Sequence),
-        is_list(Sequence),
-        phrase(([27,91], integer(Y), [59], integer(X)), Sequence, []).
+ansi_restore_cursor :-
+    ansi_csi("u").
+
+request_terminal_size :-
+    flush_output,
+    ansi_save_cursor,
+    ansi_set_cursor(1000,1000),
+    ansi_csi("6n"),
+    ansi_restore_cursor,
+    flush_output.
 
 :- dynamic terminal_size_/2.
-update_terminal_size :-
+
+:- det(set_terminal_size__requires_redraw/3).
+set_terminal_size__requires_redraw(Cols, Rows, Redraw) :-
+    ignore(terminal_size_(PrevCols, PrevRows)),
+    ignore(PrevCols = 0),
     retractall(terminal_size_(_, _)),
-    save_cursor,
-    set_cursor(1000,1000),
-    report_cursor(Cols, Rows),
-    restore_cursor,
-    asserta(terminal_size_(Cols, Rows)).
+    asserta(terminal_size_(Cols, Rows)),
+    (  PrevCols-PrevRows = Cols-Rows
+    -> Redraw = false
+    ;  retractall(location_style_char_(_,_,_)),
+       ansi_reset,
+       Redraw = true
+    ).
 
-
+:- det(terminal_size/2).
 terminal_size(Cols, Rows) :-
     terminal_size_(Cols, Rows), !.
-
-terminal_size(Cols, Rows) :-
-    update_terminal_size,
-    terminal_size_(Cols, Rows), !.
-
 
 :- dynamic location_style_char_/3.
 
 tui_init :-
-    clear_screen,
+    ansi_reset,
+    ansi_hide_cursor,
+    request_terminal_size,
     retractall(location_style_char_(_, _, _)),
-    update_terminal_size.
+    retractall(terminal_size_(_, _)),
+    wait_for_terminal_size.
+
+wait_for_terminal_size :-
+    get_single_input(In),
+    (  In = terminal_size(Cols, Rows)
+    -> set_terminal_size__requires_redraw(Cols, Rows, _)
+    ;  wait_for_terminal_size
+    ).
+
+
 
 location_style_char(X-Y, Style, C) :-
     location_style_char_(X-Y, Style, C), !.
 
 location_style_char(X-Y, Style, C) :-
     retractall(location_style_char_(X-Y, _, _)),
-    set_cursor(X, Y),
+    ansi_set_cursor(X, Y),
     ansi_format(Style, '~s', [C]),
     assertz(location_style_char_(X-Y, Style, C)),
    !.
 
-clear_screen :-
-    reset.
-
-set_cursor(X, Y) :-
+ansi_set_cursor(X, Y) :-
     format('\e[~w;~wH', [Y, X]).
 
 is_stlye_attribute(A) :-
@@ -244,11 +246,27 @@ drawable(A .> B, Stack, Attr, DX-DY, MX-MY) --> !,
     drawable(translate(WidthA-0, B), Stack, Attr, DX-DY, BMX-BMY),
     { MX is max(AMX, BMX), MY is max(AMY, BMY) }.
 
+drawable(B .< A, Stack, Attr, DX-DY, MX-MY) --> !,
+    { phrase(drawable(A, Stack, Attr, DX-DY, AMX-AMY), Raw, []),
+      WidthA is AMX - DX + 1
+    },
+    drawable(translate(WidthA-0, B), Stack, Attr, DX-DY, BMX-BMY),
+    drawable(raw(Raw), [], [], 0-0, _-_),
+    { MX is max(AMX, BMX), MY is max(AMY, BMY) }.
 
 drawable(A .\/ B, Stack, Attr, DX-DY, MX-MY) --> !,
     drawable(A, Stack, Attr, DX-DY, AMX-AMY),
     { HeightA is AMY - DY + 1 },
     drawable(translate(0-HeightA, B), Stack, Attr, DX-DY, BMX-BMY),
+    { MX is max(AMX, BMX), MY is max(AMY, BMY) }.
+
+
+drawable(B ./\ A, Stack, Attr, DX-DY, MX-MY) --> !,
+    { phrase(drawable(A, Stack, Attr, DX-DY, AMX-AMY), Raw, []),
+      HeightA is AMY - DY + 1
+    },
+    drawable(translate(0-HeightA, B), Stack, Attr, DX-DY, BMX-BMY),
+    drawable(raw(Raw), [], [], 0-0, _-_),
     { MX is max(AMX, BMX), MY is max(AMY, BMY) }.
 
 drawable(A, Stack, Attr, DX-DY, MX-MY) -->
@@ -297,50 +315,77 @@ drawable__normalized_commands__end(Drawables, Deduped, MXY) :-
     keylist_deduped_prioritize_last(Commands, Deduped).
 
 :- meta_predicate(app(?, 2, 3, ?)).
-:- det(app/4).
-app(result(Result), _, _, Result) :- !.
+app(State, View, Update, Result) :-
+    call_cleanup(
+        with_tty_raw((
+            tui_init,
+            app_loop(State, View, Update, Result)
+        )),
+        (ansi_reset,
+        ansi_show_cursor)
+        ).
 
-app(S0, View, Update, Result) :-
+repeat(Goal) :-
+    repeat,
+    copy_term(Goal, Copy),
+    call(Copy),
+    Goal = Copy.
+
+no_repeat(Goal) :- Goal.
+
+:- meta_predicate(app_loop(?, 2, 3, ?)).
+:- det(app_loop/4).
+app_loop(result(Result), _, _, Result) :- !.
+
+app_loop(S0, View, Update, Result) :-
+    ansi_hide_cursor,
     (X-Y)-M0 = S0,
     call(View, S0, Drawable),
     drawable__normalized_commands__end(Drawable, Commands, EX-EY),
     once(apply_focus(X-Y, Commands)),
-    hide_cursor,
     render_commands(X-Y, Commands),
-%    set_cursor(X,Y),
-%    show_cursor,
     flush_output,
-
-
-
 
     commands_eventmap(Commands, EventMap),
     list_to_assoc(EventMap, EventAssoc), !,
 
-%    get_single_input(E0), !,
-    input_or_tick(E0), !,
-    state_event_assoc_bubbled(S0, E0, EventAssoc, E1),
-    (  E1 = result(Result)
+    no_repeat((
+        input_or_tick(E0),
+        state_event_assoc_bubbled(S0, E0, EventAssoc, E1)
+        )),
+
+    (  E1 = result(Result), !
     -> true
 
-    ;  direction(E1)
+%    ;  E1 = time-_, !
+%    -> request_terminal_size,
+%       call(Update, E1, S0, S1),
+%       app_loop(S1, View, Update, Result)
+
+    ;  E1 = terminal_size(Cols, Rows)
+    -> set_terminal_size__requires_redraw(Cols, Rows, _Redraw),
+       app_loop(S0, View, Update, Result)
+%       ( Redraw, !
+%       -> app_loop(S0, View, Update, Result)
+%       ;  fail % backtrack to listen for next input
+%       )
+
+    ;  direction(E1), !
     -> (  limits_direction_from_to(EX-EY, E1, X-Y, NX-NY),
           (  X-Y = NX-NY
-          -> app(S0, View, Update, Result)
+          -> app_loop(S0, View, Update, Result)
 
-          ;  state_event_assoc_bubbled((X-Y)-M0, moved(E1, X-Y, NX-NY), EventAssoc, E2),
+          ;  state_event_assoc_bubbled(S0, moved(E1, X-Y, NX-NY), EventAssoc, E2),
               (  E2 = moved(E1, X-Y, NX-NY)
-              -> app((NX-NY)-M0, View, Update, Result)
+              -> app_loop((NX-NY)-M0, View, Update, Result)
               ;  call(Update, E2, (NX-NY)-M0, S1),
-                 app(S1, View, Update, Result)
+                 app_loop(S1, View, Update, Result)
               )
-%       ;  bell,
-%          app(S0, View, Update, Result)
-       )
+          )
        )
 
-    ;  call(Update, E1, S0, S1),
-       app(S1, View, Update, Result)
+    ;  call(Update, E1, S0, S1), !,
+       app_loop(S1, View, Update, Result)
     ).
 
 state_event_assoc_bubbled(S0, E0, EventAssoc, E1) :-
@@ -363,8 +408,7 @@ commands_eventmap([((X-Y)-(S-_-_))|T], EM) :-
 render_commands(_, []).
 render_commands(Cursor, [((X-Y)-(_-A-C))|T]) :-
     (  onscreen(X-Y)
-    -> %set_cursor(X, Y),
-       flatten(A, A1),
+    -> flatten(A, A1),
        raw_attributes_attributes(A1, A2), !,
        (   Cursor = X-Y
        ->  append(A2, [negative], A3)
@@ -374,19 +418,6 @@ render_commands(Cursor, [((X-Y)-(_-A-C))|T]) :-
     ;  true
     ),
     render_commands(Cursor, T).
-
-render_commands([]).
-render_commands([((X-Y)-(_-A-C))|T]) :-
-    (  onscreen(X-Y)
-    -> flatten(A, A1),
-       raw_attributes_attributes(A1, A2), !,
-       location_style_char(X-Y, A2, C)
-    ;  true
-    ),
-    render_commands(T).
-
-
-
 
                 /*******************************
                 *     UNICODE LINES/BOXES      *
@@ -477,8 +508,8 @@ alias_drawable(clear(W-H), style([reset, bg(default)], Spaces)) :-
 codes_value(I, V) :-
     escape_codes_value(I, V).
 
-%escape_codes_value([27, 91  | Codes], report_size(X,Y)) :-
-%   phrase((integer(Y), [59], integer(X)), Codes, []).
+escape_codes_value([27, 91  | Codes], terminal_size(X,Y)) :-
+   phrase((integer(Y), [59], integer(X), [82]), Codes, []), !.
 
 escape_codes_value([27, 91  |Codes], V) :-
     atom_codes(Atom, Codes),
@@ -540,9 +571,9 @@ code_value(C, V) :-
     \+ code_type(C, cntrl),
     char_code(V, C).
 
-code_value(C, V) :-
-    is_list(C),
-    atom_codes(V, C).
+%code_value(C, V) :-
+%    is_list(C),
+%    atom_codes(V, C).
 
 
 limits_direction_from_to(_-_, up, X-Y0, X-Y) :-
@@ -572,7 +603,7 @@ input_or_tick(E) :-
     -> true
     ;  retractall(last_tick(_)),
        assertz(last_tick(Now)),
-       E = time(T),
+       E = time-T,
        format_time(atom(T), '%T', Now)
     ).
 
@@ -609,10 +640,10 @@ read_escseq(L-T, Code) :-
     ( T = [C], codes_value(L, Code)
     -> true
     ;  wait_for_input([user_input], [user_input], -1)
-    -> T = [C  |T2],
+    -> T = [C | T2],
        read_escseq(L-T2, Code)
     ;  T = [],
-       Code = L
+       Code = escseq(L)
     ).
 
 stack_event_is(V, _, _) :- var(V), domain_error(stack_event_is, stack:V).
