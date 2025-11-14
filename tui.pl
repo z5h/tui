@@ -146,6 +146,8 @@ my_color(_).
 %
 %   True if Command is a valid drawing command.
 %   Commands are the fundamental unit of drawing to the terminal.
+
+:- public(command/1).
 command((X-Y)-(Stack-Attrs-C)) :-
     integer(X),
     integer(Y),
@@ -207,10 +209,12 @@ drawable([H|T], Stack, Attr, XY, MX-MY) --> !,
 
 drawable([], _, _, XY, XY) --> !, [].
 
+:- meta_predicate(capture(//, ?, ?, ?)).
 capture(Phrase, C, A, A2) :-
     phrase(Phrase, C, []), !,
     A = A2.
 
+:- meta_predicate(excluding(1, //, ?, ?)).
 excluding(Pred, Phrase) -->
     capture(Phrase, C),
     { exclude(Pred, C, E) },
@@ -325,12 +329,14 @@ app(State, View, Update, Result) :-
         ansi_show_cursor)
         ).
 
+:- public(repeat/1).
 repeat(Goal) :-
     repeat,
     copy_term(Goal, Copy),
     call(Copy),
     Goal = Copy.
 
+:- public(no_repeat/1).
 no_repeat(Goal) :- Goal.
 
 :- meta_predicate(app_loop(?, 2, 3, ?)).
@@ -650,28 +656,20 @@ stack_event_is(V, _, _) :- var(V), domain_error(stack_event_is, stack:V).
 
 stack_event_is(_, V, _) :- var(V), domain_error(stack_event_is, event:V).
 
-stack_event_is([H|T], E, Is) :-
+stack_event_is([H|T], E, Is) :- !,
     (  tui:at_event_is(H, E, Next)
     -> stack_event_is([H|T], Next, Is)
     ;  stack_event_is(T, E, Is)
-    ), !.
+    ).
 
-stack_event_is([], E, Is) :-
+stack_event_is([], E, Is) :- !,
     (  tui:at_event_is([], E, Next)
     -> stack_event_is([], Next, Is)
     ;  Is = E
-    ), !.
+    ).
 
 pair_key_pred(Delta, K1-_, K2-_) :- compare(Delta, K1, K2).
 
 keylist_deduped_prioritize_last(L0, LN) :-
     reverse(L0, R),
     predsort(pair_key_pred, R, LN).
-
-keylist_deduped_prioritize_last_(L0, L1) :-
-    forced_list_to_assoc(L0, A),
-    assoc_to_list(A, L1).
-
-forced_list_to_assoc(L, A) :-
-    empty_assoc(E),
-    foldl(list_to_assoc_fold_goal, L, E, A).

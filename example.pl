@@ -29,6 +29,7 @@ init(M) :-
             ].
 
 :- det(update/3).
+:- public(update/3).
 update(q, S0, result(S0)) :- !.
 update(C, S0, (X-Y)-M1) :-
     (X-Y)-M0 = S0,
@@ -59,6 +60,7 @@ alldif(A, [H|T]) :-
 alldif([H|T]) :- alldif(H, T).
 
 :- det(view/2).
+:- public(view/2).
 view((_X-_Y)-M, View) :-
 
     % we want the most recently updated movable to be rendered last (over the others)
