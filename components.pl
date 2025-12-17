@@ -184,6 +184,7 @@ tui:at_event_is(vscroll(_, Max), down, scroll_down(Max)).
 tui:at_event_is(hscroll(_, Max), right, scroll_right(Max)).
 tui:at_event_is(hscroll(_, Max), left, scroll_left(Max)).
 
+
 tui:at_event_is(scroll(_-_, X-Y, _), ScrollD, scroll-(X1-Y1)) :-
     ( ScrollD = scroll_down(Max),
       Y1 is max(Y - 1, -Max),

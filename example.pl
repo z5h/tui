@@ -13,7 +13,7 @@
 
 
 init_checks(Checks) :-
-    findall(true, between(1, 100, N), Checks).
+    findall(true, between(1, 100, _), Checks).
 
 init(M) :-
     init_checks(Cs),
@@ -25,27 +25,21 @@ init(M) :-
               moveable(1)-(0-0-false),
               moveable(2)-(20-0-false),
               moveable(3)-(40-0-false),
-              time-' '
+              time-' ',
+              last_event-'n/a'
             ].
 
 :- det(update/3).
 :- public(update/3).
-update(q, S0, result(S0)) :- !.
 update(C, S0, (X-Y)-M1) :-
     (X-Y)-M0 = S0,
     (  C = Key-Change
     -> pair_pair_assocs_assocs(Key-_, Key-Change, M0, M1)
-    ;  atom(C)
-    -> M1 = M0
+
+    ;  pair_pair_assocs_assocs(last_event-_, last_event-C, M0, M1)
     ), !.
 
-update(C, S0, _) :-
-    writeln("Bad Update"),
-    writeln(C),
-    writeln(S0),
-    fail.
-
-:- table(int_text(I, T)).
+:- table(int_text/2).
 int_text(I, T) :-
     M is (I - 1) mod 9,
     nth0(M, [lorem, ipsum, dolor, sit, amet, consectetur, adipiscing, elit, 'sed do eiusmod tempor'], W),
@@ -61,7 +55,7 @@ alldif([H|T]) :- alldif(H, T).
 
 :- det(view/2).
 :- public(view/2).
-view((_X-_Y)-M, View) :-
+view((X-Y)-M, View) :-
 
     % we want the most recently updated movable to be rendered last (over the others)
     % so this is just to establist A,B,C as the IDs in the order we want.
@@ -70,19 +64,34 @@ view((_X-_Y)-M, View) :-
                  [ moveable(A)-_,
                    moveable(B)-_,
                    moveable(C)-_,
-                   time-T
+                   time-T,
+                   last_event-LastEvent
                  ]), !,
 
     View =
         titled_frame(80-25, "My App",
-                     [ my_scrolled_checks(C, M)
-                     , my_scrolled_checks(B, M)
-                     , my_scrolled_checks(A, M)
-                     ] ./\ clock(T)
-                     ).
+            [
+                my_scrolled_checks(C, M),
+                my_scrolled_checks(B, M),
+                my_scrolled_checks(A, M)
+            ]
+           ./\ clock(T)
+           ./\ intercepter(LastEvent)
+           ./\ quit((X-Y)-M)
+        ).
+
+tui:alias_drawable(quit(Data), View) :-
+    View = style([bg('#FFF')], "Quit").
+update(q, S0, result(S0)) :- !.
+
+tui:at_event_is(quit(M), ' ', result(M)).
+
+tui:alias_drawable(intercepter(LastEvent), View) :-
+    View = style([bg('#EEE')],
+                 titled_frame(30-3, "Event", '"' .> literal(LastEvent) .> '"')).
 
 tui:alias_drawable(clock(T), View) :-
-    View = style([bg('#FFF')], titled_frame(10-3,"Time", T)).
+    View = style([bg('#FFF')], titled_frame(10-3, "Time", T)).
 
 tui:alias_drawable(my_scrolled_checks(Id, M), View) :-
     assocs_pairs(M,
@@ -102,11 +111,12 @@ moveable_style(1, [fg(red)]).
 moveable_style(2, [fg(green)]).
 moveable_style(3, [fg(blue)]).
 
-
+% Functor(P1, P2 ...), id(Id, Functor, P1, P2 ...)
 tui:alias_drawable(IDed, Drawable) :-
     IDed =.. [id, _Id, Alias  |Parameters],
     Drawable =.. [Alias  |Parameters].
 
+% Thing-Event --> Thing(Id)-Event
 tui:at_event_is(IDedAlias, Alias-Updated, IDed-Updated) :-
     IDedAlias =.. [id, Id, Alias  |_],
     IDed =.. [Alias, Id].
@@ -146,13 +156,14 @@ tui:at_event_is(moveable(DX-DY-Moving, _), ' ', moveable-(DX-DY-MovingToggle)) :
     not(Moving, MovingToggle), !.
 
 tui:at_event_is(moveable(DX-DY-true, _), moved(D, _, _), moveable-(DX1-DY1-true)) :-
-    ( D = left, DX1 is DX - 1, DY1 is DY
-    ; D = right, DX1 is DX + 1, DY1 is DY
-    ; D = up, DX1 is DX, DY1 is DY - 1
-    ; D = down, DX1 is DX, DY1 is DY + 1
+    (   D = left, DX1 is DX - 1, DY1 is DY
+    ;   D = right, DX1 is DX + 1, DY1 is DY
+    ;   D = up, DX1 is DX, DY1 is DY - 1
+    ;   D = down, DX1 is DX, DY1 is DY + 1
     ), !.
 
 indent(X) :- write('  '), writeln(X).
+
 go :-
     init(M),
     app(M, view, update, (X-Y)-Result),
@@ -161,3 +172,4 @@ go :-
     writeln((X-Y)-'['),
     maplist(indent, Result),
     writeln(']').
+

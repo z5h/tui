@@ -16,15 +16,45 @@
             app/4
           ]).
 
+% --------------------------------------
+'#imports'.
+% --------------------------------------
+:- use_module(one_shot).
 :- use_module(library(dcg/basics)).
 :- use_module(library(ansi_term)).
-
+:- use_module(local(core/core)).
 :- multifile at_event_is/3.
 :- multifile alias_drawable/2.
 
-                /*******************************
-                *          UTILITIES           *
-                *******************************/
+
+:- meta_predicate(log(0)).
+log(Goal) :-
+    setup_call_cleanup(
+        open('tui.log', append, Out),
+        with_output_to(Out, Goal),
+        close(Out)
+    ).
+
+
+:- op(950, fy, ?).
+:- meta_predicate(debug_call(0)).
+debug_call(G) :-
+    (   G
+    *-> log(writeln(pass:G))
+    ;   log(writeln(fail:G)), fail
+    ).
+
+:- meta_predicate('?'(0)).
+'?'(G) :- debug_call(G).
+
+:- op(950, fy, @).
+:- meta_predicate('@'(0)).
+:- det('@'/1).
+'@'(G) :- G.
+
+% --------------------------------------
+'#utilities'.
+% --------------------------------------
 ansi_bell :-
     format('\007').
 
@@ -46,13 +76,6 @@ ansi_save_cursor :-
 ansi_restore_cursor :-
     ansi_csi("u").
 
-request_terminal_size :-
-    flush_output,
-    ansi_save_cursor,
-    ansi_set_cursor(1000,1000),
-    ansi_csi("6n"),
-    ansi_restore_cursor,
-    flush_output.
 
 :- dynamic terminal_size_/2.
 
@@ -70,27 +93,11 @@ set_terminal_size__requires_redraw(Cols, Rows, Redraw) :-
     ).
 
 :- det(terminal_size/2).
+
 terminal_size(Cols, Rows) :-
     terminal_size_(Cols, Rows), !.
 
 :- dynamic location_style_char_/3.
-
-tui_init :-
-    ansi_reset,
-    ansi_hide_cursor,
-    request_terminal_size,
-    retractall(location_style_char_(_, _, _)),
-    retractall(terminal_size_(_, _)),
-    wait_for_terminal_size.
-
-wait_for_terminal_size :-
-    get_single_input(In),
-    (  In = terminal_size(Cols, Rows)
-    -> set_terminal_size__requires_redraw(Cols, Rows, _)
-    ;  wait_for_terminal_size
-    ).
-
-
 
 location_style_char(X-Y, Style, C) :-
     location_style_char_(X-Y, Style, C), !.
@@ -100,7 +107,7 @@ location_style_char(X-Y, Style, C) :-
     ansi_set_cursor(X, Y),
     ansi_format(Style, '~s', [C]),
     assertz(location_style_char_(X-Y, Style, C)),
-   !.
+    !.
 
 ansi_set_cursor(X, Y) :-
     format('\e[~w;~wH', [Y, X]).
@@ -119,7 +126,8 @@ is_color_attribute(A) :-
     ; A = bg(Color)
     ; A = hbg(Color)
     ; A = hfg(Color)
-    ), my_color(Color).
+    ),
+    my_color(Color).
 
 ansi_attribute(A) :- is_stlye_attribute(A).
 
@@ -137,10 +145,9 @@ is_attribute(A) :-
 my_color(_).
 
 
-                /*******************************
-                *           COMMANDS           *
-                *******************************/
-
+% -------------------------------------
+'#commands'.
+% -------------------------------------
 
 %!  command(+Command).
 %
@@ -157,6 +164,10 @@ command((X-Y)-(Stack-Attrs-C)) :-
     atom(C),
     atom_length(C, 1).
 
+% -------------------------------------
+'#drawables'.
+% -------------------------------------
+
 :- discontiguous(drawable//5).
 :- det(drawable//5).
 drawable(Var, _, _, _, _) -->
@@ -164,12 +175,20 @@ drawable(Var, _, _, _, _) -->
       domain_error(drawable, Var)
     }.
 
+drawable(literal(T), Stack, Attr, X-Y, MX-MY) -->
+    { atom(T), atom_chars(T, Chars)
+    ; string(T), string_chars(T, Chars)
+    ; number(T), number_chars(T, Chars)
+    ; term_string(T, S), string_chars(S, Chars)
+    }, !,
+    drawable(chars(Chars), Stack, Attr, X-Y, MX-MY).
+
 drawable(chars([]), _, _, XY, XY) --> !,
     [].
 
 drawable(chars([C|T]), Stack, Attr, X-Y, MX-MY) --> !,
     [ (X-Y)-(Stack-Attr-C)],
-    drawable(chars_tail(T), Stack, Attr, X-Y, MX-MY), !.
+    drawable(chars_tail(T), Stack, Attr, X-Y, MX-MY).
 
 drawable(chars_tail([]), _, _, XY, XY) --> !,
     [].
@@ -182,12 +201,12 @@ drawable(raw([]), _, _, XY, XY) --> !,
     [].
 
 drawable(raw([H|T]), Stack, Attr, DX-DY, MX-MY) --> !,
-    {H = (X-Y)-(StackH-AttrH-C),
-    X1 is X + DX,
-    Y1 is Y + DY,
-    append(AttrH, Attr, Attr1),
-    append(StackH, Stack, Stack1),
-    H1 = (X1-Y1)-(Stack1-Attr1-C)
+    { H = (X-Y)-(StackH-AttrH-C),
+      X1 is X + DX,
+      Y1 is Y + DY,
+      append(AttrH, Attr, Attr1),
+      append(StackH, Stack, Stack1),
+      H1 = (X1-Y1)-(Stack1-Attr1-C)
     }, !,
     [H1],
     drawable(raw(T), Stack, Attr, DX-DY, MTX-MTY),
@@ -228,7 +247,7 @@ zone_out(X0-Y0, W-H, X-Y-_) :-
      )).
 
 drawable(translate(TX-TY, Drawables), Stack, Attr, DX-DY, MX-MY) --> !,
-    { NDX is DX + TX, NDY is DY + TY},
+    { NDX is DX + TX, NDY is DY + TY },
     drawable(Drawables, Stack, Attr, NDX-NDY, MX-MY).
 
 drawable(TX-TY-Drawable, Stack, Attr, DX-DY, MX-MY) --> !,
@@ -239,7 +258,7 @@ drawable(port(W-H, Drawables), Stack, Attr, DX-DY, MX-MY) --> !,
 
 drawable(port(W-H, Drawables, MPX-MPY), Stack, Attr, DX-DY, MX-MY) --> !,
     excluding(zone_out(DX-DY, W-H), drawable(Drawables, Stack, Attr, DX-DY, MPX-MPY)),
-    { MX is DX + W - 1, MY is DY + H - 1}.
+    { MX is DX + W - 1, MY is DY + H - 1 }.
 
 drawable(style(Style, Drawables), Stack, Attr, DX-DY, MX-MY) --> !,
     drawable(Drawables, Stack, [Style | Attr ], DX-DY, MX-MY).
@@ -280,10 +299,6 @@ drawable(A, Stack, Attr, DX-DY, MX-MY) -->
 drawable(D, _, _, _, _) -->
     { domain_error(drawable, D) }.
 
-                /*******************************
-                *            RENDER            *
-                *******************************/
-
 onscreen(X-Y) :-
     X > 0,
     Y > 0,
@@ -318,16 +333,244 @@ drawable__normalized_commands__end(Drawables, Deduped, MXY) :-
     !,
     keylist_deduped_prioritize_last(Commands, Deduped).
 
+
+% -------------------------------------
+'#app'.
+% -------------------------------------
+
+:- det(tui_init/0).
+tui_init :-
+    ansi_reset,
+    ansi_hide_cursor,
+    retractall(location_style_char_(_, _, _)),
+    retractall(terminal_size_(_, _)),
+    tty_request_size,
+    wait_for_terminal_size.
+
+wait_for_terminal_size :-
+    get_single_input(In),
+    (  In = terminal_size(Cols, Rows)
+    -> set_terminal_size__requires_redraw(Cols, Rows, _)
+    ;  wait_for_terminal_size
+    ).
+
+
 :- meta_predicate(app(?, 2, 3, ?)).
+%%    app(State, View, Update, Result)
+%     True if app sets up the threads/queues for a TUI app,
+%     with Result unified upon completion.
+%
+%     Architecture:
+%       - Main thread: owns TTY, reads input, dispatches events
+%       - TTY output thread: handles rendering commands
+%       - Update thread: processes events, updates state, generates views
+%
+%     App exits when update/3 produces result(R) - this must be triggered
+%     by user input (e.g., pressing 'q') since main thread blocks on input.
+%
 app(State, View, Update, Result) :-
+    one_shot_message(FinalUpdate, FinalUpdateInput),
     call_cleanup(
-        with_tty_raw((
-            tui_init,
-            app_loop(State, View, Update, Result)
-        )),
-        (ansi_reset,
-        ansi_show_cursor)
+        % call
+        with_tty_raw(
+            (
+                tui_init,
+                thread_self(MainThread),
+                thread_create(tty_output_loop, _, [alias(tty_output)]),
+            
+        
+                on_signal(winch, _, sig_winch),
+                thread_create(
+                    update_loop(State, _, _, View, Update, FinalUpdate),
+                    _UpdateId,
+                    [alias(update)]
+                ),
+                needs_repaint,
+                % Main thread handles input - it owns the TTY
+                input_loop(MainThread, FinalUpdateInput, Result)
+            )
+        ),
+        % cleanup
+        (
+            @ ignore(thread_send_message(tty_output, exit)),
+            @ on_signal(winch, _, default),
+            @ ansi_reset,
+            @ ansi_show_cursor
+        )
+    ).
+
+sig_winch(_) :-
+    tty_request_size.
+
+% -------------------------------------
+'#threads_and_queues'.
+% -------------------------------------
+
+% Architecture:
+%
+%   ┌─────────────────────────────────────────────────────────────┐
+%   │                     EVENT SOURCES                           │
+%   ├─────────────────┬─────────────────┬─────────────────────────┤
+%   │  Main Thread    │  Signal Handler │  Other Async Sources    │
+%   │  (TTY input)    │  (SIGWINCH)     │  (timers, network, etc) │
+%   └────────┬────────┴────────┬────────┴────────────┬────────────┘
+%            │                 │                     │
+%            │    thread_send_message(update, ...)   │
+%            └─────────────────┼─────────────────────┘
+%                              ▼
+%                     ┌─────────────────┐
+%                     │  Update Thread  │
+%                     │  - process event│
+%                     │  - update state │
+%                     │  - generate view│
+%                     └────────┬────────┘
+%                              │
+%                              │ thread_send_message(tty_output, render(...))
+%                              ▼
+%                     ┌─────────────────┐
+%                     │  TTY Output     │
+%                     │  - render       │
+%                     └─────────────────┘
+%
+% Result flow:
+%   When update produces result(R), it sends result(R) to MainThread.
+%   Main thread peeks for this message before blocking on input.
+%   Constraint: app exit must be triggered by user input.
+
+% --- Main Thread: Input Loop ---
+% Runs in the main thread which owns the TTY.
+% Checks for result message before blocking on input.
+
+input_loop(MainThread, FinalUpdateInput, Result) :-
+        wait_for_input([user_input, FinalUpdateInput], Ready, infinite),
+        (   Ready = [user_input]
+        ->  get_single_input(In),
+            handle_input(In),
+            input_loop(MainThread, FinalUpdateInput, Result)
+        ;   @ read_term(FinalUpdateInput, Result, []),
+            @ close(FinalUpdateInput)
         ).
+    
+    % (   thread_peek_message(MainThread, result(Result))
+    % ->  thread_get_message(MainThread, result(Result))  % consume it
+
+    % ;   wait_for_input([user_input], [user_input], infinite),
+    %     get_single_input(In),
+    %     handle_input(In),
+    %     input_loop(MainThread, Result)
+    % ).
+
+handle_input(terminal_size(Cols, Rows)) :- !,
+    set_terminal_size__requires_redraw(Cols, Rows, Redraw),
+    (   Redraw
+    ->  needs_repaint
+    ;   true
+    ).
+
+handle_input(In) :-
+    thread_send_message(update, update(In)).
+
+
+% --- TTY Output Thread ---
+% Handles all terminal output to avoid interleaving issues.
+
+tty_output_loop :-
+    thread_get_message(tty_output, M),
+    (   M = exit
+    ->  true  % Exit the loop
+
+    ;   M = tty_render(Cursor, Commands)
+    ->  tty_render(Cursor, Commands),
+        tty_output_loop
+
+    ;   M = tty_request_size
+    ->  tty_request_size,
+        tty_output_loop
+    ;   assertion((fail, message:M))
+    ).
+
+tty_render(X-Y, Commands) :-
+    ansi_hide_cursor,
+    render_commands(X-Y, Commands),
+    flush_output.
+
+tty_request_size :-
+    flush_output,
+    ansi_save_cursor,
+    ansi_set_cursor(1000, 1000),
+    ansi_csi("6n"),
+    ansi_restore_cursor,
+    flush_output.
+
+
+% --- Update Thread ---
+% Processes events, updates state, generates views.
+
+render(State, View, Commands, EventAssoc, EX-EY) :-
+    (X-Y)-_ = State,
+    call(View, State, Drawable),
+    drawable__normalized_commands__end(Drawable, Commands, EX-EY),
+    once(apply_focus(X-Y, Commands)),
+    thread_send_message(tty_output, tty_render(X-Y, Commands)),
+    commands_eventmap(Commands, EventMap),
+    list_to_assoc(EventMap, EventAssoc).
+
+needs_repaint :-
+    thread_send_message(update, view).
+
+handle_new_state(State1, View, Update, FinalUpdate) :-
+    needs_repaint,
+    update_loop(State1, _, _, View, Update, FinalUpdate).
+
+thread_get_message_prioritize(Thread, M, P) :-
+    (   thread_peek_message(Thread, P)
+    ->  M = P
+    ;   true
+    ),
+    thread_get_message(Thread, M).
+    
+:- meta_predicate update_loop(+, ?, ?, 2, 3, +).
+update_loop(State0, EventAssoc, EX-EY, View, Update, FinalUpdate) :-
+    thread_get_message_prioritize(update, M, view),
+
+    (   M = view
+    ->  render(State0, View, _Commands, NewEventAssoc, EX1-EY1),
+        update_loop(State0, NewEventAssoc, EX1-EY1, View, Update, FinalUpdate)
+
+    ;   M = update(E0)
+    ->  (X-Y)-Model0 = State0,
+
+        assertion(ground(EX)),
+        assertion(ground(EY)),  % Guard: need valid extents
+        state_event_assoc_bubbled(State0, E0, EventAssoc, E1),
+        (   E1 = result(Result)
+        ->  FinalUpdate = Result,
+            thread_exit(_)
+
+            % Direction keys: handle cursor movement
+        ;   direction(E1)
+        ->  limits_direction_from_to(EX-EY, E1, X-Y, NX-NY),
+            (   X-Y = NX-NY
+            ->  % No change, just re-loop
+                update_loop(State0, EventAssoc, EX-EY, View, Update, FinalUpdate)
+
+            ;   state_event_assoc_bubbled(State0, moved(E1, X-Y, NX-NY), EventAssoc, E2),
+                (   E2 = moved(E1, X-Y, NX-NY)
+                ->  handle_new_state((NX-NY)-Model0, View, Update, FinalUpdate)
+
+                ;   call(Update, E2, (NX-NY)-Model0, State1),
+                    handle_new_state(State1, View, Update, FinalUpdate)
+                )
+            )
+
+        ;   % Normal event: call update and check result
+            call(Update, E1, State0, State1),
+            handle_new_state(State1, View, Update, FinalUpdate)
+        )
+
+    ;   assertion((fail, message:M))
+    ).
+
 
 :- public(repeat/1).
 repeat(Goal) :-
@@ -339,61 +582,9 @@ repeat(Goal) :-
 :- public(no_repeat/1).
 no_repeat(Goal) :- Goal.
 
-:- meta_predicate(app_loop(?, 2, 3, ?)).
-:- det(app_loop/4).
-app_loop(result(Result), _, _, Result) :- !.
-
-app_loop(S0, View, Update, Result) :-
-    ansi_hide_cursor,
-    (X-Y)-M0 = S0,
-    call(View, S0, Drawable),
-    drawable__normalized_commands__end(Drawable, Commands, EX-EY),
-    once(apply_focus(X-Y, Commands)),
-    render_commands(X-Y, Commands),
-    flush_output,
-
-    commands_eventmap(Commands, EventMap),
-    list_to_assoc(EventMap, EventAssoc), !,
-
-    no_repeat((
-        input_or_tick(E0),
-        state_event_assoc_bubbled(S0, E0, EventAssoc, E1)
-        )),
-
-    (  E1 = result(Result), !
-    -> true
-
-%    ;  E1 = time-_, !
-%    -> request_terminal_size,
-%       call(Update, E1, S0, S1),
-%       app_loop(S1, View, Update, Result)
-
-    ;  E1 = terminal_size(Cols, Rows)
-    -> set_terminal_size__requires_redraw(Cols, Rows, _Redraw),
-       app_loop(S0, View, Update, Result)
-%       ( Redraw, !
-%       -> app_loop(S0, View, Update, Result)
-%       ;  fail % backtrack to listen for next input
-%       )
-
-    ;  direction(E1), !
-    -> (  limits_direction_from_to(EX-EY, E1, X-Y, NX-NY),
-          (  X-Y = NX-NY
-          -> app_loop(S0, View, Update, Result)
-
-          ;  state_event_assoc_bubbled(S0, moved(E1, X-Y, NX-NY), EventAssoc, E2),
-              (  E2 = moved(E1, X-Y, NX-NY)
-              -> app_loop((NX-NY)-M0, View, Update, Result)
-              ;  call(Update, E2, (NX-NY)-M0, S1),
-                 app_loop(S1, View, Update, Result)
-              )
-          )
-       )
-
-    ;  call(Update, E1, S0, S1), !,
-       app_loop(S1, View, Update, Result)
-    ).
-
+% -------------------------------------
+'#events'.
+% -------------------------------------
 state_event_assoc_bubbled(S0, E0, EventAssoc, E1) :-
     (X-Y)-_ = S0,
     (  get_assoc(X-Y, EventAssoc, Stack)
@@ -425,10 +616,9 @@ render_commands(Cursor, [((X-Y)-(_-A-C))|T]) :-
     ),
     render_commands(Cursor, T).
 
-                /*******************************
-                *     UNICODE LINES/BOXES      *
-                *******************************/
-
+% --------------------------------------
+'#lines_boxes'.
+% --------------------------------------
 char_from_to_line(C, X1-Y, X2-Y, L) :- !,
     (  X1 > X2
     -> From = X2, To = X1
@@ -469,11 +659,10 @@ style_corner_char(double, br, '\u255d').
 style_horizontal(double, '\u2550').
 style_vertical(double, '\u2551').
 
-
-                /*******************************
-                *     ALIASES (COMPONENTS)     *
-                *******************************/
-
+                
+% --------------------------------------
+'#alias_drawables'.
+% --------------------------------------
 alias_drawable(V, _) :-
     var(V), !,
     instantiation_error(alias_drawable).
@@ -533,10 +722,10 @@ escaped_atom_value('C', right).
 escaped_atom_value('D', left).
 escaped_atom_value('F', end).
 escaped_atom_value('H', home).
-escaped_atom_value('OP', f1).
-escaped_atom_value('OQ', f2).
-escaped_atom_value('OR', f3).
-escaped_atom_value('OS', f4).
+escaped_atom_value('11~', f1).
+escaped_atom_value('12~', f2).
+escaped_atom_value('13~', f3).
+escaped_atom_value('14~', f4).
 escaped_atom_value('15~', f5).
 escaped_atom_value('17~', f6).
 escaped_atom_value('18~', f7).
@@ -596,8 +785,9 @@ limits_direction_from_to(_-MY, down, X-Y0, X-Y) :-
 
 direction(E) :- member(E, [up, down, left, right]).
 
-
-
+% --------------------------------------
+'#input'.
+% --------------------------------------
 wait_for_input :-
     get_single_input(_).
 
@@ -610,9 +800,12 @@ input_or_tick(E) :-
     ;  retractall(last_tick(_)),
        assertz(last_tick(Now)),
        E = time-T,
+       sleep(0),
        format_time(atom(T), '%T', Now)
     ).
 
+no_input :-
+   \+ wait_for_input([user_input], [user_input], 0).
 
 get_single_input(I) :-
     get_single_input(I, true).
@@ -652,6 +845,9 @@ read_escseq(L-T, Code) :-
        Code = escseq(L)
     ).
 
+% --------------------------------------
+'#event_bubbling'.
+% --------------------------------------
 stack_event_is(V, _, _) :- var(V), domain_error(stack_event_is, stack:V).
 
 stack_event_is(_, V, _) :- var(V), domain_error(stack_event_is, event:V).
