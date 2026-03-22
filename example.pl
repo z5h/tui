@@ -101,35 +101,21 @@ tui:alias_drawable(my_scrolled_checks(Id, M), View) :-
                    checks-Checks
                  ]),
     moveable_style(Id, Style),
-    View = id(Id, moveable, MV,
+    View = moveable(Id) : moveable(MV,
               1-1-style(Style,
-                        id(Id, scroll, 20-15, SO,
+                        scroll(Id) : scroll(20-15, SO,
                            checks(Checks)
-                        ))
-           ).
+                        ))).
 
 moveable_style(1, [fg(red)]).
 moveable_style(2, [fg(green)]).
 moveable_style(3, [fg(blue)]).
 
-% Functor(P1, P2 ...), id(Id, Functor, P1, P2 ...)
-tui:alias_drawable(IDed, Drawable) :-
-    IDed =.. [id, _Id, Alias  |Parameters],
-    Drawable =.. [Alias  |Parameters].
-
-% Thing-Event --> Thing(Id)-Event
-tui:at_event_is(IDedAlias, Alias-Updated, IDed-Updated) :-
-    IDedAlias =.. [id, Id, Alias  |_],
-    IDed =.. [Alias, Id].
-
-to_ided_checkbox(I, T, id(I, check_box, L, T)) :- int_text(I, L).
+to_ided_checkbox(I, T, check_box(I) : check_box(L, T)) :- int_text(I, L).
 
 tui:alias_drawable(checks(Checks), View) :-
     mapindexed(to_ided_checkbox, Checks, IndexedChecks),
     View = column(IndexedChecks).
-
-tui:alias_drawable(indexed_check(I, Bool), View) :-
-    View = check_box(I, Bool).
 
 list_index_is_updated([_|T], 1, H, [H|T]) :- !.
 list_index_is_updated([H|T], N, Is, [H|U]) :-

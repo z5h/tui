@@ -12,6 +12,32 @@
 :- op(601, xfy, '.\\/').
 
 
+'#tagging'.
+
+%% Key:Drawable — annotation operator.
+%
+%  Attaches a tag to a drawable. The left-hand side is ignored for
+%  rendering — Drawable is drawn as-is.
+%
+%  For event bubbling: when a component event (ComponentName-Value)
+%  passes through a Key:Component node, and ComponentName matches
+%  the functor of Component, the event is rewritten to Key-Value.
+%  This replaces the component's own name with the tag, namespacing
+%  the event for routing.
+%
+%  Events from deeper nested components (whose functor doesn't match)
+%  pass through unmodified. Raw events (atoms, non-pair terms) also
+%  pass through — they are not component events.
+%
+%  Example:
+%    scroll(Id) : scroll(20-15, Offset, Content)
+%    %% scroll fires scroll-(0-5), tag rewrites to scroll(1)-(0-5)
+%
+tui:alias_drawable(_:D, D).
+tui:at_event_is(Key:Inner, ComponentKey-Value, Key-Value) :-
+    functor(Inner, ComponentKey, _).
+
+
 '#layout'.
 
 %% column(+Drawables)
