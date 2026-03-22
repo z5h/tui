@@ -52,7 +52,6 @@ tui:alias_drawable(frame(W-H, Contents, Extent), [Clear, Box, Port]) :-
     Clear = 1-1-clear(PW-PH),
     Port =  1-1-port(PW-PH, Contents, Extent).
 
-
 repeat_char_string(N, C, S) :-
     length(List, N),
     maplist(=(C), List),

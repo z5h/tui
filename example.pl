@@ -2,9 +2,9 @@
                    ]).
 
 :- use_module(tui).
+:- use_module(utils).
+:- use_module(assocs).
 :- use_module(components).
-:- use_module(local(core/core)).
-:- use_module(local(core/assocs)).
 
 :- op(601, xfy, '.>').
 :- op(601, xfy, '.<').
@@ -39,6 +39,8 @@ update(C, S0, (X-Y)-M1) :-
     ;  pair_pair_assocs_assocs(last_event-_, last_event-C, M0, M1)
     ), !.
 
+update(q, S0, result(S0)) :- !.
+
 :- table(int_text/2).
 int_text(I, T) :-
     M is (I - 1) mod 9,
@@ -70,19 +72,18 @@ view((X-Y)-M, View) :-
 
     View =
         titled_frame(80-25, "My App",
-            [
-                my_scrolled_checks(C, M),
-                my_scrolled_checks(B, M),
-                my_scrolled_checks(A, M)
-            ]
-           ./\ clock(T)
-           ./\ intercepter(LastEvent)
-           ./\ quit((X-Y)-M)
+                     [
+                         my_scrolled_checks(C, M),
+                         my_scrolled_checks(B, M),
+                         my_scrolled_checks(A, M)
+                     ]
+                     ./\ clock(T)
+                     ./\ intercepter(LastEvent)
+                     ./\ quit((X-Y)-M)
         ).
 
-tui:alias_drawable(quit(Data), View) :-
+tui:alias_drawable(quit(_), View) :-
     View = style([bg('#FFF')], "Quit").
-update(q, S0, result(S0)) :- !.
 
 tui:at_event_is(quit(M), ' ', result(M)).
 

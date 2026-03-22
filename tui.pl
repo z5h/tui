@@ -22,7 +22,6 @@
 :- use_module(one_shot).
 :- use_module(library(dcg/basics)).
 :- use_module(library(ansi_term)).
-:- use_module(local(core/core)).
 :- multifile at_event_is/3.
 :- multifile alias_drawable/2.
 
