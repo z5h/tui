@@ -1,3 +1,9 @@
+%% Reusable TUI components.
+%
+%  This module defines standard components via tui:alias_drawable/2 and
+%  tui:at_event_is/3 multifile hooks. Import this module to make these
+%  components available in your app's view.
+
 :- module(components, []).
 
 :- use_module(tui).
@@ -5,14 +11,33 @@
 :- op(601, xfy, '.>').
 :- op(601, xfy, '.\\/').
 
+
+'#layout'.
+
+%% column(+Drawables)
+%
+%  Vertically stack a list of drawables using .\/ (top to bottom).
 tui:alias_drawable(column([H]), H) :- !.
 tui:alias_drawable(column([]), []) :- !.
 tui:alias_drawable(column([H|T]), (H .\/ column(T))) :- !.
 
+%% row(+Drawables)
+%
+%  Horizontally concatenate a list of drawables using .> (left to right).
 tui:alias_drawable(row([H]), H) :- !.
 tui:alias_drawable(row([]), []) :- !.
 tui:alias_drawable(row([H|T]), (H .> row(T))) :- !.
 
+
+'#input_controls'.
+
+%% check_box(+Title, +Bool)
+%
+%  A toggleable checkbox. Displays [x] or [ ] followed by Title.
+%  Highlighted with underline on hover. Faint when unchecked.
+%
+%  Events produced:
+%    * check_box-NewBool on space or return (toggles Bool)
 tui:alias_drawable(check_box(Title, Bool), CheckWithHover) :-
     (  Bool = true
     -> Check = style([     ], ('[x]' .> ': ' .> Title))
@@ -26,7 +51,11 @@ not(false, true).
 tui:at_event_is(check_box(_Title, Bool), ' ', check_box-T) :- not(Bool, T).
 tui:at_event_is(check_box(_Title, Bool), return, check_box-T) :- not(Bool, T).
 
-
+%% input(+Width, +Placeholder, ?Value)
+%
+%  A text input field of fixed Width. When Value is unbound, displays
+%  the Placeholder in faint underlined style. When bound, displays the
+%  value underlined.
 tui:alias_drawable(input(W, PlaceholderA, ValueA), D) :-
     atomics_to_string([PlaceholderA], Placeholder),
     (  var(ValueA)
@@ -39,8 +68,16 @@ tui:alias_drawable(input(W, PlaceholderA, ValueA), D) :-
     D = [style([faint], 0-0-'> '),
          2-0-Field].
 
-tui:alias_drawable(frame(W-H, Contents), frame(W-H, Contents, _)).
 
+'#containers'.
+
+%% frame(+W-+H, +Contents)
+%% frame(+W-+H, +Contents, -Extent)
+%
+%  A thin-bordered box of size W×H containing Contents in a viewport.
+%  The interior is cleared before rendering. Extent is unified with
+%  the MaxX-MaxY of the content (useful for scrolling).
+tui:alias_drawable(frame(W-H, Contents), frame(W-H, Contents, _)).
 tui:alias_drawable(frame(W-H, Contents, Extent), [Clear, Box, Port]) :-
     (  W > 1, H > 1
     -> true
@@ -52,32 +89,12 @@ tui:alias_drawable(frame(W-H, Contents, Extent), [Clear, Box, Port]) :-
     Clear = 1-1-clear(PW-PH),
     Port =  1-1-port(PW-PH, Contents, Extent).
 
-repeat_char_string(N, C, S) :-
-    length(List, N),
-    maplist(=(C), List),
-    string_chars(S, List).
-
-string_length_adjusted(S, L, A) :-
-    string_length(S, SL),
-    (  SL = L
-    -> A = S
-
-    ;  SL < L
-    -> Dif is L - SL,
-       repeat_char_string(Dif, ' ', Pad),
-       string_concat(S, Pad, A)
-
-    ;  length(AC, L),
-       string_chars(S, SC),
-       append(AC, _, SC),
-       string_chars(A, AC)
-    ).
-
-title_l('\u2574').
-title_r('\u2576').
-
+%% titled_frame(+W-+H, +Title, +Contents)
+%% titled_frame(+W-+H, +Title, +Contents, -Extent)
+%
+%  A frame with a bold Title rendered in the top border. Title is
+%  truncated if it exceeds the frame width.
 tui:alias_drawable(titled_frame(W-H, Title, Contents), titled_frame(W-H, Title, Contents, _)).
-
 tui:alias_drawable(titled_frame(W-H, Title, Contents, Extent), [FramePart, 1-0-TitlePart]) :-
     title_l(TL),
     title_r(TR),
@@ -90,68 +107,20 @@ tui:alias_drawable(titled_frame(W-H, Title, Contents, Extent), [FramePart, 1-0-T
     ;  TitlePart = TL .> style([bold], Title) .> TR
     ).
 
-overlap(A-B, C-D, O) :-
-    B < A, !,
-    overlap(B-A, C-D, O).
-
-overlap(A-B, C-D, O) :-
-    D < C, !,
-    overlap(A-B, D-C, O).
-
-overlap(A-B, C-D, O) :-
-    C < A, !,
-    overlap(C-D, A-B, O).
-
-overlap(_-B, C-D, O) :-
-    (  C < B
-    -> O is min(B-C, D-C)
-    ;  O is 0
-    ).
-
-scroll_char(h, s, s, '\u2500').
-scroll_char(h, f, f, '\u2501').
-scroll_char(h, s, f, '\u257c').
-scroll_char(h, f, s, '\u257e').
-
-scroll_char(v, s, s, '\u2502').
-scroll_char(v, f, f, '\u2503').
-scroll_char(v, s, f, '\u257d').
-scroll_char(v, f, s, '\u257f').
-
-nofm_seg_style_drawable(M/M, _, _, []) :- !.
-nofm_seg_style_drawable(N/M, P1-P2, S, [X-Y-H|T]) :-
-    % 0-based cell spans from N - N + 1
-    % if N+0   to N+0.5 OVERLAPS seg, it's indicated
-    % if N+0.5 to N+1   OVARLAPS seg, THAT part is indicated
-    N0 is N/M,
-    Np5 is (N + 0.5)/M,
-    N1 is (N + 1)/M,
-    (  overlap(N0-Np5, P1-P2, O1), O1 > 0
-    -> A = f
-    ;  A = s
-    ),
-    (  overlap(Np5-N1, P1-P2, O2), O2 > 0
-    -> B = f
-    ;  B = s
-    ),
-    scroll_char(S, A, B, H),
-    (  S = h
-    -> X = N, Y = 0
-    ;  Y = N, X = 0
-    ),
-    Next is N + 1,
-    nofm_seg_style_drawable(Next/M, P1-P2, S, T).
-
-portd_contentd_contento_style_drawable(PD, CD, _, S, D) :-
-    PD >= CD, !,
-    nofm_seg_style_drawable(0/PD, (-1)-(-1), S, D).
-
-portd_contentd_contento_style_drawable(PD, CD, CO, S, D) :-
-    (P1 is (-CO)/CD),
-    (P2 is P1 + PD/CD),
-    nofm_seg_style_drawable(0/PD, P1-P2, S, D).
+title_l('\u2574').
+title_r('\u2576').
 
 
+'#scrolling'.
+
+%% scroll(+W-+H, +ScrollX-+ScrollY, +Content)
+%
+%  A scrollable frame. Content is rendered inside a W×H bordered
+%  viewport offset by ScrollX-ScrollY. Scroll indicators appear on
+%  the bottom and right edges using half-block line-drawing characters.
+%
+%  Events produced:
+%    * scroll-(NewX-NewY) on arrow keys when cursor is on a scrollbar
 tui:alias_drawable(scroll(W-H, X-Y, Content),
                    [FramePart,
                     hscroll(1-HM1-HScroll, MaxScrollH),
@@ -183,7 +152,6 @@ tui:at_event_is(vscroll(_, Max), down, scroll_down(Max)).
 tui:at_event_is(hscroll(_, Max), right, scroll_right(Max)).
 tui:at_event_is(hscroll(_, Max), left, scroll_left(Max)).
 
-
 tui:at_event_is(scroll(_-_, X-Y, _), ScrollD, scroll-(X1-Y1)) :-
     ( ScrollD = scroll_down(Max),
       Y1 is max(Y - 1, -Max),
@@ -198,3 +166,84 @@ tui:at_event_is(scroll(_-_, X-Y, _), ScrollD, scroll-(X1-Y1)) :-
       X1 is min(0, X + 1),
       Y1 is Y
     ), !.
+
+
+'#helpers'.
+
+repeat_char_string(N, C, S) :-
+    length(List, N),
+    maplist(=(C), List),
+    string_chars(S, List).
+
+string_length_adjusted(S, L, A) :-
+    string_length(S, SL),
+    (  SL = L
+    -> A = S
+
+    ;  SL < L
+    -> Dif is L - SL,
+       repeat_char_string(Dif, ' ', Pad),
+       string_concat(S, Pad, A)
+
+    ;  length(AC, L),
+       string_chars(S, SC),
+       append(AC, _, SC),
+       string_chars(A, AC)
+    ).
+
+overlap(A-B, C-D, O) :-
+    B < A, !,
+    overlap(B-A, C-D, O).
+overlap(A-B, C-D, O) :-
+    D < C, !,
+    overlap(A-B, D-C, O).
+overlap(A-B, C-D, O) :-
+    C < A, !,
+    overlap(C-D, A-B, O).
+overlap(_-B, C-D, O) :-
+    (  C < B
+    -> O is min(B-C, D-C)
+    ;  O is 0
+    ).
+
+% Scroll indicator characters — half-block line drawing for
+% sub-cell-resolution scroll position display.
+
+scroll_char(h, s, s, '\u2500').
+scroll_char(h, f, f, '\u2501').
+scroll_char(h, s, f, '\u257c').
+scroll_char(h, f, s, '\u257e').
+
+scroll_char(v, s, s, '\u2502').
+scroll_char(v, f, f, '\u2503').
+scroll_char(v, s, f, '\u257d').
+scroll_char(v, f, s, '\u257f').
+
+nofm_seg_style_drawable(M/M, _, _, []) :- !.
+nofm_seg_style_drawable(N/M, P1-P2, S, [X-Y-H|T]) :-
+    N0 is N/M,
+    Np5 is (N + 0.5)/M,
+    N1 is (N + 1)/M,
+    (  overlap(N0-Np5, P1-P2, O1), O1 > 0
+    -> A = f
+    ;  A = s
+    ),
+    (  overlap(Np5-N1, P1-P2, O2), O2 > 0
+    -> B = f
+    ;  B = s
+    ),
+    scroll_char(S, A, B, H),
+    (  S = h
+    -> X = N, Y = 0
+    ;  Y = N, X = 0
+    ),
+    Next is N + 1,
+    nofm_seg_style_drawable(Next/M, P1-P2, S, T).
+
+portd_contentd_contento_style_drawable(PD, CD, _, S, D) :-
+    PD >= CD, !,
+    nofm_seg_style_drawable(0/PD, (-1)-(-1), S, D).
+portd_contentd_contento_style_drawable(PD, CD, CO, S, D) :-
+    (P1 is (-CO)/CD),
+    (P2 is P1 + PD/CD),
+    nofm_seg_style_drawable(0/PD, P1-P2, S, D).

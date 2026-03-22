@@ -1,3 +1,11 @@
+%% TUI — A Text User Interface framework for SWI-Prolog.
+%
+%  Inspired by TEA (The Elm Architecture). An app is a loop of
+%  model → view → event → update. Components are defined via the
+%  multifile hooks alias_drawable/2 and at_event_is/3.
+%
+%  @see app/4 for the main entry point.
+
 :- module(tui,
           [
             op(601, xfy, '.>'),
@@ -16,15 +24,32 @@
             app/4
           ]).
 
-% --------------------------------------
 '#imports'.
-% --------------------------------------
+
 :- use_module(one_shot).
 :- use_module(library(dcg/basics)).
 :- use_module(library(ansi_term)).
-:- multifile at_event_is/3.
+
+%% alias_drawable(+DrawableTerm, -ExpandedDrawable) is semidet.
+%
+%  Multifile hook. Define custom drawable components by mapping a term
+%  to its drawable expansion. During rendering the alias is pushed onto
+%  the component stack so that at_event_is/3 can intercept events.
+%
+%  @see at_event_is/3
 :- multifile alias_drawable/2.
 
+%% at_event_is(+AliasOrStack, +RawEvent, -RewrittenEvent) is semidet.
+%
+%  Multifile hook. Rewrite an event as seen by a component on the alias
+%  stack. Called during event bubbling: if the hook succeeds the event
+%  is replaced; otherwise bubbling continues to the next stack entry.
+%
+%  @see stack_event_is/3
+:- multifile at_event_is/3.
+
+
+'#debug'.
 
 :- meta_predicate(log(0)).
 log(Goal) :-
@@ -33,7 +58,6 @@ log(Goal) :-
         with_output_to(Out, Goal),
         close(Out)
     ).
-
 
 :- op(950, fy, ?).
 :- meta_predicate(debug_call(0)).
@@ -51,9 +75,11 @@ debug_call(G) :-
 :- det('@'/1).
 '@'(G) :- G.
 
-% --------------------------------------
-'#utilities'.
-% --------------------------------------
+
+'#terminal_io'.
+
+% ANSI escape helpers — thin wrappers over CSI sequences.
+
 ansi_bell :-
     format('\007').
 
@@ -75,9 +101,12 @@ ansi_save_cursor :-
 ansi_restore_cursor :-
     ansi_csi("u").
 
+ansi_set_cursor(X, Y) :-
+    format('\e[~w;~wH', [Y, X]).
 
 :- dynamic terminal_size_/2.
 
+% IMPURE: mutable global — caches last-known terminal dimensions.
 :- det(set_terminal_size__requires_redraw/3).
 set_terminal_size__requires_redraw(Cols, Rows, Redraw) :-
     ignore(terminal_size_(PrevCols, PrevRows)),
@@ -91,16 +120,23 @@ set_terminal_size__requires_redraw(Cols, Rows, Redraw) :-
        Redraw = true
     ).
 
+%% terminal_size(-Cols, -Rows) is det.
+%
+%  Current terminal dimensions in columns and rows.
+%  Updated automatically on SIGWINCH.
 :- det(terminal_size/2).
-
 terminal_size(Cols, Rows) :-
     terminal_size_(Cols, Rows), !.
 
+
+'#rendering'.
+
+% IMPURE: mutable global — caches what was last written at each screen
+% location to avoid redundant terminal writes.
 :- dynamic location_style_char_/3.
 
 location_style_char(X-Y, Style, C) :-
     location_style_char_(X-Y, Style, C), !.
-
 location_style_char(X-Y, Style, C) :-
     retractall(location_style_char_(X-Y, _, _)),
     ansi_set_cursor(X, Y),
@@ -108,8 +144,71 @@ location_style_char(X-Y, Style, C) :-
     assertz(location_style_char_(X-Y, Style, C)),
     !.
 
-ansi_set_cursor(X, Y) :-
-    format('\e[~w;~wH', [Y, X]).
+onscreen(X-Y) :-
+    X > 0,
+    Y > 0,
+    terminal_size(Cols, Rows), !,
+    X =< Cols,
+    Y =< Rows.
+
+raw_attributes_attributes([], []).
+raw_attributes_attributes([style_hovergroup(_, false)|T], Attr) :- !,
+    raw_attributes_attributes(T, Attr).
+raw_attributes_attributes([style_hovergroup(S, true)|T], Attr) :- !,
+    append(S, T, ST),
+    raw_attributes_attributes(ST, Attr).
+raw_attributes_attributes([H|T], [H|A]) :- !,
+    raw_attributes_attributes(T, A).
+
+apply_focus(X-Y, Commands) :-
+    member((X-Y)-(_-Attr-_), Commands),
+    member([style_hovergroup(_S, G)], Attr),
+    G = true.
+apply_focus(_, _).
+
+render_commands(_, []).
+render_commands(Cursor, [((X-Y)-(_-A-C))|T]) :-
+    (  onscreen(X-Y)
+    -> flatten(A, A1),
+       raw_attributes_attributes(A1, A2), !,
+       (   Cursor = X-Y
+       ->  append(A2, [negative], A3)
+       ;   A3 = A2
+       ),
+       location_style_char(X-Y, A3, C)
+    ;  true
+    ),
+    render_commands(Cursor, T).
+
+%% drawable_raw(+Drawable, -Raw) is det.
+%
+%  Render Drawable into raw command list wrapped as raw(Commands).
+%  Useful for pre-rendering a component for later embedding.
+drawable_raw(Drawable, raw(Raw)) :-
+    phrase(drawable(Drawable, [], [], 0-0, _), Raw, []).
+
+drawable__normalized_commands__end(Drawables, Deduped, MXY) :-
+    phrase(drawable(Drawables, [], [], 1-1, MXY), Commands, []),
+    !,
+    keylist_deduped_prioritize_last(Commands, Deduped).
+
+commands_eventmap([], []).
+commands_eventmap([((X-Y)-(S-_-_))|T], EM) :-
+    (  onscreen(X-Y)
+    -> E = (X-Y)-S,
+       EM = [E|EMT]
+    ;  EM = EMT
+    ),
+    commands_eventmap(T, EMT).
+
+pair_key_pred(Delta, K1-_, K2-_) :- compare(Delta, K1, K2).
+
+keylist_deduped_prioritize_last(L0, LN) :-
+    reverse(L0, R),
+    predsort(pair_key_pred, R, LN).
+
+
+'#attributes'.
 
 is_stlye_attribute(A) :-
     member(A, [reset,
@@ -129,30 +228,25 @@ is_color_attribute(A) :-
     my_color(Color).
 
 ansi_attribute(A) :- is_stlye_attribute(A).
-
 ansi_attribute(A) :- is_color_attribute(A).
 
 is_attribute(hide_cursor).
-
 is_attribute(style_hovergroup(Style, _G)) :-
     maplist(ansi_attribute, Style).
-
 is_attribute(A) :-
     ansi_attribute(A).
-
 
 my_color(_).
 
 
-% -------------------------------------
 '#commands'.
-% -------------------------------------
 
-%!  command(+Command).
+%% command(+Command) is semidet.
 %
-%   True if Command is a valid drawing command.
-%   Commands are the fundamental unit of drawing to the terminal.
-
+%  True if Command is a valid drawing command.
+%  A command is (X-Y)-(Stack-Attrs-Char) where X,Y are integers,
+%  Stack is the alias component stack, Attrs is a list of style
+%  attributes, and Char is a single-character atom.
 :- public(command/1).
 command((X-Y)-(Stack-Attrs-C)) :-
     integer(X),
@@ -163,9 +257,34 @@ command((X-Y)-(Stack-Attrs-C)) :-
     atom(C),
     atom_length(C, 1).
 
-% -------------------------------------
+
 '#drawables'.
-% -------------------------------------
+
+%% drawable(+Term, +Stack, +Attrs, +XY, -EndXY)// is det.
+%
+%  DCG that renders a drawable term into a difference list of commands.
+%
+%  Term is the drawable to render — an atom, string, number, list, or
+%  one of the compound drawable terms (see below). Stack is the current
+%  alias component stack (used for event routing). Attrs is the current
+%  style attribute list. XY is the origin coordinate as X-Y. EndXY is
+%  unified with the maximum X-Y coordinate reached.
+%
+%  Drawable terms:
+%    * Atoms, strings, numbers — rendered as character sequences
+%    * literal(T)       — render any term as its printed representation
+%    * chars(List)      — render a list of characters
+%    * raw(Commands)    — embed pre-rendered commands with offset
+%    * translate(DX-DY, D) — offset D by DX-DY
+%    * X-Y-D            — shorthand for translate(X-Y, D)
+%    * port(W-H, D)     — clip D to a W×H viewport
+%    * style(Attrs, D)  — push style attributes for D
+%    * A .> B           — horizontal concat (A left, B right)
+%    * B .< A           — horizontal concat (A rendered first for width)
+%    * A .\/ B          — vertical concat (A top, B bottom)
+%    * B ./\ A          — vertical concat (A rendered first for height)
+%    * [H|T]            — render all drawables overlaid at same origin
+%    * Any term matched by alias_drawable/2
 
 :- discontiguous(drawable//5).
 :- det(drawable//5).
@@ -282,7 +401,6 @@ drawable(A .\/ B, Stack, Attr, DX-DY, MX-MY) --> !,
     drawable(translate(0-HeightA, B), Stack, Attr, DX-DY, BMX-BMY),
     { MX is max(AMX, BMX), MY is max(AMY, BMY) }.
 
-
 drawable(B ./\ A, Stack, Attr, DX-DY, MX-MY) --> !,
     { phrase(drawable(A, Stack, Attr, DX-DY, AMX-AMY), Raw, []),
       HeightA is AMY - DY + 1
@@ -298,44 +416,104 @@ drawable(A, Stack, Attr, DX-DY, MX-MY) -->
 drawable(D, _, _, _, _) -->
     { domain_error(drawable, D) }.
 
-onscreen(X-Y) :-
-    X > 0,
-    Y > 0,
-    terminal_size(Cols, Rows), !,
-    X =< Cols,
-    Y =< Rows.
 
-raw_attributes_attributes([], []).
+'#builtin_components'.
 
-raw_attributes_attributes([style_hovergroup(_, false)|T], Attr) :- !,
-    raw_attributes_attributes(T, Attr).
+% Error guard for uninstantiated alias lookups.
+alias_drawable(V, _) :-
+    var(V), !,
+    instantiation_error(alias_drawable).
 
-raw_attributes_attributes([style_hovergroup(S, true)|T], Attr) :- !,
-    append(S, T, ST),
-    raw_attributes_attributes(ST, Attr).
+%% alias_drawable(hover(+Style, +Term), -Drawable).
+%
+%  Wrap Term with a hover highlight. When the cursor is over this
+%  component, Style attributes are applied.
+alias_drawable(hover(Style, Term), HoverTerm) :-
+    HoverTerm = style([style_hovergroup(Style, _G)], Term).
 
-raw_attributes_attributes([H|T], [H|A]) :- !,
-    raw_attributes_attributes(T, A).
+%% alias_drawable(+X-+Y-+Term, -Drawable).
+%
+%  Shorthand for translate(X-Y, Term). Matches only when X and Y are
+%  integers and Term is a compound (not another pair).
+alias_drawable(X-Y-Term, translate(X-Y, Term)) :-
+    integer(X), integer(Y),
+    functor(Term, Name, Arity),
+    Name \= '-',
+    Arity > 0, !.
 
-apply_focus(X-Y, Commands) :-
-    member((X-Y)-(_-Attr-_), Commands),
-    member([style_hovergroup(_S, G)], Attr),
-    G = true.
+%% alias_drawable(box(+W-+H, +Style), -Drawable).
+%
+%  A W×H box border in the given Style (thin, thick, or double).
+%  The box is hollow — only the border characters are drawn.
+alias_drawable(box(W0-H0, Style), [Top, Bottom, Left, Right, Corners]) :-
+    W is W0 - 1,
+    H is H0 - 1,
+    style_corner_char(Style, tl, TL),
+    style_corner_char(Style, tr, TR),
+    style_corner_char(Style, bl, BL),
+    style_corner_char(Style, br, BR),
+    style_horizontal(Style, Hoz),
+    style_vertical(Style, Vrt),
+    Corners = [(0-0)-TL, (W-0)-TR, (0-H)-BL, (W-H)-BR],
+    WM is W - 1,
+    HM is H - 1,
+    char_from_to_line(Hoz, 1-0, WM-0, Top),
+    char_from_to_line(Hoz, 1-H, WM-H, Bottom),
+    char_from_to_line(Vrt, 0-1, 0-HM, Left),
+    char_from_to_line(Vrt, W-1, W-HM, Right).
 
-apply_focus(_, _).
+%% alias_drawable(clear(+W-+H), -Drawable).
+%
+%  A W×H rectangle of spaces with reset styling. Used to erase a
+%  region before drawing over it.
+alias_drawable(clear(W-H), style([reset, bg(default)], Spaces)) :-
+    findall((X-Y)-' ',
+            ( between(0, W, X),
+              between(0, H, Y) ),
+            Spaces).
 
-drawable_raw(Drawable, raw(Raw)) :-
-    phrase(drawable(Drawable, [], [], 0-0, _), Raw, []).
+% Line and box-drawing character tables.
 
-drawable__normalized_commands__end(Drawables, Deduped, MXY) :-
-    phrase(drawable(Drawables, [], [], 1-1, MXY), Commands, []),
-    !,
-    keylist_deduped_prioritize_last(Commands, Deduped).
+char_from_to_line(C, X1-Y, X2-Y, L) :- !,
+    (  X1 > X2
+    -> From = X2, To = X1
+    ;  From = X1, To = X2
+    ),
+    findall((X-Y)-C, between(From, To, X), L).
+char_from_to_line(C, X-Y1, X-Y2, L) :- !,
+    (  Y1 > Y2
+    -> From = Y2, To = Y1
+    ;  From = Y1, To = Y2
+    ),
+    findall((X-Y)-C, between(From, To, Y), L).
+
+:- discontiguous style_corner_char/3.
+:- discontiguous style_horizontal/2.
+:- discontiguous style_vertical/2.
+
+style_corner_char(thick, tl, '\u250f').
+style_corner_char(thick, bl, '\u2517').
+style_corner_char(thick, tr, '\u2513').
+style_corner_char(thick, br, '\u251b').
+style_horizontal(thick, '\u2501').
+style_vertical(thick, '\u2503').
+
+style_corner_char(thin, tl, '\u250c').
+style_corner_char(thin, bl, '\u2514').
+style_corner_char(thin, tr, '\u2510').
+style_corner_char(thin, br, '\u2518').
+style_horizontal(thin, '\u2500').
+style_vertical(thin, '\u2502').
+
+style_corner_char(double, tl, '\u2554').
+style_corner_char(double, tr, '\u2557').
+style_corner_char(double, bl, '\u255a').
+style_corner_char(double, br, '\u255d').
+style_horizontal(double, '\u2550').
+style_vertical(double, '\u2551').
 
 
-% -------------------------------------
 '#app'.
-% -------------------------------------
 
 :- det(tui_init/0).
 tui_init :-
@@ -353,31 +531,28 @@ wait_for_terminal_size :-
     ;  wait_for_terminal_size
     ).
 
-
+%% app(+State, :View, :Update, -Result) is det.
+%
+%  Run a TUI application. State is the initial (CursorX-CursorY)-Model.
+%  View is called as call(View, State, Drawable) to produce the current
+%  view. Update is called as call(Update, Event, State0, State1) to
+%  handle events. Result is unified when Update produces result(R).
+%
+%  Three threads cooperate:
+%    * Main thread — owns TTY, reads input, dispatches events
+%    * tty_output  — serializes terminal writes
+%    * update      — processes events, calls Update, generates views
+%
+%  The app exits when update/3 returns result(R) for some event.
 :- meta_predicate(app(?, 2, 3, ?)).
-%%    app(State, View, Update, Result)
-%     True if app sets up the threads/queues for a TUI app,
-%     with Result unified upon completion.
-%
-%     Architecture:
-%       - Main thread: owns TTY, reads input, dispatches events
-%       - TTY output thread: handles rendering commands
-%       - Update thread: processes events, updates state, generates views
-%
-%     App exits when update/3 produces result(R) - this must be triggered
-%     by user input (e.g., pressing 'q') since main thread blocks on input.
-%
 app(State, View, Update, Result) :-
     one_shot_message(FinalUpdate, FinalUpdateInput),
     call_cleanup(
-        % call
         with_tty_raw(
             (
                 tui_init,
                 thread_self(MainThread),
                 thread_create(tty_output_loop, _, [alias(tty_output)]),
-            
-        
                 on_signal(winch, _, sig_winch),
                 thread_create(
                     update_loop(State, _, _, View, Update, FinalUpdate),
@@ -385,11 +560,9 @@ app(State, View, Update, Result) :-
                     [alias(update)]
                 ),
                 needs_repaint,
-                % Main thread handles input - it owns the TTY
                 input_loop(MainThread, FinalUpdateInput, Result)
             )
         ),
-        % cleanup
         (
             @ ignore(thread_send_message(tty_output, exit)),
             @ on_signal(winch, _, default),
@@ -401,9 +574,8 @@ app(State, View, Update, Result) :-
 sig_winch(_) :-
     tty_request_size.
 
-% -------------------------------------
-'#threads_and_queues'.
-% -------------------------------------
+
+'#threads'.
 
 % Architecture:
 %
@@ -430,15 +602,10 @@ sig_winch(_) :-
 %                     │  TTY Output     │
 %                     │  - render       │
 %                     └─────────────────┘
-%
-% Result flow:
-%   When update produces result(R), it sends result(R) to MainThread.
-%   Main thread peeks for this message before blocking on input.
-%   Constraint: app exit must be triggered by user input.
 
 % --- Main Thread: Input Loop ---
 % Runs in the main thread which owns the TTY.
-% Checks for result message before blocking on input.
+% Monitors both user_input and the one-shot pipe for app termination.
 
 input_loop(MainThread, FinalUpdateInput, Result) :-
         wait_for_input([user_input, FinalUpdateInput], Ready, infinite),
@@ -449,15 +616,6 @@ input_loop(MainThread, FinalUpdateInput, Result) :-
         ;   @ read_term(FinalUpdateInput, Result, []),
             @ close(FinalUpdateInput)
         ).
-    
-    % (   thread_peek_message(MainThread, result(Result))
-    % ->  thread_get_message(MainThread, result(Result))  % consume it
-
-    % ;   wait_for_input([user_input], [user_input], infinite),
-    %     get_single_input(In),
-    %     handle_input(In),
-    %     input_loop(MainThread, Result)
-    % ).
 
 handle_input(terminal_size(Cols, Rows)) :- !,
     set_terminal_size__requires_redraw(Cols, Rows, Redraw),
@@ -465,18 +623,16 @@ handle_input(terminal_size(Cols, Rows)) :- !,
     ->  needs_repaint
     ;   true
     ).
-
 handle_input(In) :-
     thread_send_message(update, update(In)).
 
-
 % --- TTY Output Thread ---
-% Handles all terminal output to avoid interleaving issues.
+% Serializes all terminal output to avoid interleaving from multiple threads.
 
 tty_output_loop :-
     thread_get_message(tty_output, M),
     (   M = exit
-    ->  true  % Exit the loop
+    ->  true
 
     ;   M = tty_render(Cursor, Commands)
     ->  tty_render(Cursor, Commands),
@@ -500,7 +656,6 @@ tty_request_size :-
     ansi_csi("6n"),
     ansi_restore_cursor,
     flush_output.
-
 
 % --- Update Thread ---
 % Processes events, updates state, generates views.
@@ -527,7 +682,7 @@ thread_get_message_prioritize(Thread, M, P) :-
     ;   true
     ),
     thread_get_message(Thread, M).
-    
+
 :- meta_predicate update_loop(+, ?, ?, 2, 3, +).
 update_loop(State0, EventAssoc, EX-EY, View, Update, FinalUpdate) :-
     thread_get_message_prioritize(update, M, view),
@@ -570,7 +725,6 @@ update_loop(State0, EventAssoc, EX-EY, View, Update, FinalUpdate) :-
     ;   assertion((fail, message:M))
     ).
 
-
 :- public(repeat/1).
 repeat(Goal) :-
     repeat,
@@ -581,9 +735,27 @@ repeat(Goal) :-
 :- public(no_repeat/1).
 no_repeat(Goal) :- Goal.
 
-% -------------------------------------
+
 '#events'.
-% -------------------------------------
+
+%% stack_event_is(+Stack, +RawEvent, -BubbledEvent) is det.
+%
+%  Walk the component Stack from innermost to outermost, giving each
+%  component a chance to rewrite the event via at_event_is/3. If no
+%  component rewrites the event, BubbledEvent = RawEvent.
+stack_event_is(V, _, _) :- var(V), domain_error(stack_event_is, stack:V).
+stack_event_is(_, V, _) :- var(V), domain_error(stack_event_is, event:V).
+stack_event_is([H|T], E, Is) :- !,
+    (  tui:at_event_is(H, E, Next)
+    -> stack_event_is([H|T], Next, Is)
+    ;  stack_event_is(T, E, Is)
+    ).
+stack_event_is([], E, Is) :- !,
+    (  tui:at_event_is([], E, Next)
+    -> stack_event_is([], Next, Is)
+    ;  Is = E
+    ).
+
 state_event_assoc_bubbled(S0, E0, EventAssoc, E1) :-
     (X-Y)-_ = S0,
     (  get_assoc(X-Y, EventAssoc, Stack)
@@ -592,119 +764,86 @@ state_event_assoc_bubbled(S0, E0, EventAssoc, E1) :-
     ),
     stack_event_is(Stack, E0, E1).
 
-commands_eventmap([], []).
-commands_eventmap([((X-Y)-(S-_-_))|T], EM) :-
-    (  onscreen(X-Y)
-    -> E = (X-Y)-S,
-       EM = [E|EMT]
-    ;  EM = EMT
+
+'#input'.
+
+%% wait_for_input is det.
+%
+%  Block until a single input event is available, then discard it.
+wait_for_input :-
+    get_single_input(_).
+
+%% get_single_input(-Event) is semidet.
+%
+%  Read one input event from the terminal. Handles escape sequences
+%  (arrow keys, function keys, etc.) and control characters. Event
+%  is an atom like up, down, return, tab, or a single character atom
+%  for printable keys. Blocks until input is available.
+get_single_input(I) :-
+    get_single_input(I, true).
+
+get_single_input(I, Wait) :-
+    (  Wait = false
+    -> wait_for_input([user_input], [user_input], 0),
+       get_single_char(H)
+    ;  get_single_char(H)
     ),
-    commands_eventmap(T, EMT).
+    (  H = -1
+    -> fail
 
-render_commands(_, []).
-render_commands(Cursor, [((X-Y)-(_-A-C))|T]) :-
-    (  onscreen(X-Y)
-    -> flatten(A, A1),
-       raw_attributes_attributes(A1, A2), !,
-       (   Cursor = X-Y
-       ->  append(A2, [negative], A3)
-       ;   A3 = A2
-       ),
-       location_style_char(X-Y, A3, C)
-    ;  true
-    ),
-    render_commands(Cursor, T).
+    ;  H \= 27
+    -> code_value(H, I)
+    ;  (  \+ wait_for_input([user_input], [user_input], -1)
+       -> code_value(27, I)
 
-% --------------------------------------
-'#lines_boxes'.
-% --------------------------------------
-char_from_to_line(C, X1-Y, X2-Y, L) :- !,
-    (  X1 > X2
-    -> From = X2, To = X1
-    ;  From = X1, To = X2
-    ),
-    findall((X-Y)-C, between(From, To, X), L).
+       ;  peek_code(27)
+       -> get_code(_),
+          code_value(27, I)
 
-char_from_to_line(C, X-Y1, X-Y2, L) :- !,
-    (  Y1 > Y2
-    -> From = Y2, To = Y1
-    ;  From = Y1, To = Y2
-    ),
-    findall((X-Y)-C, between(From, To, Y), L).
+       ;  read_escseq([ 27  |T ]-T, I)
+       -> true
+    )
+    ), !.
 
-:- discontiguous style_corner_char/3.
-:- discontiguous style_horizontal/2.
-:- discontiguous style_vertical/2.
+%% input_or_tick(-Event) is det.
+%
+%  Non-blocking input with a tick fallback. If input is available
+%  within the tick interval, returns the input event. Otherwise
+%  returns time-TimeAtom where TimeAtom is the formatted current time.
+:- dynamic(last_tick/1).
+input_or_tick(E) :-
+    ( last_tick(Last), ! ; Last = 0 ),
+    get_time(Now),
+    (  Now - Last < 1, get_single_input(E, false)
+    -> true
+    ;  retractall(last_tick(_)),
+       assertz(last_tick(Now)),
+       E = time-T,
+       sleep(0),
+       format_time(atom(T), '%T', Now)
+    ).
 
-style_corner_char(thick, tl, '\u250f').
-style_corner_char(thick, bl, '\u2517').
-style_corner_char(thick, tr, '\u2513').
-style_corner_char(thick, br, '\u251b').
-style_horizontal(thick, '\u2501').
-style_vertical(thick, '\u2503').
+no_input :-
+   \+ wait_for_input([user_input], [user_input], 0).
 
-style_corner_char(thin, tl, '\u250c').
-style_corner_char(thin, bl, '\u2514').
-style_corner_char(thin, tr, '\u2510').
-style_corner_char(thin, br, '\u2518').
-style_horizontal(thin, '\u2500').
-style_vertical(thin, '\u2502').
+read_escseq(L-T, Code) :-
+    get_code(C),
+    ( T = [C], codes_value(L, Code)
+    -> true
+    ;  wait_for_input([user_input], [user_input], -1)
+    -> T = [C | T2],
+       read_escseq(L-T2, Code)
+    ;  T = [],
+       Code = escseq(L)
+    ).
 
-
-style_corner_char(double, tl, '\u2554').
-style_corner_char(double, tr, '\u2557').
-style_corner_char(double, bl, '\u255a').
-style_corner_char(double, br, '\u255d').
-style_horizontal(double, '\u2550').
-style_vertical(double, '\u2551').
-
-                
-% --------------------------------------
-'#alias_drawables'.
-% --------------------------------------
-alias_drawable(V, _) :-
-    var(V), !,
-    instantiation_error(alias_drawable).
-
-alias_drawable(hover(Style, Term), HoverTerm) :-
-    HoverTerm = style([style_hovergroup(Style, _G)], Term).
-
-alias_drawable(X-Y-Term, translate(X-Y, Term)) :-
-    integer(X), integer(Y),
-    functor(Term, Name, Arity),
-    Name \= '-',
-    Arity > 0, !.
-
-alias_drawable(box(W0-H0, Style), [Top, Bottom, Left, Right, Corners]) :-
-    W is W0 - 1,
-    H is H0 - 1,
-    style_corner_char(Style, tl, TL),
-    style_corner_char(Style, tr, TR),
-    style_corner_char(Style, bl, BL),
-    style_corner_char(Style, br, BR),
-    style_horizontal(Style, Hoz),
-    style_vertical(Style, Vrt),
-    Corners = [(0-0)-TL, (W-0)-TR, (0-H)-BL, (W-H)-BR],
-    WM is W - 1,
-    HM is H - 1,
-    char_from_to_line(Hoz, 1-0, WM-0, Top),
-    char_from_to_line(Hoz, 1-H, WM-H, Bottom),
-    char_from_to_line(Vrt, 0-1, 0-HM, Left),
-    char_from_to_line(Vrt, W-1, W-HM, Right).
-
-
-alias_drawable(clear(W-H), style([reset, bg(default)], Spaces)) :-
-    findall((X-Y)-' ',
-            ( between(0, W, X),
-              between(0, H, Y) ),
-            Spaces).
+% Escape sequence decoding tables.
 
 codes_value(I, V) :-
     escape_codes_value(I, V).
 
 escape_codes_value([27, 91  | Codes], terminal_size(X,Y)) :-
    phrase((integer(Y), [59], integer(X), [82]), Codes, []), !.
-
 escape_codes_value([27, 91  |Codes], V) :-
     atom_codes(Atom, Codes),
     once(escaped_atom_value(Atom, V)).
@@ -738,6 +877,8 @@ escaped_atom_value('26~', f14).
 escaped_atom_value('28~', f15).
 escaped_atom_value('29~', f16).
 
+% Control character code table.
+
 code_cntrl(1, start_of_heading).
 code_cntrl(2, start_of_text).
 code_cntrl(3, interrupt).
@@ -760,111 +901,27 @@ code_cntrl(27, escape).
 code_cntrl(127, delete).
 
 code_value(C, V) :- code_cntrl(C, V).
-
 code_value(C, V) :-
     \+ code_type(C, cntrl),
     char_code(V, C).
 
-%code_value(C, V) :-
-%    is_list(C),
-%    atom_codes(V, C).
 
+'#navigation'.
 
-limits_direction_from_to(_-_, up, X-Y0, X-Y) :-
-    Y is max(1, Y0 - 1).
-
-limits_direction_from_to(_-_, left, X0-Y, X-Y) :-
-    X is max(1, X0 - 1).
-
-limits_direction_from_to(MX-_, right, X0-Y, X-Y) :-
-    X is min(MX, X0 + 1).
-
-limits_direction_from_to(_-MY, down, X-Y0, X-Y) :-
-    Y is min(MY, Y0 + 1).
-
+%% direction(+Event) is semidet.
+%
+%  True if Event is a directional input: up, down, left, or right.
 direction(E) :- member(E, [up, down, left, right]).
 
-% --------------------------------------
-'#input'.
-% --------------------------------------
-wait_for_input :-
-    get_single_input(_).
-
-:- dynamic(last_tick/1).
-input_or_tick(E) :-
-    ( last_tick(Last), ! ; Last = 0 ),
-    get_time(Now),
-    (  Now - Last < 1, get_single_input(E, false)
-    -> true
-    ;  retractall(last_tick(_)),
-       assertz(last_tick(Now)),
-       E = time-T,
-       sleep(0),
-       format_time(atom(T), '%T', Now)
-    ).
-
-no_input :-
-   \+ wait_for_input([user_input], [user_input], 0).
-
-get_single_input(I) :-
-    get_single_input(I, true).
-
-get_single_input(I, Wait) :-
-    (  Wait = false
-    -> wait_for_input([user_input], [user_input], 0),
-       get_single_char(H)
-    ;  get_single_char(H)
-    ),
-    (  H = -1
-    -> fail
-
-    ;  H \= 27
-    -> code_value(H, I)
-    ;  (  \+ wait_for_input([user_input], [user_input], -1)
-       -> code_value(27, I)
-
-       ;  peek_code(27)
-       -> get_code(_),
-          code_value(27, I)
-
-       ;  read_escseq([ 27  |T ]-T, I)
-       -> true
-    )
-    ), !.
-
-
-read_escseq(L-T, Code) :-
-    get_code(C),
-    ( T = [C], codes_value(L, Code)
-    -> true
-    ;  wait_for_input([user_input], [user_input], -1)
-    -> T = [C | T2],
-       read_escseq(L-T2, Code)
-    ;  T = [],
-       Code = escseq(L)
-    ).
-
-% --------------------------------------
-'#event_bubbling'.
-% --------------------------------------
-stack_event_is(V, _, _) :- var(V), domain_error(stack_event_is, stack:V).
-
-stack_event_is(_, V, _) :- var(V), domain_error(stack_event_is, event:V).
-
-stack_event_is([H|T], E, Is) :- !,
-    (  tui:at_event_is(H, E, Next)
-    -> stack_event_is([H|T], Next, Is)
-    ;  stack_event_is(T, E, Is)
-    ).
-
-stack_event_is([], E, Is) :- !,
-    (  tui:at_event_is([], E, Next)
-    -> stack_event_is([], Next, Is)
-    ;  Is = E
-    ).
-
-pair_key_pred(Delta, K1-_, K2-_) :- compare(Delta, K1, K2).
-
-keylist_deduped_prioritize_last(L0, LN) :-
-    reverse(L0, R),
-    predsort(pair_key_pred, R, LN).
+%% limits_direction_from_to(+Limits, +Direction, +From, -To) is det.
+%
+%  Compute the cursor position To by moving one step in Direction from
+%  From, clamped to 1..Limits. Limits is MaxX-MaxY.
+limits_direction_from_to(_-_, up, X-Y0, X-Y) :-
+    Y is max(1, Y0 - 1).
+limits_direction_from_to(_-_, left, X0-Y, X-Y) :-
+    X is max(1, X0 - 1).
+limits_direction_from_to(MX-_, right, X0-Y, X-Y) :-
+    X is min(MX, X0 + 1).
+limits_direction_from_to(_-MY, down, X-Y0, X-Y) :-
+    Y is min(MY, Y0 + 1).
