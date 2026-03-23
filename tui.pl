@@ -188,9 +188,28 @@ drawable_raw(Drawable, raw(Raw)) :-
     phrase(drawable(Drawable, [], [], 0-0, _), Raw, []).
 
 drawable__normalized_commands__end(Drawables, Deduped, MXY) :-
-    phrase(drawable(Drawables, [], [], 1-1, MXY), Commands, []),
+    call_time(
+        phrase(drawable(Drawables, [], [], 1-1, MXY), Commands, []),
+        Time
+    ),
     !,
-    keylist_deduped_prioritize_last(Commands, Deduped).
+    profile_overlay(Time, Commands, Commands1),
+    keylist_deduped_prioritize_last(Commands1, Deduped).
+
+profile_overlay(Time, Commands, Commands1) :-
+    (   getenv('TUI_PROFILE', _)
+    ->  Wall = Time.wall,
+        format(atom(Label), '~3fms', [Wall * 1000]),
+        atom_chars(Label, Chars),
+        profile_chars(Chars, 1, 1, Overlay),
+        append(Commands, Overlay, Commands1)
+    ;   Commands1 = Commands
+    ).
+
+profile_chars([], _, _, []).
+profile_chars([C|T], X, Y, [(X-Y)-([]-[bold, fg(yellow), bg(black)]-C)|Rest]) :-
+    X1 is X + 1,
+    profile_chars(T, X1, Y, Rest).
 
 commands_eventmap([], []).
 commands_eventmap([((X-Y)-(S-_-_))|T], EM) :-
