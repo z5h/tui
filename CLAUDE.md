@@ -36,6 +36,7 @@ Drawables are a term-based DSL rendered via the DCG `drawable//5`. Key drawable 
   - `./\` — vertical concat, bottom-aligned first
 - **Combinators**: `translate(DX-DY, D)`, `port(W-H, D)`, `style(Attrs, D)`, `X-Y-D` (shorthand for translate)
 - **Builtins**: `box(W-H, Style)`, `clear(W-H)`, `hover(Style, D)`
+- **Tagging**: `Key : Drawable` — annotates a drawable with a tag for event routing (see below)
 
 Rendering produces a flat list of `(X-Y)-(Stack-Attrs-Char)` commands, deduplicated (last wins).
 
@@ -44,6 +45,18 @@ Rendering produces a flat list of `(X-Y)-(Stack-Attrs-Char)` commands, deduplica
 Custom components are defined as multifile `tui:alias_drawable(Term, Drawable)` clauses. During rendering, the alias stack tracks which components produced each character at each coordinate.
 
 Event rewriting uses multifile `tui:at_event_is(AliasOrStack, RawEvent, RewrittenEvent)` — components intercept and transform events before they bubble up. This is how checkboxes turn `' '` into `check_box-true/false`, scrollables turn arrow keys into scroll offsets, and moveables capture direction events.
+
+### Tagging with `Key : Drawable`
+
+The `:` operator attaches an identity tag to a drawable for event routing. Rendering ignores the tag. During event bubbling, when a component event `ComponentName-Value` passes through a `Key:Component` node and `ComponentName` matches the functor of `Component`, the event is rewritten to `Key-Value`. Raw events (atoms like `up`, `down`) and events from deeper nested components pass through unmodified.
+
+```prolog
+% Tag a scroll component instance with its model key:
+scroll(Id) : scroll(20-15, Offset, Content)
+% scroll fires scroll-(0-5), tag rewrites to scroll(Id)-(0-5)
+```
+
+This replaces the earlier `id/N` mechanism which relied on `=..`.
 
 ### State Shape
 
@@ -59,7 +72,15 @@ Lightweight association list library using plain `Key-Value` pair lists (not `li
 
 ### components.pl
 
-Reusable components: `column/1`, `row/1`, `check_box/2`, `input/3`, `frame/2-3`, `titled_frame/3-4`, `scroll/3`.
+Reusable components: `Key:Drawable` (tagging), `column/1`, `row/1`, `check_box/2`, `input/3`, `frame/2-3`, `titled_frame/3-4`, `scroll/3`.
+
+### Profiling
+
+Set `TUI_PROFILE=1` to display drawable expansion time (milliseconds) in the top-left corner. Typical render times for the example app: 6-25ms.
+
+### CONSIDERATIONS.md
+
+Design notes and analysis for future features (Kitty graphics protocol, caching experiments, etc.).
 
 ## Style Guidelines
 
