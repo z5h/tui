@@ -5,7 +5,7 @@
 %  via assocs_pairs/2. Suitable for small collections where the
 %  simplicity of list operations outweighs AVL lookup performance.
 
-:- module(assocs, [ empty_assocs/1,
+:- module(tui_assocs, [ empty_assocs/1,
                     empty_assocs//0,
                     assocs_pair/2,
                     assocs_pairs/2,

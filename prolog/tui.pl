@@ -26,7 +26,8 @@
 
 '#imports'.
 
-:- use_module(one_shot).
+:- use_module(library(tui/one_shot)).
+:- use_module(library(tui/components)).
 :- use_module(library(dcg/basics)).
 :- use_module(library(ansi_term)).
 
@@ -135,6 +136,8 @@ terminal_size(Cols, Rows) :-
 % location to avoid redundant terminal writes.
 :- dynamic location_style_char_/3.
 
+location_style_char(X-Y, [conceal | Tail ], _) :- !,
+    location_style_char(X-Y, Tail, ' ').   
 location_style_char(X-Y, Style, C) :-
     location_style_char_(X-Y, Style, C), !.
 location_style_char(X-Y, Style, C) :-
@@ -161,24 +164,44 @@ raw_attributes_attributes([H|T], [H|A]) :- !,
     raw_attributes_attributes(T, A).
 
 apply_focus(X-Y, Commands) :-
-    member((X-Y)-(_-Attr-_), Commands),
+    member((X-Y)-(Stack-Attr-_), Commands),
     member([style_hovergroup(_S, G)], Attr),
+    @ stack_focused(Stack),
     G = true.
 apply_focus(_, _).
+
+stack_focused([]).
+stack_focused([hover(_,_,true) | Tail ]) :- !,
+    stack_focused(Tail).
+stack_focused([_ | Tail]) :-
+    stack_focused(Tail).
 
 render_commands(_, []).
 render_commands(Cursor, [((X-Y)-(_-A-C))|T]) :-
     (  onscreen(X-Y)
     -> flatten(A, A1),
        raw_attributes_attributes(A1, A2), !,
+       @ attributes_revealed(A2, A3),
        (   Cursor = X-Y
-       ->  append(A2, [negative], A3)
-       ;   A3 = A2
+       ->  append(A3, [negative], A4)
+       ;   A4 = A3
        ),
-       location_style_char(X-Y, A3, C)
+       location_style_char(X-Y, A4, C)
     ;  true
     ),
     render_commands(Cursor, T).
+
+attributes_revealed(A, R) :-
+    exclude('='(conceal), A, A1),
+    (   A1 = A
+    ->  R  = A
+    ;   exclude('='(reveal), A1, A2),
+        (   A2 = A1
+        ->  R = [conceal | A1]
+        ;   R = A2
+        )
+    ).    
+    
 
 %% drawable_raw(+Drawable, -Raw) is det.
 %
@@ -447,8 +470,11 @@ alias_drawable(V, _) :-
 %
 %  Wrap Term with a hover highlight. When the cursor is over this
 %  component, Style attributes are applied.
-alias_drawable(hover(Style, Term), HoverTerm) :-
-    HoverTerm = style([style_hovergroup(Style, _G)], Term).
+alias_drawable(hover(Style, Term), hover(Style, Term, _Group)).
+
+alias_drawable(hover(Style, Term, Group), HoverTerm) :-
+    HoverTerm = style([style_hovergroup(Style, Group)], Term).
+
 
 %% alias_drawable(+X-+Y-+Term, -Drawable).
 %
@@ -476,10 +502,10 @@ alias_drawable(box(W0-H0, Style), [Top, Bottom, Left, Right, Corners]) :-
     Corners = [(0-0)-TL, (W-0)-TR, (0-H)-BL, (W-H)-BR],
     WM is W - 1,
     HM is H - 1,
-    char_from_to_line(Hoz, 1-0, WM-0, Top),
-    char_from_to_line(Hoz, 1-H, WM-H, Bottom),
-    char_from_to_line(Vrt, 0-1, 0-HM, Left),
-    char_from_to_line(Vrt, W-1, W-HM, Right).
+    Top    = line(Hoz, 1-0, WM-0),
+    Bottom = line(Hoz, 1-H, WM-H),
+    Left   = line(Vrt, 0-1, 0-HM),
+    Right  = line(Vrt, W-1, W-HM).
 
 %% alias_drawable(clear(+W-+H), -Drawable).
 %
@@ -491,6 +517,9 @@ alias_drawable(clear(W-H), style([reset, bg(default)], Spaces)) :-
               between(0, H, Y) ),
             Spaces).
 
+alias_drawable(line(Char, From, To), Line) :-
+    char_from_to_line(Char, From, To, Line).
+    
 % Line and box-drawing character tables.
 
 char_from_to_line(C, X1-Y, X2-Y, L) :- !,

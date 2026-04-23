@@ -1,4 +1,4 @@
-:- module(utils,
+:- module(tui_utils,
           [
               mapindexed/3
           ]).

@@ -4,12 +4,15 @@
 %  tui:at_event_is/3 multifile hooks. Import this module to make these
 %  components available in your app's view.
 
-:- module(components, []).
+:- module(tui_components, []).
 
-:- use_module(tui).
+:- use_module(library(tui)).
 
 :- op(601, xfy, '.>').
 :- op(601, xfy, '.\\/').
+
+:- discontiguous tui:alias_drawable/2.
+:- discontiguous tui:at_event_is/3.
 
 
 '#tagging'.
@@ -125,13 +128,15 @@ tui:alias_drawable(titled_frame(W-H, Title, Contents, Extent), [FramePart, 1-0-T
     title_l(TL),
     title_r(TR),
     FramePart = frame(W-H, Contents, Extent),
-    string_length(Title, TitleLength),
     MaxTitleLength is W - 2,
-    (  TitleLength > MaxTitleLength
-    -> string_length_adjusted(Title, MaxTitleLength, TitleText),
-       TitlePart = TL .> style([bold], TitleText) .> TR
-    ;  TitlePart = TL .> style([bold], Title) .> TR
-    ).
+    TitlePart = [TL .> port(MaxTitleLength-1, Title .> TR) ].
+    
+    % string_length(Title, TitleLength),
+    % (  TitleLength > MaxTitleLength
+    % -> string_length_adjusted(Title, MaxTitleLength, TitleText),
+    %    TitlePart = TL .> style([bold], TitleText) .> TR
+    % ;  TitlePart = TL .> style([bold], Title) .> TR
+    % ).
 
 title_l('\u2574').
 title_r('\u2576').
@@ -155,7 +160,7 @@ tui:alias_drawable(scroll(W-H, X-Y, Content),
     HM1 is H - 1,
     WM1 is W - 1,
 
-    drawable_raw(frame(W-H, X-Y-Content, EX-EY), FramePart),
+    drawable_raw(frame(W-H, X-Y-scrollable(Content, MaxScrollH, MaxScrollV), EX-EY), FramePart),
 
     CW is EX - X + 1,
     CH is EY - Y + 1,
@@ -169,8 +174,18 @@ tui:alias_drawable(scroll(W-H, X-Y, Content),
     portd_contentd_contento_style_drawable(PW, CW, X, h, HScroll),
     portd_contentd_contento_style_drawable(PH, CH, Y, v, VScroll).
 
+tui:alias_drawable(scrollable(C, _, _), C).
+
 tui:alias_drawable(vscroll(C, _), C).
 tui:alias_drawable(hscroll(C, _), C).
+
+tui:at_event_is(frame(_-H, X-Y-scrollable(_, _, _MaxV), _), page_up, scroll-(X-Y1)) :-
+    Delta is (H - 2 - 1),
+    Y1 is min(0, Y + Delta).
+    
+tui:at_event_is(frame(_-H, X-Y-scrollable(_, _, MaxV), _), page_down, scroll-(X-Y1)) :-
+    Delta is (H - 2 - 1),
+    Y1 is max(Y - Delta, -MaxV).
 
 tui:at_event_is(vscroll(_, Max), up, scroll_up(Max)).
 tui:at_event_is(vscroll(_, Max), down, scroll_down(Max)).

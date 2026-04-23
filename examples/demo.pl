@@ -1,10 +1,9 @@
-:- module(example, [go/0
+:- module(demo, [go/0
                    ]).
 
-:- use_module(tui).
-:- use_module(utils).
-:- use_module(assocs).
-:- use_module(components).
+:- use_module(library(tui)).
+:- use_module(library(tui/utils)).
+:- use_module(library(tui/assocs)).
 
 :- op(601, xfy, '.>').
 :- op(601, xfy, '.<').
@@ -47,13 +46,16 @@ int_text(I, T) :-
     nth0(M, [lorem, ipsum, dolor, sit, amet, consectetur, adipiscing, elit, 'sed do eiusmod tempor'], W),
     atomic_list_concat([I, ' ', W], T), !.
 
-alldif(_, []).
-alldif(A, [H|T]) :-
-    dif(A, H),
-    alldif(A, T),
-    alldif([H|T]).
+alldif([]).
+alldif([H|T]) :-
+    not_in(H, T),
+    alldif(T).
 
-alldif([H|T]) :- alldif(H, T).
+not_in(_, []).
+not_in(A, [B|T]) :-
+    dif(A,B),
+    not_in(A, T).
+   
 
 :- det(view/2).
 :- public(view/2).
@@ -73,9 +75,9 @@ view((X-Y)-M, View) :-
     View =
         titled_frame(80-25, "My App",
                      [
-                         my_scrolled_checks(C, M),
-                         my_scrolled_checks(B, M),
-                         my_scrolled_checks(A, M)
+                         hover([bold], my_scrolled_checks(C, M)),
+                         hover([bold], my_scrolled_checks(B, M)),
+                         hover([bold], my_scrolled_checks(A, M))
                      ]
                      ./\ clock(T)
                      ./\ intercepter(LastEvent)
@@ -102,10 +104,11 @@ tui:alias_drawable(my_scrolled_checks(Id, M), View) :-
                  ]),
     moveable_style(Id, Style),
     View = moveable(Id) : moveable(MV,
-              1-1-style(Style,
-                        scroll(Id) : scroll(20-15, SO,
+              1-1-[hover([reset, underline], "*") .>style(Style,
+                         scroll(Id) : scroll(20-15, SO,
                            checks(Checks)
-                        ))).
+                        ))]
+                        ).
 
 moveable_style(1, [fg(red)]).
 moveable_style(2, [fg(green)]).

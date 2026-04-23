@@ -1,4 +1,4 @@
-:- module(one_shot,
+:- module(tui_one_shot,
           [one_shot_message/2
           ]
 ).
