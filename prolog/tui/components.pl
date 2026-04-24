@@ -1,10 +1,10 @@
-%% Reusable TUI components.
-%
-%  This module defines standard components via tui:alias_drawable/2 and
-%  tui:at_event_is/3 multifile hooks. Import this module to make these
-%  components available in your app's view.
-
 :- module(tui_components, []).
+
+/** <module> Reusable TUI components
+
+Standard components defined via tui:alias_drawable/2 and
+tui:at_event_is/3 multifile hooks. Auto-loaded by library(tui).
+*/
 
 :- use_module(library(tui)).
 
@@ -17,7 +17,7 @@
 
 '#tagging'.
 
-%% Key:Drawable — annotation operator.
+%!  Key:Drawable — annotation operator.
 %
 %  Attaches a tag to a drawable. The left-hand side is ignored for
 %  rendering — Drawable is drawn as-is.
@@ -43,14 +43,14 @@ tui:at_event_is(Key:Inner, ComponentKey-Value, Key-Value) :-
 
 '#layout'.
 
-%% column(+Drawables)
+%!  column(+Drawables)
 %
 %  Vertically stack a list of drawables using .\/ (top to bottom).
 tui:alias_drawable(column([H]), H) :- !.
 tui:alias_drawable(column([]), []) :- !.
 tui:alias_drawable(column([H|T]), (H .\/ column(T))) :- !.
 
-%% row(+Drawables)
+%!  row(+Drawables)
 %
 %  Horizontally concatenate a list of drawables using .> (left to right).
 tui:alias_drawable(row([H]), H) :- !.
@@ -60,7 +60,7 @@ tui:alias_drawable(row([H|T]), (H .> row(T))) :- !.
 
 '#input_controls'.
 
-%% check_box(+Title, +Bool)
+%!  check_box(+Title, +Bool)
 %
 %  A toggleable checkbox. Displays [x] or [ ] followed by Title.
 %  Highlighted with underline on hover. Faint when unchecked.
@@ -80,7 +80,7 @@ not(false, true).
 tui:at_event_is(check_box(_Title, Bool), ' ', check_box-T) :- not(Bool, T).
 tui:at_event_is(check_box(_Title, Bool), return, check_box-T) :- not(Bool, T).
 
-%% input(+Width, +Placeholder, ?Value)
+%!  input(+Width, +Placeholder, ?Value)
 %
 %  A text input field of fixed Width. When Value is unbound, displays
 %  the Placeholder in faint underlined style. When bound, displays the
@@ -100,8 +100,8 @@ tui:alias_drawable(input(W, PlaceholderA, ValueA), D) :-
 
 '#containers'.
 
-%% frame(+W-+H, +Contents)
-%% frame(+W-+H, +Contents, -Extent)
+%!  frame(+W-+H, +Contents)
+%!  frame(+W-+H, +Contents, -Extent)
 %
 %  A thin-bordered box of size W×H containing Contents in a viewport.
 %  The interior is cleared before rendering. Extent is unified with
@@ -118,8 +118,8 @@ tui:alias_drawable(frame(W-H, Contents, Extent), [Clear, Box, Port]) :-
     Clear = 1-1-clear(PW-PH),
     Port =  1-1-port(PW-PH, Contents, Extent).
 
-%% titled_frame(+W-+H, +Title, +Contents)
-%% titled_frame(+W-+H, +Title, +Contents, -Extent)
+%!  titled_frame(+W-+H, +Title, +Contents)
+%!  titled_frame(+W-+H, +Title, +Contents, -Extent)
 %
 %  A frame with a bold Title rendered in the top border. Title is
 %  truncated if it exceeds the frame width.
@@ -144,7 +144,7 @@ title_r('\u2576').
 
 '#scrolling'.
 
-%% scroll(+W-+H, +ScrollX-+ScrollY, +Content)
+%!  scroll(+W-+H, +ScrollX-+ScrollY, +Content)
 %
 %  A scrollable frame. Content is rendered inside a W×H bordered
 %  viewport offset by ScrollX-ScrollY. Scroll indicators appear on

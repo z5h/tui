@@ -6,11 +6,24 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 A Text User Interface (TUI) framework for SWI-Prolog, inspired by TEA (The Elm Architecture). Apps are defined with `app/4` accepting a model, view callback, update callback, and final-result argument.
 
+## Pack Structure
+
+This is a SWI-Prolog pack. Library modules live in `prolog/`, internal modules in `prolog/tui/`.
+
+- `prolog/tui.pl` — public module `tui` (auto-loads components)
+- `prolog/tui/components.pl` — module `tui_components`
+- `prolog/tui/assocs.pl` — module `tui_assocs`
+- `prolog/tui/one_shot.pl` — module `tui_one_shot`
+- `prolog/tui/utils.pl` — module `tui_utils`
+- `examples/demo.pl` — example app
+- `pack.pl` — pack metadata
+
 ## Commands
 
-- **Run the example app**: `swipl -g go example.pl`
+- **Run the example app**: `swipl -p library=prolog -g go examples/demo.pl`
+- **Verify modules load**: `swipl -p library=prolog -g halt examples/demo.pl`
 - **Reload code**: `make.` in a running SWI-Prolog session
-- **Run from REPL**: `swipl` then `[example].` then `go.`
+- **Run tests**: `swipl -p library=prolog -g "load_test_files([]), run_tests" -t halt`
 
 ## Architecture
 
@@ -92,5 +105,5 @@ See `PROLOG_STYLE.md` for full conventions. Key points:
 - **Arithmetic**: CLP(FD) by default; `is/2` only when provably ground and marked `% IMPURE:`
 - **Branching**: `if_/3` with reified tests preferred; `-> ;` only for ground dispatch
 - **Formatting**: 4-space indentation, no blank lines between clauses of same predicate, one blank line between predicates
-- **Documentation**: PLdoc with `%%` and mode markers (`+`, `-`, `?`) plus `is det/semidet/nondet`
+- **Documentation**: PLdoc with `%!` (preferred) and mode markers (`+`, `-`, `?`) plus `is det/semidet/nondet`
 - **Modules**: one per file, explicit exports, ≤200 clauses

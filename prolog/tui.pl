@@ -1,11 +1,3 @@
-%% TUI — A Text User Interface framework for SWI-Prolog.
-%
-%  Inspired by TEA (The Elm Architecture). An app is a loop of
-%  model → view → event → update. Components are defined via the
-%  multifile hooks alias_drawable/2 and at_event_is/3.
-%
-%  @see app/4 for the main entry point.
-
 :- module(tui,
           [
             op(601, xfy, '.>'),
@@ -24,6 +16,16 @@
             app/4
           ]).
 
+/** <module> Text User Interface framework
+
+A TUI framework for SWI-Prolog, inspired by TEA (The Elm Architecture).
+Components are defined via the multifile hooks alias_drawable/2 and
+at_event_is/3.
+
+@author Mark Bolusmjak
+@see app/4
+*/
+
 '#imports'.
 
 :- use_module(library(tui/one_shot)).
@@ -31,7 +33,7 @@
 :- use_module(library(dcg/basics)).
 :- use_module(library(ansi_term)).
 
-%% alias_drawable(+DrawableTerm, -ExpandedDrawable) is semidet.
+%!  alias_drawable(+DrawableTerm, -ExpandedDrawable) is semidet.
 %
 %  Multifile hook. Define custom drawable components by mapping a term
 %  to its drawable expansion. During rendering the alias is pushed onto
@@ -40,7 +42,7 @@
 %  @see at_event_is/3
 :- multifile alias_drawable/2.
 
-%% at_event_is(+AliasOrStack, +RawEvent, -RewrittenEvent) is semidet.
+%!  at_event_is(+AliasOrStack, +RawEvent, -RewrittenEvent) is semidet.
 %
 %  Multifile hook. Rewrite an event as seen by a component on the alias
 %  stack. Called during event bubbling: if the hook succeeds the event
@@ -121,7 +123,7 @@ set_terminal_size__requires_redraw(Cols, Rows, Redraw) :-
        Redraw = true
     ).
 
-%% terminal_size(-Cols, -Rows) is det.
+%!  terminal_size(-Cols, -Rows) is det.
 %
 %  Current terminal dimensions in columns and rows.
 %  Updated automatically on SIGWINCH.
@@ -203,7 +205,7 @@ attributes_revealed(A, R) :-
     ).    
     
 
-%% drawable_raw(+Drawable, -Raw) is det.
+%!  drawable_raw(+Drawable, -Raw) is det.
 %
 %  Render Drawable into raw command list wrapped as raw(Commands).
 %  Useful for pre-rendering a component for later embedding.
@@ -283,7 +285,7 @@ my_color(_).
 
 '#commands'.
 
-%% command(+Command) is semidet.
+%!  command(+Command) is semidet.
 %
 %  True if Command is a valid drawing command.
 %  A command is (X-Y)-(Stack-Attrs-Char) where X,Y are integers,
@@ -302,7 +304,7 @@ command((X-Y)-(Stack-Attrs-C)) :-
 
 '#drawables'.
 
-%% drawable(+Term, +Stack, +Attrs, +XY, -EndXY)// is det.
+%!  drawable(+Term, +Stack, +Attrs, +XY, -EndXY)// is det.
 %
 %  DCG that renders a drawable term into a difference list of commands.
 %
@@ -466,7 +468,7 @@ alias_drawable(V, _) :-
     var(V), !,
     instantiation_error(alias_drawable).
 
-%% alias_drawable(hover(+Style, +Term), -Drawable).
+%!  alias_drawable(hover(+Style, +Term), -Drawable).
 %
 %  Wrap Term with a hover highlight. When the cursor is over this
 %  component, Style attributes are applied.
@@ -476,7 +478,7 @@ alias_drawable(hover(Style, Term, Group), HoverTerm) :-
     HoverTerm = style([style_hovergroup(Style, Group)], Term).
 
 
-%% alias_drawable(+X-+Y-+Term, -Drawable).
+%!  alias_drawable(+X-+Y-+Term, -Drawable).
 %
 %  Shorthand for translate(X-Y, Term). Matches only when X and Y are
 %  integers and Term is a compound (not another pair).
@@ -486,7 +488,7 @@ alias_drawable(X-Y-Term, translate(X-Y, Term)) :-
     Name \= '-',
     Arity > 0, !.
 
-%% alias_drawable(box(+W-+H, +Style), -Drawable).
+%!  alias_drawable(box(+W-+H, +Style), -Drawable).
 %
 %  A W×H box border in the given Style (thin, thick, or double).
 %  The box is hollow — only the border characters are drawn.
@@ -507,7 +509,7 @@ alias_drawable(box(W0-H0, Style), [Top, Bottom, Left, Right, Corners]) :-
     Left   = line(Vrt, 0-1, 0-HM),
     Right  = line(Vrt, W-1, W-HM).
 
-%% alias_drawable(clear(+W-+H), -Drawable).
+%!  alias_drawable(clear(+W-+H), -Drawable).
 %
 %  A W×H rectangle of spaces with reset styling. Used to erase a
 %  region before drawing over it.
@@ -579,7 +581,7 @@ wait_for_terminal_size :-
     ;  wait_for_terminal_size
     ).
 
-%% app(+State, :View, :Update, -Result) is det.
+%!  app(+State, :View, :Update, -Result) is det.
 %
 %  Run a TUI application. State is the initial (CursorX-CursorY)-Model.
 %  View is called as call(View, State, Drawable) to produce the current
@@ -786,7 +788,7 @@ no_repeat(Goal) :- Goal.
 
 '#events'.
 
-%% stack_event_is(+Stack, +RawEvent, -BubbledEvent) is det.
+%!  stack_event_is(+Stack, +RawEvent, -BubbledEvent) is det.
 %
 %  Walk the component Stack from innermost to outermost, giving each
 %  component a chance to rewrite the event via at_event_is/3. If no
@@ -815,13 +817,13 @@ state_event_assoc_bubbled(S0, E0, EventAssoc, E1) :-
 
 '#input'.
 
-%% wait_for_input is det.
+%!  wait_for_input is det.
 %
 %  Block until a single input event is available, then discard it.
 wait_for_input :-
     get_single_input(_).
 
-%% get_single_input(-Event) is semidet.
+%!  get_single_input(-Event) is semidet.
 %
 %  Read one input event from the terminal. Handles escape sequences
 %  (arrow keys, function keys, etc.) and control characters. Event
@@ -853,7 +855,7 @@ get_single_input(I, Wait) :-
     )
     ), !.
 
-%% input_or_tick(-Event) is det.
+%!  input_or_tick(-Event) is det.
 %
 %  Non-blocking input with a tick fallback. If input is available
 %  within the tick interval, returns the input event. Otherwise
@@ -956,12 +958,12 @@ code_value(C, V) :-
 
 '#navigation'.
 
-%% direction(+Event) is semidet.
+%!  direction(+Event) is semidet.
 %
 %  True if Event is a directional input: up, down, left, or right.
 direction(E) :- member(E, [up, down, left, right]).
 
-%% limits_direction_from_to(+Limits, +Direction, +From, -To) is det.
+%!  limits_direction_from_to(+Limits, +Direction, +From, -To) is det.
 %
 %  Compute the cursor position To by moving one step in Direction from
 %  From, clamped to 1..Limits. Limits is MaxX-MaxY.

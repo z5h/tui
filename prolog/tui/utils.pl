@@ -3,7 +3,7 @@
               mapindexed/3
           ]).
 
-%% mapindexed(:Goal, +List, -Mapped) is det.
+%!  mapindexed(:Goal, +List, -Mapped) is det.
 %
 %  Like maplist/3 but calls Goal with a 1-based index:
 %  call(Goal, Index, Element, MappedElement) for each element.

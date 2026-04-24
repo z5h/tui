@@ -3,7 +3,7 @@
           ]
 ).
 
-%% one_shot_message(-Var, -WakeStream) is det.
+%!  one_shot_message(-Var, -WakeStream) is det.
 %
 %  Create a one-shot inter-thread communication channel that can wake
 %  a thread blocked on `wait_for_input/3`.
