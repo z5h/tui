@@ -13,7 +13,7 @@ The key question is whether the drawable system's `(X-Y)-(Stack-Attrs-Char)` com
 ### What works already
 
 - Images are placed at cursor positions (character cell coordinates) — the drawable system already tracks X-Y positions
-- Images are sent via escape sequences to the TTY — the `tty_output` thread already serializes terminal output
+- Images are sent via escape sequences to the TTY — the event loop is the single writer to the terminal
 - Placement is a write-and-forget operation, just like writing a character
 
 ### What doesn't conflict but needs extension
@@ -22,7 +22,7 @@ The key question is whether the drawable system's `(X-Y)-(Stack-Attrs-Char)` com
   - Reserve the cell space (emit placeholder chars) and send the graphics escape separately
   - Extend the command format to allow a graphics variant alongside character commands
 - The `location_style_char` cache avoids redundant writes by remembering what's at each cell. An analogous cache for image placements would be needed — don't re-transmit an image that's already displayed at that position
-- Image data needs to be transmitted once (uploaded to terminal memory with an ID), then placed many times. That's a two-phase operation: upload in `tui_init` or lazily on first use, place during render. The `tty_output` thread is the natural place for both
+- Image data needs to be transmitted once (uploaded to terminal memory with an ID), then placed many times. That's a two-phase operation: upload in `tui_init` or lazily on first use, place during render. The paint step (`tty_render/2`) is the natural place for both
 
 ### What's irrelevant to the architecture
 

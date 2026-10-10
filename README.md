@@ -29,7 +29,7 @@ Run with `swipl -g go hello.pl`.
 
 ## Architecture
 
-Three threads cooperate: the **main thread** reads terminal input, the **update thread** processes events and generates views, and the **tty_output thread** serializes writes to the terminal.
+A single event loop in the main thread reads terminal input, runs `update/3`, and paints the view. Other threads can deliver events through a wake pipe that the loop waits on alongside the terminal.
 
 ### Drawables
 

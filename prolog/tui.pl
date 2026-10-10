@@ -7,7 +7,6 @@
             terminal_size/2,
             wait_for_input/0,
             get_single_input/1,
-            input_or_tick/1,
             direction/1,
             stack_event_is/3,
             limits_direction_from_to/4,
@@ -28,7 +27,7 @@ at_event_is/3.
 
 '#imports'.
 
-:- use_module(library(tui/one_shot)).
+:- use_module(library(unix)).
 :- use_module(library(tui/components)).
 :- use_module(library(dcg/basics)).
 :- use_module(library(ansi_term)).
@@ -58,7 +57,9 @@ at_event_is/3.
 log(Goal) :-
     setup_call_cleanup(
         open('tui.log', append, Out),
-        with_output_to(Out, Goal),
+        (   with_output_to(Out, Goal),
+            with_output_to(Out, nl)
+        ),
         close(Out)
     ).
 
@@ -177,6 +178,47 @@ stack_focused([hover(_,_,true) | Tail ]) :- !,
     stack_focused(Tail).
 stack_focused([_ | Tail]) :-
     stack_focused(Tail).
+
+cursor_pred(Pred, (X1-Y1)-_, (X2-Y2)-_) :-
+    compare(Pred, Y1-X1, Y2-X2).
+
+ok(_).
+    
+render_commands_(Cursor, Commands) :- 
+    predsort(cursor_pred, Commands, Sorted),
+    phrase(grouped_by_attributes(Grouped), Sorted),
+    ? ok(phrase),
+    % writeln(Grouped),
+    maplist(render_it, Grouped).
+
+render_it((X-Y)-(Style-Chars)) :-
+    ? ansi_set_cursor(X, Y),
+    ? ansi_format(Style, '~s', Chars).
+
+grouped_by_attributes([(X-Y)-(Attr-CharsTail) | Tail]) -->
+    [(_-Y)-(_-A-C)],
+    {   flatten(A, A1),
+        attributes_revealed(A1, A2),
+        A2 = Attr,
+        !,
+        CharsTail = [C | NextCharsTail]
+    },
+    grouped_by_attributes([(X-Y)-(Attr-NextCharsTail) | Tail]).
+
+grouped_by_attributes(List), [(X-Y)-(_-A-C)] -->
+    [(X-Y)-(_-A-C)],
+    {   var(List), !,
+        List = [X-Y-_-_ | _]
+    },
+    grouped_by_attributes(List).
+
+grouped_by_attributes([Complete | Tail]) --> !,
+    {   Complete = (_-_)-(_-[]),
+        ? ok(Complete)
+    },
+    grouped_by_attributes(Tail).
+    
+grouped_by_attributes([]) --> [].
 
 render_commands(_, []).
 render_commands(Cursor, [((X-Y)-(_-A-C))|T]) :-
@@ -398,7 +440,7 @@ capture(Phrase, C, A, A2) :-
 :- meta_predicate(excluding(1, //, ?, ?)).
 excluding(Pred, Phrase) -->
     capture(Phrase, C),
-    { exclude(Pred, C, E) },
+    { exclude(Pred, C, E) }, !,
     E.
 
 zone_out(X0-Y0, W-H, X-Y-_) :-
@@ -586,113 +628,199 @@ wait_for_terminal_size :-
 %  Run a TUI application. State is the initial (CursorX-CursorY)-Model.
 %  View is called as call(View, State, Drawable) to produce the current
 %  view. Update is called as call(Update, Event, State0, State1) to
-%  handle events. Result is unified when Update produces result(R).
+%  handle events. The app exits with Result when an event bubbles to
+%  result(Result), or when Update produces result(Result).
 %
-%  Three threads cooperate:
-%    * Main thread — owns TTY, reads input, dispatches events
-%    * tty_output  — serializes terminal writes
-%    * update      — processes events, calls Update, generates views
-%
-%  The app exits when update/3 returns result(R) for some event.
+%  Everything runs in the calling thread, which must own the TTY. Other
+%  threads deliver events through the wake pipe (see '#wake').
 :- meta_predicate(app(?, 2, 3, ?)).
 app(State, View, Update, Result) :-
-    one_shot_message(FinalUpdate, FinalUpdateInput),
-    call_cleanup(
+    setup_call_cleanup(
+        wake_open,
         with_tty_raw(
-            (
-                tui_init,
-                thread_self(MainThread),
-                thread_create(tty_output_loop, _, [alias(tty_output)]),
+            (   tui_init,
                 on_signal(winch, _, sig_winch),
-                thread_create(
-                    update_loop(State, _, _, View, Update, FinalUpdate),
-                    _UpdateId,
-                    [alias(update)]
-                ),
-                needs_repaint,
-                input_loop(MainThread, FinalUpdateInput, Result)
+                app_loop(app(View, Update), State, stale, Result)
             )
         ),
-        (
-            @ ignore(thread_send_message(tty_output, exit)),
-            @ on_signal(winch, _, default),
+        (   @ on_signal(winch, _, default),
+            @ wake_close,
             @ ansi_reset,
             @ ansi_show_cursor
         )
     ).
 
+% Runs in the main thread, possibly mid-render, so it must not write to
+% the terminal. The loop issues the size request instead.
 sig_winch(_) :-
-    tty_request_size.
+    post(terminal_resized).
 
 
-'#threads'.
+'#wake'.
 
-% Architecture:
+% Other threads (and signal handlers) queue an event, then write a byte
+% to the wake pipe. The loop waits on the pipe alongside user_input.
+
+% IMPURE: mutable global — the running app's event queue and wake pipe.
+:- dynamic wake_/3.
+
+wake_open :-
+    pipe(In, Out),
+    message_queue_create(Queue),
+    asserta(wake_(Queue, In, Out)).
+
+wake_close :-
+    retract(wake_(Queue, In, Out)), !,
+    close(In),
+    close(Out),
+    message_queue_destroy(Queue).
+
+% IMPURE: queue Event for the running app and wake its loop. The event is
+% queued before the byte is written; posted_events/1 relies on this.
+post(Event) :-
+    wake_(Queue, _, Out), !,
+    thread_send_message(Queue, Event),
+    put_char(Out, w),
+    flush_output(Out).
+
+% IMPURE: consume wake bytes, then drain the queue. Every byte consumed
+% belongs to an event already queued, so none is left behind.
+posted_events(Events) :-
+    wake_(Queue, In, _), !,
+    fill_buffer(In),
+    read_pending_codes(In, _, []),
+    queue_events(Queue, Events).
+
+queue_events(Queue, Events) :-
+    (   thread_get_message(Queue, E, [timeout(0)])
+    ->  Events = [E | Es],
+        queue_events(Queue, Es)
+    ;   Events = []
+    ).
+
+
+'#loop'.
+
+% Each iteration paints the current state if needed, waits, then folds
+% every ready event into the state before painting again.
 %
-%   ┌─────────────────────────────────────────────────────────────┐
-%   │                     EVENT SOURCES                           │
-%   ├─────────────────┬─────────────────┬─────────────────────────┤
-%   │  Main Thread    │  Signal Handler │  Other Async Sources    │
-%   │  (TTY input)    │  (SIGWINCH)     │  (timers, network, etc) │
-%   └────────┬────────┴────────┬────────┴────────────┬────────────┘
-%            │                 │                     │
-%            │    thread_send_message(update, ...)   │
-%            └─────────────────┼─────────────────────┘
-%                              ▼
-%                     ┌─────────────────┐
-%                     │  Update Thread  │
-%                     │  - process event│
-%                     │  - update state │
-%                     │  - generate view│
-%                     └────────┬────────┘
-%                              │
-%                              │ thread_send_message(tty_output, render(...))
-%                              ▼
-%                     ┌─────────────────┐
-%                     │  TTY Output     │
-%                     │  - render       │
-%                     └─────────────────┘
+% A frame is the rendered form of a state: frame(Commands, EventAssoc,
+% Extent). The loop tracks it as stale (not computed), fresh(Frame)
+% (computed, not on screen), or painted(Frame). Events are routed
+% through the frame of the state they apply to, so a batch of events
+% may compute several frames but paints only the last.
 
-% --- Main Thread: Input Loop ---
-% Runs in the main thread which owns the TTY.
-% Monitors both user_input and the one-shot pipe for app termination.
+app_loop(App, State0, Tracked0, Result) :-
+    App = app(View, _),
+    view_state_tracked_painted(View, State0, Tracked0, Tracked1),
+    ready_events(Events),
+    app_events_state_tracked_outcome(App, Events, State0, Tracked1, Outcome),
+    (   Outcome = result(Result)
+    ->  true
+    ;   Outcome = continue(State, Tracked),
+        app_loop(App, State, Tracked, Result)
+    ).
 
-input_loop(MainThread, FinalUpdateInput, Result) :-
-        wait_for_input([user_input, FinalUpdateInput], Ready, infinite),
-        (   Ready = [user_input]
-        ->  get_single_input(In),
-            handle_input(In),
-            input_loop(MainThread, FinalUpdateInput, Result)
-        ;   @ read_term(FinalUpdateInput, Result, []),
-            @ close(FinalUpdateInput)
-        ).
+% IMPURE: blocks until input or a wake, then returns everything ready.
+ready_events(Events) :-
+    wake_(_, WakeIn, _), !,
+    wait_for_input([user_input, WakeIn], Ready, infinite),
+    (   memberchk(WakeIn, Ready)
+    ->  posted_events(Posted)
+    ;   Posted = []
+    ),
+    (   memberchk(user_input, Ready)
+    ->  tty_events(Inputs)
+    ;   Inputs = []
+    ),
+    append(Posted, Inputs, Events).
 
-handle_input(terminal_size(Cols, Rows)) :- !,
+% IMPURE: one input, plus any others available without blocking.
+tty_events([In | Ins]) :-
+    get_single_input(In),
+    (   wait_for_input([user_input], [_], 0)
+    ->  tty_events(Ins)
+    ;   Ins = []
+    ).
+
+app_events_state_tracked_outcome(_, [], State, Tracked, continue(State, Tracked)).
+app_events_state_tracked_outcome(App, [E | Es], State0, Tracked0, Outcome) :-
+    app_event_state_tracked_next(App, E, State0, Tracked0, Next),
+    (   Next = result(_)
+    ->  Outcome = Next
+    ;   Next = continue(State1, Tracked1),
+        app_events_state_tracked_outcome(App, Es, State1, Tracked1, Outcome)
+    ).
+
+% Framework events.
+app_event_state_tracked_next(_, terminal_resized, S, T, continue(S, T)) :- !,
+    tty_request_size.
+app_event_state_tracked_next(_, terminal_size(Cols, Rows), S, T0, continue(S, T)) :- !,
     set_terminal_size__requires_redraw(Cols, Rows, Redraw),
     (   Redraw
-    ->  needs_repaint
-    ;   true
+    ->  T = stale
+    ;   T = T0
     ).
-handle_input(In) :-
-    thread_send_message(update, update(In)).
-
-% --- TTY Output Thread ---
-% Serializes all terminal output to avoid interleaving from multiple threads.
-
-tty_output_loop :-
-    thread_get_message(tty_output, M),
-    (   M = exit
-    ->  true
-
-    ;   M = tty_render(Cursor, Commands)
-    ->  tty_render(Cursor, Commands),
-        tty_output_loop
-
-    ;   M = tty_request_size
-    ->  tty_request_size,
-        tty_output_loop
-    ;   assertion((fail, message:M))
+% App events.
+app_event_state_tracked_next(App, E, S0, T0, Next) :-
+    App = app(View, Update),
+    view_state_tracked_fresh(View, S0, T0, T1),
+    tracked_frame(T1, Frame),
+    frame_update_event_state0_state(Frame, Update, E, S0, S),
+    (   S = result(_)
+    ->  Next = S
+    ;   S == S0
+    ->  Next = continue(S0, T1)
+    ;   Next = continue(S, stale)
     ).
+
+% The state an event leads to, or result(R). Cursor movement is handled
+% here; other events are bubbled through the component stack under the
+% cursor and passed to Update.
+:- meta_predicate frame_update_event_state0_state(+, 3, +, +, -).
+frame_update_event_state0_state(frame(_, EventAssoc, Extent), Update, E0, S0, S) :-
+    state_event_assoc_bubbled(S0, E0, EventAssoc, E1),
+    (   E1 = result(_)
+    ->  S = E1
+    ;   direction(E1)
+    ->  (X-Y)-Model0 = S0,
+        limits_direction_from_to(Extent, E1, X-Y, NX-NY),
+        (   X-Y = NX-NY
+        ->  S = S0
+        ;   state_event_assoc_bubbled(S0, moved(E1, X-Y, NX-NY), EventAssoc, E2),
+            (   E2 = moved(E1, X-Y, NX-NY)
+            ->  S = (NX-NY)-Model0
+            ;   call(Update, E2, (NX-NY)-Model0, S)
+            )
+        )
+    ;   call(Update, E1, S0, S)
+    ).
+
+
+'#frames'.
+
+tracked_frame(fresh(F), F).
+tracked_frame(painted(F), F).
+
+view_state_tracked_fresh(View, State, stale, fresh(F)) :- !,
+    view_state_frame(View, State, F).
+view_state_tracked_fresh(_, _, T, T).
+
+% IMPURE: paints the frame unless it is already on screen.
+view_state_tracked_painted(_, _, painted(F), painted(F)) :- !.
+view_state_tracked_painted(View, State, T0, painted(F)) :-
+    view_state_tracked_fresh(View, State, T0, fresh(F)),
+    (X-Y)-_ = State,
+    F = frame(Commands, _, _),
+    tty_render(X-Y, Commands).
+
+view_state_frame(View, State, frame(Commands, EventAssoc, Extent)) :-
+    (X-Y)-_ = State,
+    call(View, State, Drawable),
+    drawable__normalized_commands__end(Drawable, Commands, Extent),
+    once(apply_focus(X-Y, Commands)),
+    commands_eventmap(Commands, EventMap),
+    list_to_assoc(EventMap, EventAssoc).
 
 tty_render(X-Y, Commands) :-
     ansi_hide_cursor,
@@ -706,84 +834,6 @@ tty_request_size :-
     ansi_csi("6n"),
     ansi_restore_cursor,
     flush_output.
-
-% --- Update Thread ---
-% Processes events, updates state, generates views.
-
-render(State, View, Commands, EventAssoc, EX-EY) :-
-    (X-Y)-_ = State,
-    call(View, State, Drawable),
-    drawable__normalized_commands__end(Drawable, Commands, EX-EY),
-    once(apply_focus(X-Y, Commands)),
-    thread_send_message(tty_output, tty_render(X-Y, Commands)),
-    commands_eventmap(Commands, EventMap),
-    list_to_assoc(EventMap, EventAssoc).
-
-needs_repaint :-
-    thread_send_message(update, view).
-
-handle_new_state(State1, View, Update, FinalUpdate) :-
-    needs_repaint,
-    update_loop(State1, _, _, View, Update, FinalUpdate).
-
-thread_get_message_prioritize(Thread, M, P) :-
-    (   thread_peek_message(Thread, P)
-    ->  M = P
-    ;   true
-    ),
-    thread_get_message(Thread, M).
-
-:- meta_predicate update_loop(+, ?, ?, 2, 3, +).
-update_loop(State0, EventAssoc, EX-EY, View, Update, FinalUpdate) :-
-    thread_get_message_prioritize(update, M, view),
-
-    (   M = view
-    ->  render(State0, View, _Commands, NewEventAssoc, EX1-EY1),
-        update_loop(State0, NewEventAssoc, EX1-EY1, View, Update, FinalUpdate)
-
-    ;   M = update(E0)
-    ->  (X-Y)-Model0 = State0,
-
-        assertion(ground(EX)),
-        assertion(ground(EY)),  % Guard: need valid extents
-        state_event_assoc_bubbled(State0, E0, EventAssoc, E1),
-        (   E1 = result(Result)
-        ->  FinalUpdate = Result,
-            thread_exit(_)
-
-            % Direction keys: handle cursor movement
-        ;   direction(E1)
-        ->  limits_direction_from_to(EX-EY, E1, X-Y, NX-NY),
-            (   X-Y = NX-NY
-            ->  % No change, just re-loop
-                update_loop(State0, EventAssoc, EX-EY, View, Update, FinalUpdate)
-
-            ;   state_event_assoc_bubbled(State0, moved(E1, X-Y, NX-NY), EventAssoc, E2),
-                (   E2 = moved(E1, X-Y, NX-NY)
-                ->  handle_new_state((NX-NY)-Model0, View, Update, FinalUpdate)
-
-                ;   call(Update, E2, (NX-NY)-Model0, State1),
-                    handle_new_state(State1, View, Update, FinalUpdate)
-                )
-            )
-
-        ;   % Normal event: call update and check result
-            call(Update, E1, State0, State1),
-            handle_new_state(State1, View, Update, FinalUpdate)
-        )
-
-    ;   assertion((fail, message:M))
-    ).
-
-:- public(repeat/1).
-repeat(Goal) :-
-    repeat,
-    copy_term(Goal, Copy),
-    call(Copy),
-    Goal = Copy.
-
-:- public(no_repeat/1).
-no_repeat(Goal) :- Goal.
 
 
 '#events'.
@@ -830,14 +880,7 @@ wait_for_input :-
 %  is an atom like up, down, return, tab, or a single character atom
 %  for printable keys. Blocks until input is available.
 get_single_input(I) :-
-    get_single_input(I, true).
-
-get_single_input(I, Wait) :-
-    (  Wait = false
-    -> wait_for_input([user_input], [user_input], 0),
-       get_single_char(H)
-    ;  get_single_char(H)
-    ),
+    get_single_char(H),
     (  H = -1
     -> fail
 
@@ -854,27 +897,6 @@ get_single_input(I, Wait) :-
        -> true
     )
     ), !.
-
-%!  input_or_tick(-Event) is det.
-%
-%  Non-blocking input with a tick fallback. If input is available
-%  within the tick interval, returns the input event. Otherwise
-%  returns time-TimeAtom where TimeAtom is the formatted current time.
-:- dynamic(last_tick/1).
-input_or_tick(E) :-
-    ( last_tick(Last), ! ; Last = 0 ),
-    get_time(Now),
-    (  Now - Last < 1, get_single_input(E, false)
-    -> true
-    ;  retractall(last_tick(_)),
-       assertz(last_tick(Now)),
-       E = time-T,
-       sleep(0),
-       format_time(atom(T), '%T', Now)
-    ).
-
-no_input :-
-   \+ wait_for_input([user_input], [user_input], 0).
 
 read_escseq(L-T, Code) :-
     get_code(C),

@@ -13,7 +13,6 @@ This is a SWI-Prolog pack. Library modules live in `prolog/`, internal modules i
 - `prolog/tui.pl` — public module `tui` (auto-loads components)
 - `prolog/tui/components.pl` — module `tui_components`
 - `prolog/tui/assocs.pl` — module `tui_assocs`
-- `prolog/tui/one_shot.pl` — module `tui_one_shot`
 - `prolog/tui/utils.pl` — module `tui_utils`
 - `examples/demo.pl` — example app
 - `pack.pl` — pack metadata
@@ -23,19 +22,22 @@ This is a SWI-Prolog pack. Library modules live in `prolog/`, internal modules i
 - **Run the example app**: `swipl -p library=prolog -g go examples/demo.pl`
 - **Verify modules load**: `swipl -p library=prolog -g halt examples/demo.pl`
 - **Reload code**: `make.` in a running SWI-Prolog session
-- **Run tests**: `swipl -p library=prolog -g "load_test_files([]), run_tests" -t halt`
+- **Run tests**: `swipl -p library=prolog -g "consult('test/test_tui.pl'), run_tests" -t halt`
 
 ## Architecture
 
-### Threading Model
+### Event Loop
 
-Three threads cooperate via message queues:
+Everything runs in the main thread, which owns the TTY (`wait_for_input/3` on `user_input` only works there). Each pass of `app_loop/4`:
 
-1. **Main thread** — owns TTY, reads input via `get_single_input/1`, dispatches events to update thread
-2. **TTY output thread** (`tty_output`) — receives render commands, writes to terminal (avoids interleaving)
-3. **Update thread** (`update`) — processes events, calls user's `update/3`, generates views, sends render commands
+1. Paints the current frame if it is not already on screen
+2. Blocks in `wait_for_input([user_input, WakeIn], ...)`
+3. Collects every ready event — posted events first, then all available keystrokes
+4. Folds them through bubbling and the user's `update/3`; the app exits on `result(R)` from either
 
-App exit: when `update/3` produces `result(R)`, the update thread signals the main thread via a `one_shot_message` pipe (see below). The main thread monitors both `user_input` and this pipe with `wait_for_input/3`.
+A frame is `frame(Commands, EventAssoc, Extent)`, computed from a state. It is tracked as `stale`, `fresh(F)` (computed, not painted) or `painted(F)`. Each event in a batch is routed through the frame of the state it applies to, but only the last frame is painted.
+
+**Wake pipe** (`'#wake'`): other threads call `post(Event)` (not yet exported), which queues the event on a message queue and then writes a byte to a pipe the loop waits on. The loop consumes the bytes before draining the queue, so no event is stranded. SIGWINCH only posts `terminal_resized`; the loop issues the size request, and the reply arrives as a `terminal_size(Cols, Rows)` input.
 
 ### Drawable System (tui.pl)
 
@@ -74,10 +76,6 @@ This replaces the earlier `id/N` mechanism which relied on `=..`.
 ### State Shape
 
 App state is `(CursorX-CursorY)-Model` where Model is user-defined (typically an assoc list from `assocs.pl`).
-
-### one_shot.pl
-
-Solves the problem of waking a thread blocked on `wait_for_input/3`: creates a Unix pipe + `freeze/2` so unifying a variable writes to the pipe, making it selectable alongside `user_input`.
 
 ### assocs.pl
 
