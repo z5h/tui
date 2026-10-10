@@ -182,43 +182,55 @@ stack_focused([_ | Tail]) :-
 cursor_pred(Pred, (X1-Y1)-_, (X2-Y2)-_) :-
     compare(Pred, Y1-X1, Y2-X2).
 
-ok(_).
-    
-render_commands_(Cursor, Commands) :- 
-    predsort(cursor_pred, Commands, Sorted),
-    phrase(grouped_by_attributes(Grouped), Sorted),
-    ? ok(phrase),
-    % writeln(Grouped),
-    maplist(render_it, Grouped).
+% The frame's runs in standard order, with the cursor cell highlighted.
+% The highlight is part of the cell's style, so the cursor cell forms its
+% own run and moving the cursor changes the runs it touches.
+cursor_commands_runs(Cursor, Commands, Runs) :-
+    include(command_onscreen, Commands, Onscreen),
+    maplist(cursor_command_cell(Cursor), Onscreen, Cells0),
+    predsort(cursor_pred, Cells0, Cells),
+    once(phrase(grouped_by_attributes(Runs0), Cells)),
+    msort(Runs0, Runs).
+
+command_onscreen(XY-_) :-
+    onscreen(XY).
+
+cursor_command_cell(Cursor, (X-Y)-(_-A-C), (X-Y)-(Attrs-Char)) :-
+    flatten(A, A1),
+    raw_attributes_attributes(A1, A2),
+    attributes_revealed(A2, A3),
+    revealed_char_attributes_shown(A3, C, Attrs0, Char),
+    (   Cursor = X-Y
+    ->  append(Attrs0, [negative], Attrs)
+    ;   Attrs = Attrs0
+    ).
+
+revealed_char_attributes_shown([conceal | Attrs], _, Attrs, ' ') :- !.
+revealed_char_attributes_shown(Attrs, C, Attrs, C).
+
+% IMPURE: draws the runs not already on screen. Runs within a frame never
+% overlap, so a run in Previous is exactly what is at those cells.
+previous_runs_rendered(Previous, Runs) :-
+    ord_subtract(Runs, Previous, Changed),
+    maplist(render_it, Changed).
 
 render_it((X-Y)-(Style-Chars)) :-
-    ? ansi_set_cursor(X, Y),
-    ? ansi_format(Style, '~s', Chars).
+    ansi_set_cursor(X, Y),
+    ansi_format(Style, '~s', [Chars]).
 
-grouped_by_attributes([(X-Y)-(Attr-CharsTail) | Tail]) -->
-    [(_-Y)-(_-A-C)],
-    {   flatten(A, A1),
-        attributes_revealed(A1, A2),
-        A2 = Attr,
-        !,
-        CharsTail = [C | NextCharsTail]
-    },
-    grouped_by_attributes([(X-Y)-(Attr-NextCharsTail) | Tail]).
-
-grouped_by_attributes(List), [(X-Y)-(_-A-C)] -->
-    [(X-Y)-(_-A-C)],
-    {   var(List), !,
-        List = [X-Y-_-_ | _]
-    },
-    grouped_by_attributes(List).
-
-grouped_by_attributes([Complete | Tail]) --> !,
-    {   Complete = (_-_)-(_-[]),
-        ? ok(Complete)
-    },
-    grouped_by_attributes(Tail).
-    
+% Runs of cells on the same row, at consecutive X, with equal attributes.
+% Cells must be sorted row-major.
+grouped_by_attributes([(X-Y)-(Attrs-[C | Cs]) | Runs]) -->
+    [(X-Y)-(Attrs-C)],
+    run_chars(X, Y, Attrs, Cs),
+    grouped_by_attributes(Runs).
 grouped_by_attributes([]) --> [].
+
+run_chars(X0, Y, Attrs, [C | Cs]) -->
+    { X is X0 + 1 },
+    [(X-Y)-(Attrs-C)], !,
+    run_chars(X, Y, Attrs, Cs).
+run_chars(_, _, _, []) --> [].
 
 render_commands(_, []).
 render_commands(Cursor, [((X-Y)-(_-A-C))|T]) :-
@@ -640,7 +652,7 @@ app(State, View, Update, Result) :-
         with_tty_raw(
             (   tui_init,
                 on_signal(winch, _, sig_winch),
-                app_loop(app(View, Update), State, stale, Result)
+                app_loop(app(View, Update), State, display(stale, []), Result)
             )
         ),
         (   @ on_signal(winch, _, default),
@@ -709,16 +721,19 @@ queue_events(Queue, Events) :-
 % (computed, not on screen), or painted(Frame). Events are routed
 % through the frame of the state they apply to, so a batch of events
 % may compute several frames but paints only the last.
+%
+% The display is display(Tracked, Runs), where Runs are the sorted runs
+% currently on screen. Painting draws only runs not already there.
 
-app_loop(App, State0, Tracked0, Result) :-
+app_loop(App, State0, Display0, Result) :-
     App = app(View, _),
-    view_state_tracked_painted(View, State0, Tracked0, Tracked1),
+    view_state_display_painted(View, State0, Display0, Display1),
     ready_events(Events),
-    app_events_state_tracked_outcome(App, Events, State0, Tracked1, Outcome),
+    app_events_state_display_outcome(App, Events, State0, Display1, Outcome),
     (   Outcome = result(Result)
     ->  true
-    ;   Outcome = continue(State, Tracked),
-        app_loop(App, State, Tracked, Result)
+    ;   Outcome = continue(State, Display),
+        app_loop(App, State, Display, Result)
     ).
 
 % IMPURE: blocks until input or a wake, then returns everything ready.
@@ -743,26 +758,27 @@ tty_events([In | Ins]) :-
     ;   Ins = []
     ).
 
-app_events_state_tracked_outcome(_, [], State, Tracked, continue(State, Tracked)).
-app_events_state_tracked_outcome(App, [E | Es], State0, Tracked0, Outcome) :-
-    app_event_state_tracked_next(App, E, State0, Tracked0, Next),
+app_events_state_display_outcome(_, [], State, Display, continue(State, Display)).
+app_events_state_display_outcome(App, [E | Es], State0, Display0, Outcome) :-
+    app_event_state_display_next(App, E, State0, Display0, Next),
     (   Next = result(_)
     ->  Outcome = Next
-    ;   Next = continue(State1, Tracked1),
-        app_events_state_tracked_outcome(App, Es, State1, Tracked1, Outcome)
+    ;   Next = continue(State1, Display1),
+        app_events_state_display_outcome(App, Es, State1, Display1, Outcome)
     ).
 
-% Framework events.
-app_event_state_tracked_next(_, terminal_resized, S, T, continue(S, T)) :- !,
+% Framework events. A redraw means the terminal was reset: nothing is on
+% screen.
+app_event_state_display_next(_, terminal_resized, S, D, continue(S, D)) :- !,
     tty_request_size.
-app_event_state_tracked_next(_, terminal_size(Cols, Rows), S, T0, continue(S, T)) :- !,
+app_event_state_display_next(_, terminal_size(Cols, Rows), S, D0, continue(S, D)) :- !,
     set_terminal_size__requires_redraw(Cols, Rows, Redraw),
     (   Redraw
-    ->  T = stale
-    ;   T = T0
+    ->  D = display(stale, [])
+    ;   D = D0
     ).
 % App events.
-app_event_state_tracked_next(App, E, S0, T0, Next) :-
+app_event_state_display_next(App, E, S0, display(T0, Runs), Next) :-
     App = app(View, Update),
     view_state_tracked_fresh(View, S0, T0, T1),
     tracked_frame(T1, Frame),
@@ -770,8 +786,8 @@ app_event_state_tracked_next(App, E, S0, T0, Next) :-
     (   S = result(_)
     ->  Next = S
     ;   S == S0
-    ->  Next = continue(S0, T1)
-    ;   Next = continue(S, stale)
+    ->  Next = continue(S0, display(T1, Runs))
+    ;   Next = continue(S, display(stale, Runs))
     ).
 
 % The state an event leads to, or result(R). Cursor movement is handled
@@ -807,12 +823,13 @@ view_state_tracked_fresh(View, State, stale, fresh(F)) :- !,
 view_state_tracked_fresh(_, _, T, T).
 
 % IMPURE: paints the frame unless it is already on screen.
-view_state_tracked_painted(_, _, painted(F), painted(F)) :- !.
-view_state_tracked_painted(View, State, T0, painted(F)) :-
+view_state_display_painted(_, _, D, D) :-
+    D = display(painted(_), _), !.
+view_state_display_painted(View, State, display(T0, Previous), display(painted(F), Runs)) :-
     view_state_tracked_fresh(View, State, T0, fresh(F)),
     (X-Y)-_ = State,
     F = frame(Commands, _, _),
-    tty_render(X-Y, Commands).
+    tty_render(X-Y, Commands, Previous, Runs).
 
 view_state_frame(View, State, frame(Commands, EventAssoc, Extent)) :-
     (X-Y)-_ = State,
@@ -822,9 +839,10 @@ view_state_frame(View, State, frame(Commands, EventAssoc, Extent)) :-
     commands_eventmap(Commands, EventMap),
     list_to_assoc(EventMap, EventAssoc).
 
-tty_render(X-Y, Commands) :-
+tty_render(Cursor, Commands, Previous, Runs) :-
     ansi_hide_cursor,
-    render_commands(X-Y, Commands),
+    cursor_commands_runs(Cursor, Commands, Runs),
+    previous_runs_rendered(Previous, Runs),
     flush_output.
 
 tty_request_size :-
