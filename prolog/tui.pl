@@ -20,7 +20,6 @@ at_event_is/3.
 
 '#imports'.
 
-:- use_module(library(unix)).
 :- use_module(library(tui/utils)).
 :- reexport(library(tui/utils), [direction/1, limits_direction_from_to/4]).
 :- use_module(library(tui/terminal)).
@@ -31,6 +30,7 @@ at_event_is/3.
 :- use_module(library(tui/events)).
 :- reexport(library(tui/events), [stack_event_is/3]).
 :- use_module(library(tui/render)).
+:- use_module(library(tui/wake)).
 :- use_module(library(tui/components)).
 
 %!  alias_drawable(+DrawableTerm, -ExpandedDrawable) is semidet.
@@ -104,19 +104,22 @@ wait_for_terminal_size :-
 %  result(Result), or when Update produces result(Result).
 %
 %  Everything runs in the calling thread, which must own the TTY. Other
-%  threads deliver events through the wake pipe (see '#wake').
+%  threads deliver events through a wake (see tui/wake.pl).
 :- meta_predicate(app(?, 2, 3, ?)).
 app(State, View, Update, Result) :-
     setup_call_cleanup(
-        wake_open,
+        (   wake_open(Wake),
+            asserta(app_wake_(Wake))
+        ),
         with_tty_raw(
             (   tui_init,
                 on_signal(winch, _, sig_winch),
-                app_loop(app(View, Update), State, display(stale, []), Result)
+                app_loop(app(View, Update, Wake), State, display(stale, []), Result)
             )
         ),
         (   @ on_signal(winch, _, default),
-            @ wake_close,
+            @ retract(app_wake_(Wake)),
+            @ wake_close(Wake),
             @ ansi_reset,
             @ ansi_show_cursor
         )
@@ -128,47 +131,16 @@ sig_winch(_) :-
     post(terminal_resized).
 
 
-'#wake'.
+'#posting'.
 
-% Other threads (and signal handlers) queue an event, then write a byte
-% to the wake pipe. The loop waits on the pipe alongside user_input.
+% IMPURE: mutable global — the running app's wake, for senders that have
+% no other way to reach it (signal handlers, other threads).
+:- dynamic app_wake_/1.
 
-% IMPURE: mutable global — the running app's event queue and wake pipe.
-:- dynamic wake_/3.
-
-wake_open :-
-    pipe(In, Out),
-    message_queue_create(Queue),
-    asserta(wake_(Queue, In, Out)).
-
-wake_close :-
-    retract(wake_(Queue, In, Out)), !,
-    close(In),
-    close(Out),
-    message_queue_destroy(Queue).
-
-% IMPURE: queue Event for the running app and wake its loop. The event is
-% queued before the byte is written; posted_events/1 relies on this.
+% IMPURE: deliver Event to the running app.
 post(Event) :-
-    wake_(Queue, _, Out), !,
-    thread_send_message(Queue, Event),
-    put_char(Out, w),
-    flush_output(Out).
-
-% IMPURE: consume wake bytes, then drain the queue. Every byte consumed
-% belongs to an event already queued, so none is left behind.
-posted_events(Events) :-
-    wake_(Queue, In, _), !,
-    fill_buffer(In),
-    read_pending_codes(In, _, []),
-    queue_events(Queue, Events).
-
-queue_events(Queue, Events) :-
-    (   thread_get_message(Queue, E, [timeout(0)])
-    ->  Events = [E | Es],
-        queue_events(Queue, Es)
-    ;   Events = []
-    ).
+    app_wake_(Wake), !,
+    wake_post(Wake, Event).
 
 
 '#loop'.
@@ -186,9 +158,9 @@ queue_events(Queue, Events) :-
 % currently on screen. Painting draws only runs not already there.
 
 app_loop(App, State0, Display0, Result) :-
-    App = app(View, _),
+    App = app(View, _, Wake),
     view_state_display_painted(View, State0, Display0, Display1),
-    ready_events(Events),
+    wake_ready_events(Wake, Events),
     app_events_state_display_outcome(App, Events, State0, Display1, Outcome),
     (   Outcome = result(Result)
     ->  true
@@ -197,11 +169,11 @@ app_loop(App, State0, Display0, Result) :-
     ).
 
 % IMPURE: blocks until input or a wake, then returns everything ready.
-ready_events(Events) :-
-    wake_(_, WakeIn, _), !,
+wake_ready_events(Wake, Events) :-
+    wake_stream(Wake, WakeIn),
     wait_for_input([user_input, WakeIn], Ready, infinite),
     (   memberchk(WakeIn, Ready)
-    ->  posted_events(Posted)
+    ->  wake_events(Wake, Posted)
     ;   Posted = []
     ),
     (   memberchk(user_input, Ready)
@@ -239,7 +211,7 @@ app_event_state_display_next(_, terminal_size(Cols, Rows), S, D0, continue(S, D)
     ).
 % App events.
 app_event_state_display_next(App, E, S0, display(T0, Runs), Next) :-
-    App = app(View, Update),
+    App = app(View, Update, _),
     view_state_tracked_fresh(View, S0, T0, T1),
     tracked_frame(T1, Frame),
     frame_update_event_state0_state(Frame, Update, E, S0, S),
