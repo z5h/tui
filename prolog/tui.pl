@@ -119,8 +119,7 @@ set_terminal_size__requires_redraw(Cols, Rows, Redraw) :-
     asserta(terminal_size_(Cols, Rows)),
     (  PrevCols-PrevRows = Cols-Rows
     -> Redraw = false
-    ;  retractall(location_style_char_(_,_,_)),
-       ansi_reset,
+    ;  ansi_reset,
        Redraw = true
     ).
 
@@ -134,21 +133,6 @@ terminal_size(Cols, Rows) :-
 
 
 '#rendering'.
-
-% IMPURE: mutable global — caches what was last written at each screen
-% location to avoid redundant terminal writes.
-:- dynamic location_style_char_/3.
-
-location_style_char(X-Y, [conceal | Tail ], _) :- !,
-    location_style_char(X-Y, Tail, ' ').   
-location_style_char(X-Y, Style, C) :-
-    location_style_char_(X-Y, Style, C), !.
-location_style_char(X-Y, Style, C) :-
-    retractall(location_style_char_(X-Y, _, _)),
-    ansi_set_cursor(X, Y),
-    ansi_format(Style, '~s', [C]),
-    assertz(location_style_char_(X-Y, Style, C)),
-    !.
 
 onscreen(X-Y) :-
     X > 0,
@@ -231,21 +215,6 @@ run_chars(X0, Y, Attrs, [C | Cs]) -->
     [(X-Y)-(Attrs-C)], !,
     run_chars(X, Y, Attrs, Cs).
 run_chars(_, _, _, []) --> [].
-
-render_commands(_, []).
-render_commands(Cursor, [((X-Y)-(_-A-C))|T]) :-
-    (  onscreen(X-Y)
-    -> flatten(A, A1),
-       raw_attributes_attributes(A1, A2), !,
-       @ attributes_revealed(A2, A3),
-       (   Cursor = X-Y
-       ->  append(A3, [negative], A4)
-       ;   A4 = A3
-       ),
-       location_style_char(X-Y, A4, C)
-    ;  true
-    ),
-    render_commands(Cursor, T).
 
 attributes_revealed(A, R) :-
     exclude('='(conceal), A, A1),
@@ -623,7 +592,6 @@ style_vertical(double, '\u2551').
 tui_init :-
     ansi_reset,
     ansi_hide_cursor,
-    retractall(location_style_char_(_, _, _)),
     retractall(terminal_size_(_, _)),
     tty_request_size,
     wait_for_terminal_size.
