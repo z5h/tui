@@ -41,6 +41,83 @@ tui:at_event_is(Key:Inner, ComponentKey-Value, Key-Value) :-
     functor(Inner, ComponentKey, _).
 
 
+'#shapes'.
+
+%!  box(+W-+H, +Style)
+%
+%  A W×H box border in the given Style (thin, thick, or double).
+%  The box is hollow — only the border characters are drawn.
+tui:alias_drawable(box(W0-H0, Style), [Top, Bottom, Left, Right, Corners]) :-
+    W is W0 - 1,
+    H is H0 - 1,
+    style_corner_char(Style, tl, TL),
+    style_corner_char(Style, tr, TR),
+    style_corner_char(Style, bl, BL),
+    style_corner_char(Style, br, BR),
+    style_horizontal(Style, Hoz),
+    style_vertical(Style, Vrt),
+    Corners = [(0-0)-TL, (W-0)-TR, (0-H)-BL, (W-H)-BR],
+    WM is W - 1,
+    HM is H - 1,
+    Top    = line(Hoz, 1-0, WM-0),
+    Bottom = line(Hoz, 1-H, WM-H),
+    Left   = line(Vrt, 0-1, 0-HM),
+    Right  = line(Vrt, W-1, W-HM).
+
+%!  clear(+W-+H)
+%
+%  A W×H rectangle of spaces with reset styling. Used to erase a
+%  region before drawing over it.
+tui:alias_drawable(clear(W-H), style([reset, bg(default)], Spaces)) :-
+    findall((X-Y)-' ',
+            ( between(0, W, X),
+              between(0, H, Y) ),
+            Spaces).
+
+tui:alias_drawable(line(Char, From, To), Line) :-
+    char_from_to_line(Char, From, To, Line).
+
+% Line and box-drawing character tables.
+
+char_from_to_line(C, X1-Y, X2-Y, L) :- !,
+    (  X1 > X2
+    -> From = X2, To = X1
+    ;  From = X1, To = X2
+    ),
+    findall((X-Y)-C, between(From, To, X), L).
+char_from_to_line(C, X-Y1, X-Y2, L) :- !,
+    (  Y1 > Y2
+    -> From = Y2, To = Y1
+    ;  From = Y1, To = Y2
+    ),
+    findall((X-Y)-C, between(From, To, Y), L).
+
+:- discontiguous style_corner_char/3.
+:- discontiguous style_horizontal/2.
+:- discontiguous style_vertical/2.
+
+style_corner_char(thick, tl, '┏').
+style_corner_char(thick, bl, '┗').
+style_corner_char(thick, tr, '┓').
+style_corner_char(thick, br, '┛').
+style_horizontal(thick, '━').
+style_vertical(thick, '┃').
+
+style_corner_char(thin, tl, '┌').
+style_corner_char(thin, bl, '└').
+style_corner_char(thin, tr, '┐').
+style_corner_char(thin, br, '┘').
+style_horizontal(thin, '─').
+style_vertical(thin, '│').
+
+style_corner_char(double, tl, '╔').
+style_corner_char(double, tr, '╗').
+style_corner_char(double, bl, '╚').
+style_corner_char(double, br, '╝').
+style_horizontal(double, '═').
+style_vertical(double, '║').
+
+
 '#layout'.
 
 %!  column(+Drawables)
