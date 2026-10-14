@@ -124,3 +124,25 @@ test(clear_fills) :-
     length(Cmds, 9).  % 0..2 x 0..2 = 3x3
 
 :- end_tests(drawables).
+
+
+:- begin_tests(hover).
+
+cursor_drawable_runs(Cursor, D, Runs) :-
+    tui_drawable:drawable__normalized_commands__end(D, Cmds, _),
+    once(tui_hover:apply_focus(Cursor, Cmds)),
+    tui:limits_cursor_commands_runs(80-25, Cursor, Cmds, Runs).
+
+test(hovered) :-
+    cursor_drawable_runs(1-1, hover([bold], "ab") .> "cd", Runs),
+    Runs == [(1-1)-([bold, negative]-[a]),
+             (2-1)-([bold]-[b]),
+             (3-1)-([]-[c, d])].
+
+test(not_hovered) :-
+    cursor_drawable_runs(3-1, hover([bold], "ab") .> "cd", Runs),
+    Runs == [(1-1)-([]-[a, b]),
+             (3-1)-([negative]-[c]),
+             (4-1)-([]-[d])].
+
+:- end_tests(hover).
