@@ -29,7 +29,9 @@ Run with `swipl -g go hello.pl`.
 
 ## Architecture
 
-A single event loop in the main thread reads terminal input, runs `update/3`, and paints the view. Other threads can deliver events through a wake pipe that the loop waits on alongside the terminal.
+A single event loop in the main thread reads input, runs `update/3`, and paints the view. Painting is incremental: the view is grouped into runs of same-styled text, and only runs that changed since the last paint are written.
+
+The loop talks to a *substrate*: a real terminal, or a VCR that replays a scripted conversation (events in, expected clears and paints out) so apps can be tested without a terminal. Other threads can deliver events through a wake pipe that the loop waits on alongside the terminal.
 
 ### Drawables
 
