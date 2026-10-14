@@ -131,7 +131,7 @@ test(clear_fills) :-
 cursor_drawable_runs(Cursor, D, Runs) :-
     tui_drawable:drawable__normalized_commands__end(D, Cmds, _),
     once(tui_hover:apply_focus(Cursor, Cmds)),
-    tui:limits_cursor_commands_runs(80-25, Cursor, Cmds, Runs).
+    tui_render:limits_cursor_commands_runs(80-25, Cursor, Cmds, Runs).
 
 test(hovered) :-
     cursor_drawable_runs(1-1, hover([bold], "ab") .> "cd", Runs),

@@ -30,8 +30,8 @@ at_event_is/3.
 :- use_module(library(tui/hover)).
 :- use_module(library(tui/events)).
 :- reexport(library(tui/events), [stack_event_is/3]).
+:- use_module(library(tui/render)).
 :- use_module(library(tui/components)).
-:- use_module(library(ansi_term)).
 
 %!  alias_drawable(+DrawableTerm, -ExpandedDrawable) is semidet.
 %
@@ -76,58 +76,6 @@ set_terminal_size__requires_redraw(Cols, Rows, Redraw) :-
 :- det(terminal_size/2).
 terminal_size(Cols, Rows) :-
     terminal_size_(Cols, Rows), !.
-
-
-'#rendering'.
-
-cursor_pred(Pred, (X1-Y1)-_, (X2-Y2)-_) :-
-    compare(Pred, Y1-X1, Y2-X2).
-
-% The frame's runs in standard order, with the cursor cell highlighted.
-% The highlight is part of the cell's style, so the cursor cell forms its
-% own run and moving the cursor changes the runs it touches.
-limits_cursor_commands_runs(Limits, Cursor, Commands, Runs) :-
-    include(limits_command_within(Limits), Commands, Onscreen),
-    maplist(cursor_command_cell(Cursor), Onscreen, Cells0),
-    predsort(cursor_pred, Cells0, Cells),
-    once(phrase(grouped_by_attributes(Runs0), Cells)),
-    msort(Runs0, Runs).
-
-limits_command_within(Limits, XY-_) :-
-    limits_point_within(Limits, XY).
-
-cursor_command_cell(Cursor, (X-Y)-(_-A-C), (X-Y)-(Attrs-Char)) :-
-    flatten(A, A1),
-    raw_attributes_attributes(A1, A2),
-    attributes_char_shown(A2, C, Attrs0, Char),
-    (   Cursor = X-Y
-    ->  append(Attrs0, [negative], Attrs)
-    ;   Attrs = Attrs0
-    ).
-
-% IMPURE: draws the runs not already on screen. Runs within a frame never
-% overlap, so a run in Previous is exactly what is at those cells.
-previous_runs_rendered(Previous, Runs) :-
-    ord_subtract(Runs, Previous, Changed),
-    maplist(render_it, Changed).
-
-render_it((X-Y)-(Style-Chars)) :-
-    ansi_set_cursor(X, Y),
-    ansi_format(Style, '~s', [Chars]).
-
-% Runs of cells on the same row, at consecutive X, with equal attributes.
-% Cells must be sorted row-major.
-grouped_by_attributes([(X-Y)-(Attrs-[C | Cs]) | Runs]) -->
-    [(X-Y)-(Attrs-C)],
-    run_chars(X, Y, Attrs, Cs),
-    grouped_by_attributes(Runs).
-grouped_by_attributes([]) --> [].
-
-run_chars(X0, Y, Attrs, [C | Cs]) -->
-    { X is X0 + 1 },
-    [(X-Y)-(Attrs-C)], !,
-    run_chars(X, Y, Attrs, Cs).
-run_chars(_, _, _, []) --> [].
 
 
 '#app'.
@@ -356,5 +304,6 @@ tty_render(Cursor, Commands, Previous, Runs) :-
     ansi_hide_cursor,
     terminal_size(Cols, Rows),
     limits_cursor_commands_runs(Cols-Rows, Cursor, Commands, Runs),
-    previous_runs_rendered(Previous, Runs),
+    runs_previous_changed(Runs, Previous, Changed),
+    maplist(ansi_run, Changed),
     flush_output.

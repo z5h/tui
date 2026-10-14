@@ -8,6 +8,7 @@
             ansi_save_cursor/0,
             ansi_restore_cursor/0,
             ansi_set_cursor/2,
+            ansi_run/1,
             tty_request_size/0,
             wait_for_input/0,
             get_single_input/1
@@ -19,6 +20,7 @@ Escape sequence output and keyboard input decoding for ANSI terminals.
 */
 
 :- use_module(library(dcg/basics)).
+:- use_module(library(ansi_term)).
 
 
 '#output'.
@@ -48,6 +50,11 @@ ansi_restore_cursor :-
 
 ansi_set_cursor(X, Y) :-
     format('\e[~w;~wH', [Y, X]).
+
+% Write Chars at X-Y in Style (a list of ansi_format/3 attributes).
+ansi_run((X-Y)-(Style-Chars)) :-
+    ansi_set_cursor(X, Y),
+    ansi_format(Style, '~s', [Chars]).
 
 % Ask the terminal for its size. The reply arrives as input, decoded by
 % get_single_input/1 as terminal_size(Cols, Rows).
