@@ -7,9 +7,7 @@
             terminal_size/2,
             wait_for_input/0,
             get_single_input/1,
-            direction/1,
             stack_event_is/3,
-            limits_direction_from_to/4,
             drawable_raw/2,
             drawable//5,
             app/4
@@ -28,6 +26,8 @@ at_event_is/3.
 '#imports'.
 
 :- use_module(library(unix)).
+:- use_module(library(tui/utils)).
+:- reexport(library(tui/utils), [direction/1, limits_direction_from_to/4]).
 :- use_module(library(tui/components)).
 :- use_module(library(dcg/basics)).
 :- use_module(library(ansi_term)).
@@ -49,35 +49,6 @@ at_event_is/3.
 %
 %  @see stack_event_is/3
 :- multifile at_event_is/3.
-
-
-'#debug'.
-
-:- meta_predicate(log(0)).
-log(Goal) :-
-    setup_call_cleanup(
-        open('tui.log', append, Out),
-        (   with_output_to(Out, Goal),
-            with_output_to(Out, nl)
-        ),
-        close(Out)
-    ).
-
-:- op(950, fy, ?).
-:- meta_predicate(debug_call(0)).
-debug_call(G) :-
-    (   G
-    *-> log(writeln(pass:G))
-    ;   log(writeln(fail:G)), fail
-    ).
-
-:- meta_predicate('?'(0)).
-'?'(G) :- debug_call(G).
-
-:- op(950, fy, @).
-:- meta_predicate('@'(0)).
-:- det('@'/1).
-'@'(G) :- G.
 
 
 '#terminal_io'.
@@ -268,12 +239,6 @@ commands_eventmap([((X-Y)-(S-_-_))|T], EM) :-
     ),
     commands_eventmap(T, EMT).
 
-pair_key_pred(Delta, K1-_, K2-_) :- compare(Delta, K1, K2).
-
-keylist_deduped_prioritize_last(L0, LN) :-
-    reverse(L0, R),
-    predsort(pair_key_pred, R, LN).
-
 
 '#attributes'.
 
@@ -413,17 +378,6 @@ drawable([H|T], Stack, Attr, XY, MX-MY) --> !,
 
 drawable([], _, _, XY, XY) --> !, [].
 
-:- meta_predicate(capture(//, ?, ?, ?)).
-capture(Phrase, C, A, A2) :-
-    phrase(Phrase, C, []), !,
-    A = A2.
-
-:- meta_predicate(excluding(1, //, ?, ?)).
-excluding(Pred, Phrase) -->
-    capture(Phrase, C),
-    { exclude(Pred, C, E) }, !,
-    E.
-
 zone_out(X0-Y0, W-H, X-Y-_) :-
      once(( X < X0
      ; Y < Y0
@@ -499,17 +453,6 @@ alias_drawable(hover(Style, Term), hover(Style, Term, _Group)).
 
 alias_drawable(hover(Style, Term, Group), HoverTerm) :-
     HoverTerm = style([style_hovergroup(Style, Group)], Term).
-
-
-%!  alias_drawable(+X-+Y-+Term, -Drawable).
-%
-%  Shorthand for translate(X-Y, Term). Matches only when X and Y are
-%  integers and Term is a compound (not another pair).
-alias_drawable(X-Y-Term, translate(X-Y, Term)) :-
-    integer(X), integer(Y),
-    functor(Term, Name, Arity),
-    Name \= '-',
-    Arity > 0, !.
 
 %!  alias_drawable(box(+W-+H, +Style), -Drawable).
 %
@@ -962,24 +905,3 @@ code_value(C, V) :- code_cntrl(C, V).
 code_value(C, V) :-
     \+ code_type(C, cntrl),
     char_code(V, C).
-
-
-'#navigation'.
-
-%!  direction(+Event) is semidet.
-%
-%  True if Event is a directional input: up, down, left, or right.
-direction(E) :- member(E, [up, down, left, right]).
-
-%!  limits_direction_from_to(+Limits, +Direction, +From, -To) is det.
-%
-%  Compute the cursor position To by moving one step in Direction from
-%  From, clamped to 1..Limits. Limits is MaxX-MaxY.
-limits_direction_from_to(_-_, up, X-Y0, X-Y) :-
-    Y is max(1, Y0 - 1).
-limits_direction_from_to(_-_, left, X0-Y, X-Y) :-
-    X is max(1, X0 - 1).
-limits_direction_from_to(MX-_, right, X0-Y, X-Y) :-
-    X is min(MX, X0 + 1).
-limits_direction_from_to(_-MY, down, X-Y0, X-Y) :-
-    Y is min(MY, Y0 + 1).
