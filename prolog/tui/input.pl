@@ -1,7 +1,8 @@
 :- module(tui_input,
           [
             codes_events_pending/3,
-            pending_events_flushed/2
+            pending_events_flushed/2,
+            pending_paste_open/1
           ]).
 
 /** <module> Terminal input decoding
@@ -19,6 +20,8 @@ Events:
     shift, super, hyper, meta, and the key last, e.g. ctrl+shift+up.
     Letters with modifiers use the lowercase letter (ctrl+a). Shift
     alone on a printable key gives the shifted character ('A').
+  * paste(Text): text pasted while bracketed paste is on, as a string.
+    Line breaks are normalised to "\n".
   * Terminal replies: kitty_keyboard(Flags), device_attributes(Params).
   * unknown_input(Codes) for a well-formed sequence with no meaning here.
 
@@ -48,6 +51,13 @@ pending_events_flushed([27, C], [E]) :- !,
     token_event(alt(C), E).
 pending_events_flushed(Codes, [unknown_input(Codes)]).
 
+%!  pending_paste_open(+Pending) is semidet.
+%
+%  True if Pending is a paste whose end has not arrived. A paste may span
+%  many reads, so it should not be flushed early.
+pending_paste_open(Pending) :-
+    phrase(paste_start, Pending, _).
+
 
 '#tokens'.
 
@@ -55,6 +65,9 @@ pending_events_flushed(Codes, [unknown_input(Codes)]).
 tokens([T | Ts]) --> token(T), !, tokens(Ts).
 tokens([]) --> [].
 
+% Bracketed paste: everything up to the end marker, taken literally.
+% Without the end marker the paste is incomplete.
+token(paste(Codes)) --> paste_start, !, paste_codes(Codes).
 % CSI: ESC [ parameter-bytes intermediate-bytes final-byte (ECMA-48).
 token(T) --> [27, 0'[], !,
     csi_bytes(0x30, 0x3F, Ps),
@@ -80,6 +93,13 @@ csi_end(Ps, Is, unknown(Codes)) --> peek(_), !,
 
 peek(C), [C] --> [C].
 
+paste_start --> [27, 0'[, 0'2, 0'0, 0'0, 0'~].
+
+paste_end --> [27, 0'[, 0'2, 0'0, 0'1, 0'~].
+
+paste_codes([]) --> paste_end, !.
+paste_codes([C | Cs]) --> [C], paste_codes(Cs).
+
 
 '#events'.
 
@@ -101,6 +121,15 @@ token_event(csi(Ps, Is, F), E) :-
         E = unknown_input(Codes)
     ).
 token_event(unknown(Codes), unknown_input(Codes)).
+token_event(paste(Codes), paste(Text)) :-
+    phrase(line_breaks_normalised(Normalised), Codes),
+    string_codes(Text, Normalised).
+
+% CR LF and CR become LF.
+line_breaks_normalised([10 | Cs]) --> [13, 10], !, line_breaks_normalised(Cs).
+line_breaks_normalised([10 | Cs]) --> [13], !, line_breaks_normalised(Cs).
+line_breaks_normalised([C | Cs]) --> [C], !, line_breaks_normalised(Cs).
+line_breaks_normalised([]) --> [].
 
 code_event(0, ctrl+' ') :- !.
 code_event(8, ctrl+h) :- !.

@@ -50,6 +50,7 @@ substrate_session(terminal(_, _), Wake, Goal) :-
                 on_signal(winch, Old, sig_winch),
                 ansi_reset,
                 ansi_hide_cursor,
+                ansi_bracketed_paste_on,
                 ansi_kitty_keyboard_query,
                 ansi_primary_device_attributes,
                 flush_output,
@@ -59,6 +60,7 @@ substrate_session(terminal(_, _), Wake, Goal) :-
             (   @ on_signal(winch, _, Old),
                 @ retract(winch_wake_(Wake)),
                 @ ansi_kitty_keyboard_pop,
+                @ ansi_bracketed_paste_off,
                 @ ansi_reset,
                 @ ansi_show_cursor
             )
@@ -88,10 +90,13 @@ size_posted(Wake) :-
 % IMPURE: blocks until input or a wake, then returns everything ready.
 % While an escape sequence is pending, waits at most the escape grace
 % period; if nothing arrives, the pending codes are decoded as they are.
-% End of input is the event eos.
+% An open paste waits for its end however long that takes. End of input
+% is the event eos.
 substrate_events(terminal(K0, Pending0), Wake, Events, terminal(K, Pending)) :-
     wake_stream(Wake, WakeIn),
-    (   Pending0 == []
+    (   (   Pending0 == []
+        ;   pending_paste_open(Pending0)
+        )
     ->  Timeout = infinite
     ;   escape_grace(Timeout)
     ),

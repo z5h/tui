@@ -11,6 +11,8 @@
             ansi_set_cursor/2,
             ansi_run/1,
             ansi_primary_device_attributes/0,
+            ansi_bracketed_paste_on/0,
+            ansi_bracketed_paste_off/0,
             ansi_kitty_keyboard_query/0,
             ansi_kitty_keyboard_push/1,
             ansi_kitty_keyboard_pop/0
@@ -70,6 +72,16 @@ ansi_run((X-Y)-(Style-Chars)) :-
 % another query, its reply marks that the other reply is not coming.
 ansi_primary_device_attributes :-
     ansi_csi("c").
+
+
+'#bracketed_paste'.
+
+% While on, pasted text arrives between ESC [200~ and ESC [201~.
+ansi_bracketed_paste_on :-
+    ansi_csi("?2004h").
+
+ansi_bracketed_paste_off :-
+    ansi_csi("?2004l").
 
 
 '#kitty_keyboard'.

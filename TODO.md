@@ -18,7 +18,8 @@ remaining:
 - macOS Terminal.app sends shift+up/down as plain up/down by default
   (only shift+left/right have modified sequences), so they cannot be
   told apart. users can add \033[1;2A / \033[1;2B in Profiles > Keyboard.
-- not yet decoded: mouse (SGR 1006), bracketed paste, focus in/out.
+- not yet decoded: mouse (SGR 1006), focus in/out.
+- input/3 could handle paste(Text) by inserting the text.
 - a key-inspector example app (show codes and decoded events) would
   help diagnose terminals.
 

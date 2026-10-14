@@ -213,13 +213,21 @@ decoded(`\e[1;10A`,         [shift+super+up]).
 decoded(`\e[?1u\e[?62;22c`, [kitty_keyboard(1), device_attributes([62, 22])]).
 decoded(`\e[3~x`,           [delete, x]).
 decoded(`\e[1;5X`,          [unknown_input(`\e[1;5X`)]).
+decoded(`\e[200~hi\e[201~`, [paste("hi")]).
+decoded(`\e[200~a\rb\r\nc\e[201~`, [paste("a\nb\nc")]).
+decoded(`\e[200~\e[Aq\e[201~x`, [paste("\e[Aq"), x]).
 
 test(decoded, [forall(decoded(Codes, Expected))]) :-
     codes_events_pending(Codes, Events, Pending),
     Events == Expected,
     Pending == [].
 
-test(pending, [forall(member(Codes, [`\e`, `\eO`, `\e[`, `\e[1;`, `x\e[1`]))]) :-
+test(paste_open) :-
+    codes_events_pending(`\e[200~abc\e[20`, [], Pending),
+    pending_paste_open(Pending),
+    \+ pending_paste_open(`\e[1;`).
+
+test(pending, [forall(member(Codes, [`\e`, `\eO`, `\e[`, `\e[1;`, `x\e[1`, `\e[200~ab`]))]) :-
     codes_events_pending(Codes, _, Pending),
     once(append(_, Pending, Codes)),
     Pending = [27 | _].
