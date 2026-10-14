@@ -2,15 +2,19 @@
 
 /** <module> atto — a tiny text editor
 
-    swipl -p library=prolog examples/atto.pl FILE
+    swipl -p library=prolog examples/atto.pl -- FILE
+
+The -- matters: without it, swipl takes a FILE ending in .pl as another
+program to load (running its directives) instead of passing it to atto.
 
 Edits FILE, which need not exist yet. Lines wrap to the screen width and
 are numbered. ^S saves, ^R reverts to the file on disk, ^Q quits (twice
 if there are unsaved changes). No undo.
 
-The text cursor is the framework's cursor: after every update the screen
-cursor is placed where the text cursor is drawn, and the editor area
-claims the arrow keys so the framework does not move it.
+The text cursor is the framework's cursor. Update tracks it as a line
+and column only; the view places the screen cursor by drawing the
+character under it as cursor(Char). The editor area claims the arrow
+keys, so they move the text cursor.
 */
 
 :- use_module(library(tui)).
@@ -25,7 +29,7 @@ main :-
     current_prolog_flag(argv, Argv),
     (   Argv = [Path]
     ->  atto(Path)
-    ;   format(user_error, "usage: atto FILE~n", []),
+    ;   format(user_error, "usage: swipl -p library=prolog examples/atto.pl -- FILE~n", []),
         halt(1)
     ).
 
@@ -127,27 +131,17 @@ model_scrolled(M0, M) :-
     ;   M = M0
     ).
 
-% The app state: the screen cursor on the text cursor.
-model_state(M, (X-Y)-M) :-
-    (   model_fits(M)
-    ->  M = atto(_, _, _-C, Top, _, _, _),
-        model_layout(M, G, W, _),
-        model_cursor_row(M, Row),
-        X is G + 1 + C mod W,
-        Y is 2 + Row - Top
-    ;   X-Y = 1-1
-    ).
-
 
 '#update'.
 
+% The screen cursor is left unbound: the view places it.
 :- det(update/3).
-update(E, (_-_)-M0, S) :-
+update(E, _-M0, S) :-
     model_event_next(E, M0, Next),
     (   Next = result(R)
     ->  S = result(R)
     ;   model_scrolled(Next, M),
-        model_state(M, S)
+        S = _-M
     ).
 
 model_event_next(terminal_size(Cols, Rows), atto(P, Ls, Cur, Top, Mod, St, _),
@@ -169,7 +163,7 @@ model_event_handled(ctrl+s, M0, M) :- !,
     model_saved(M0, M).
 model_event_handled(ctrl+r, M0, M) :- !,
     model_reverted(M0, M).
-model_event_handled(cursor(D), M0, M) :- !,
+model_event_handled(move(D), M0, M) :- !,
     model_direction_moved(M0, D, M).
 model_event_handled(E, M0, M) :-
     memberchk(E, [home, end, page_up, page_down]), !,
@@ -420,14 +414,19 @@ width_path_shown(Avail, Path, Shown) :-
     ).
 
 model_text(M, editor_area(port(Cols-H, [clear(Cols1-H1), translate(0-NegTop, column(Numbered))]))) :-
-    M = atto(_, Lines, _, Top, _, _, Cols-_),
+    M = atto(_, Lines, Cursor, Top, _, _, Cols-_),
     model_layout(M, G, W, H),
     Cols1 is Cols - 1,
     H1 is H - 1,
     NegTop is -Top,
-    mapindexed(numbered_line(G, W), Lines, Numbered).
+    mapindexed(numbered_line(G, W, Cursor), Lines, Numbered).
 
-numbered_line(G, W, N, Chars, numbered_line(N, G, W, Chars)).
+% Line N, with the cursor's column if the cursor is on it.
+numbered_line(G, W, L-C, N, Chars, numbered_line(N, G, W, Chars, Col)) :-
+    (   N =:= L + 1
+    ->  Col = C
+    ;   Col = none
+    ).
 
 model_status_line(M, Line) :-
     M = atto(_, Lines, L-C, _, _, St, Cols-_),
@@ -448,15 +447,28 @@ status_text(confirm_quit, "Unsaved changes: ^Q again to quit, ^S to save").
 % rather than the framework's cursor.
 tui:alias_drawable(editor_area(D), D).
 
-tui:at_event_is(editor_area(_), D, cursor(D)) :-
+tui:at_event_is(editor_area(_), D, move(D)) :-
     direction(D).
 
 % Line N: its number in a gutter G wide, then its text wrapped to W.
 % Characters that would move the terminal's cursor are shown as spaces.
-tui:alias_drawable(numbered_line(N, G, W, Chars), [style([faint], Gutter), G-0-wrapped(W, Shown)]) :-
+% If the cursor is on the line, at column Col, the character there (or a
+% space past the end) is drawn again as cursor(Char), placing the cursor.
+tui:alias_drawable(numbered_line(N, G, W, Chars, Col),
+                   [style([faint], Gutter), G-0-wrapped(W, Shown) | Cursor]) :-
     G1 is G - 1,
     format(string(Gutter), "~t~d~*| ", [N, G1]),
-    maplist(char_shown, Chars, Shown).
+    maplist(char_shown, Chars, Shown),
+    (   Col == none
+    ->  Cursor = []
+    ;   X is G + Col mod W,
+        Y is Col // W,
+        (   nth0(Col, Shown, Ch)
+        ->  true
+        ;   Ch = ' '
+        ),
+        Cursor = [X-Y-cursor(Ch)]
+    ).
 
 char_shown(C, S) :-
     (   char_type(C, cntrl)

@@ -31,6 +31,7 @@ This is a SWI-Prolog pack. Library modules live in `prolog/`, internal modules i
 ## Commands
 
 - **Run the example app**: `swipl -p library=prolog -g go examples/demo.pl`
+- **Run the atto editor**: `swipl -p library=prolog examples/atto.pl -- FILE` (the `--` stops swipl from loading a `.pl` FILE as code)
 - **Verify modules load**: `swipl -p library=prolog -g halt examples/demo.pl`
 - **Reload code**: `make.` in a running SWI-Prolog session
 - **Run tests**: `swipl -p library=prolog -g "consult('test/test_tui.pl'), run_tests" -t halt`
@@ -51,7 +52,9 @@ Everything runs in the main thread, which owns the TTY (`wait_for_input/3` on `u
 2. Asks the substrate for events, which blocks
 3. Folds them through bubbling and the user's `update/3`; the app exits on `result(R)` from either
 
-A frame is `frame(Commands, EventAssoc, Extent)`, computed from a state. It is tracked as `stale`, `fresh(F)` (computed, not painted) or `painted(F)`. Each event in a batch is routed through the frame of the state it applies to, but only the last frame is painted.
+**The cursor.** Update may bind the state's cursor `X-Y`, or leave it unbound. The view may draw `cursor(Drawable)` (an alias defined in `loop.pl`), which places the cursor on the top-left cell drawn by it; because the view runs after update, this overrides any cursor update bound. If several are drawn, the top-left cell of them all wins. With neither, there is no cursor: nothing is highlighted, and events bubble through an empty stack (so only `at_event_is([], ...)` sees them) and arrows do not move anything. Arrow keys not claimed by a component move the cursor by default (the loop binds the new position). Update receives the state with the cursor as shown.
+
+A frame is `frame(Commands, EventAssoc, Extent, Cursor)`, computed from a state; `Cursor` is the resolved cursor or `none`. It is tracked as `stale`, `fresh(F)` (computed, not painted) or `painted(F)`. Each event in a batch is routed through the frame of the state it applies to, but only the last frame is painted.
 
 The loop's display is `display(Substrate, Tracked, Size, Runs)`. Size is `unknown` until the first `terminal_size(Cols, Rows)` event, which (like any size change) clears the substrate. Runs are what is on the substrate; painting draws only the runs that changed.
 

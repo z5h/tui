@@ -57,6 +57,19 @@ app(Substrate, State, View, Update, Result) :-
     ).
 
 
+'#cursor'.
+
+:- multifile tui:alias_drawable/2.
+
+%!  cursor(+Drawable)
+%
+%  Drawable, with the cursor on its top-left cell. This overrides any
+%  cursor in the state update produced. If several are drawn, the
+%  top-left cell of them all wins; if Drawable draws nothing, it places
+%  no cursor.
+tui:alias_drawable(cursor(D), D).
+
+
 '#posting'.
 
 % IMPURE: mutable global — the running app's wake, for senders that have
@@ -75,10 +88,15 @@ post(Event) :-
 % every ready event into the state before painting again.
 %
 % A frame is the rendered form of a state: frame(Commands, EventAssoc,
-% Extent). The loop tracks it as stale (not computed), fresh(Frame)
-% (computed, not on screen), or painted(Frame). Events are routed
-% through the frame of the state they apply to, so a batch of events
-% may compute several frames but paints only the last.
+% Extent, Cursor). The loop tracks it as stale (not computed),
+% fresh(Frame) (computed, not on screen), or painted(Frame). Events are
+% routed through the frame of the state they apply to, so a batch of
+% events may compute several frames but paints only the last.
+%
+% Cursor is where the cursor is in the frame: the top-left cell drawn by
+% cursor(_) if the view drew one, otherwise the state's cursor if update
+% bound it, otherwise none. With no cursor nothing is highlighted, and
+% events bubble through no components.
 %
 % The display is display(Substrate, Tracked, Size, Runs). Size is Cols-Rows,
 % or unknown until the substrate reports it; nothing is painted before
@@ -126,24 +144,34 @@ app_event_state_display_updated(App, E, S0, display(Sub, T0, Size, Runs), Next) 
     App = app(View, Update, _),
     view_size_state_tracked_fresh(View, Size, S0, T0, T1),
     tracked_frame(T1, Frame),
-    frame_update_event_state0_state(Frame, Update, E, S0, S),
+    frame_state_shown(Frame, S0, Shown),
+    frame_update_event_state0_state(Frame, Update, E, Shown, S),
     (   S = result(_)
     ->  Next = S
-    ;   S == S0
-    ->  Next = continue(S0, display(Sub, T1, Size, Runs))
+    ;   S == Shown
+    ->  Next = continue(Shown, display(Sub, T1, Size, Runs))
     ;   Next = continue(S, display(Sub, stale, Size, Runs))
+    ).
+
+% The state as shown: with the frame's cursor, which the view may have
+% placed. Update receives this state.
+frame_state_shown(frame(_, _, _, Cursor), Cursor0-Model, Shown) :-
+    (   Cursor == none
+    ->  Shown = Cursor0-Model
+    ;   Shown = Cursor-Model
     ).
 
 % The state an event leads to, or result(R). Cursor movement is handled
 % here; other events are bubbled through the component stack under the
 % cursor and passed to Update.
 :- meta_predicate frame_update_event_state0_state(+, 3, +, +, -).
-frame_update_event_state0_state(frame(_, EventAssoc, Extent), Update, E0, S0, S) :-
-    (X-Y)-Model0 = S0,
-    point_event_assoc_bubbled(X-Y, E0, EventAssoc, E1),
+frame_update_event_state0_state(frame(_, EventAssoc, Extent, Cursor), Update, E0, S0, S) :-
+    _-Model0 = S0,
+    cursor_event_assoc_bubbled(Cursor, E0, EventAssoc, E1),
     (   E1 = result(_)
     ->  S = E1
-    ;   direction(E1)
+    ;   direction(E1),
+        Cursor = X-Y
     ->  limits_direction_from_to(Extent, E1, X-Y, NX-NY),
         (   X-Y = NX-NY
         ->  S = S0
@@ -155,6 +183,11 @@ frame_update_event_state0_state(frame(_, EventAssoc, Extent), Update, E0, S0, S)
         )
     ;   call(Update, E1, S0, S)
     ).
+
+cursor_event_assoc_bubbled(none, E0, _, E1) :- !,
+    stack_event_is([], E0, E1).
+cursor_event_assoc_bubbled(XY, E0, EventAssoc, E1) :-
+    point_event_assoc_bubbled(XY, E0, EventAssoc, E1).
 
 
 '#frames'.
@@ -174,20 +207,35 @@ view_state_display_painted(_, _, D, D) :-
     D = display(_, _, unknown, _), !.
 view_state_display_painted(View, State, display(Sub0, T0, Size, Previous), display(Sub, painted(F), Size, Runs)) :-
     view_size_state_tracked_fresh(View, Size, State, T0, fresh(F)),
-    (X-Y)-_ = State,
-    F = frame(Commands, _, _),
-    limits_cursor_commands_runs(Size, X-Y, Commands, Runs),
+    F = frame(Commands, _, _, Cursor),
+    limits_cursor_commands_runs(Size, Cursor, Commands, Runs),
     runs_previous_changed(Runs, Previous, Changed),
     substrate_runs_painted(Sub0, Changed, Sub).
 
-view_size_state_frame(View, Size, State, frame(Commands, EventAssoc, Extent)) :-
-    (X-Y)-_ = State,
+view_size_state_frame(View, Size, State, frame(Commands, EventAssoc, Extent, Cursor)) :-
     call(View, State, Drawable),
     drawable__normalized_commands__end(Drawable, Commands, Extent),
-    once(apply_focus(X-Y, Commands)),
     size_limits(Size, Limits),
     limits_commands_eventmap(Limits, Commands, EventMap),
+    state_eventmap_cursor(State, EventMap, Cursor),
+    (   Cursor = X-Y
+    ->  once(apply_focus(X-Y, Commands))
+    ;   true
+    ),
     list_to_assoc(EventMap, EventAssoc).
+
+% The top-left cell drawn by cursor(_), if any; otherwise the state's
+% cursor if update bound it; otherwise none.
+state_eventmap_cursor(Cursor0-_, EventMap, Cursor) :-
+    findall(Y-X, ( member((X-Y)-Stack, EventMap),
+                   memberchk(cursor(_), Stack) ), Marked),
+    (   Marked \== []
+    ->  min_member(Y-X, Marked),
+        Cursor = X-Y
+    ;   ground(Cursor0)
+    ->  Cursor = Cursor0
+    ;   Cursor = none
+    ).
 
 % Before the size is known, events may land anywhere.
 size_limits(unknown, inf-inf) :- !.

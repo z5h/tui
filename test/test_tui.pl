@@ -169,6 +169,28 @@ test(replay) :-
     app(vcr(Script), (1-1)-[], vcr_view, vcr_update, Result),
     Result == (2-1)-[a, terminal_size(10, 3)].
 
+% The view places the cursor, over whatever update supplied.
+cursor_view(_, "ab" .> cursor("c")).
+
+test(view_places_cursor) :-
+    Script = [ send([terminal_size(10, 3)]),
+               expect(clear),
+               expect(runs([(1-1)-([]-[a, b]), (3-1)-([negative]-[c])]))
+             ],
+    app(vcr(Script), (1-1)-[], cursor_view, vcr_update, _).
+
+% No cursor: nothing highlighted, and arrows reach update unmoved.
+test(no_cursor) :-
+    Script = [ send([terminal_size(10, 3)]),
+               expect(clear),
+               expect(runs([(1-1)-([]-[h, i])])),
+               send([right])
+             ],
+    app(vcr(Script), _-[], vcr_view, vcr_update, Result),
+    Result = Cursor-Events,
+    \+ ground(Cursor),
+    Events == [right, terminal_size(10, 3)].
+
 test(mismatch, [throws(error(vcr_mismatch(expect(runs(_)), expect(clear)), _))]) :-
     Script = [ send([terminal_size(10, 3)]),
                expect(runs([]))
