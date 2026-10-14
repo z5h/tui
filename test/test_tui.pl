@@ -4,6 +4,7 @@
 :- use_module(library(tui)).
 :- use_module(library(tui/assocs)).
 :- use_module(library(tui/utils)).
+:- use_module(library(tui/loop), [app/5]).
 
 :- op(601, xfy, '.>').
 :- op(601, xfy, '.\\/').
@@ -146,3 +147,31 @@ test(not_hovered) :-
              (4-1)-([]-[d])].
 
 :- end_tests(hover).
+
+
+:- begin_tests(vcr).
+
+% Shows "hi"; records each event it receives; quits on eos.
+vcr_view(_, "hi").
+
+vcr_update(eos, S, result(S)) :- !.
+vcr_update(E, (X-Y)-Es, (X-Y)-[E | Es]).
+
+test(replay) :-
+    Script = [ send([terminal_size(10, 3)]),
+               expect(clear),
+               expect(runs([(1-1)-([negative]-[h]), (2-1)-([]-[i])])),
+               send([a]),
+               send([right]),
+               expect(runs([(1-1)-([]-[h]), (2-1)-([negative]-[i])]))
+             ],
+    app(vcr(Script), (1-1)-[], vcr_view, vcr_update, Result),
+    Result == (2-1)-[a].
+
+test(mismatch, [throws(error(vcr_mismatch(expect(runs(_)), expect(clear)), _))]) :-
+    Script = [ send([terminal_size(10, 3)]),
+               expect(runs([]))
+             ],
+    app(vcr(Script), (1-1)-[], vcr_view, vcr_update, _).
+
+:- end_tests(vcr).
