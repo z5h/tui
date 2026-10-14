@@ -11,6 +11,8 @@ tui:at_event_is/3 multifile hooks. Auto-loaded by library(tui).
 :- op(601, xfy, '.>').
 :- op(601, xfy, '.\\/').
 
+:- multifile tui:alias_drawable/2.
+:- multifile tui:at_event_is/3.
 :- discontiguous tui:alias_drawable/2.
 :- discontiguous tui:at_event_is/3.
 

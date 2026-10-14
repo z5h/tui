@@ -10,7 +10,8 @@
               capture//2,
               excluding//2,
               direction/1,
-              limits_direction_from_to/4
+              limits_direction_from_to/4,
+              limits_point_within/2
           ]).
 
 
@@ -98,3 +99,12 @@ limits_direction_from_to(MX-_, right, X0-Y, X-Y) :-
     X is min(MX, X0 + 1).
 limits_direction_from_to(_-MY, down, X-Y0, X-Y) :-
     Y is min(MY, Y0 + 1).
+
+%!  limits_point_within(+Limits, +Point) is semidet.
+%
+%  True if Point X-Y lies within 1..Limits. Limits is MaxX-MaxY.
+limits_point_within(MX-MY, X-Y) :-
+    X > 0,
+    Y > 0,
+    X =< MX,
+    Y =< MY.

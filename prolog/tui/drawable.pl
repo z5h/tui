@@ -97,7 +97,7 @@ ansi_attribute(A) :- is_color_attribute(A).
 
 is_attribute(hide_cursor).
 % NOTE: hover is not a drawable concern; style_hovergroup leaks in from
-% the hover component until hover gets its own module.
+% tui/hover.pl.
 is_attribute(style_hovergroup(Style, _G)) :-
     maplist(ansi_attribute, Style).
 is_attribute(A) :-

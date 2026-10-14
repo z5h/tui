@@ -5,7 +5,6 @@
             op(601, xfy, '.\\/'),
             op(601, xfy, './\\'),
             terminal_size/2,
-            stack_event_is/3,
             app/4
           ]).
 
@@ -28,6 +27,9 @@ at_event_is/3.
 :- reexport(library(tui/terminal), [wait_for_input/0, get_single_input/1]).
 :- use_module(library(tui/drawable)).
 :- reexport(library(tui/drawable), [drawable//5, drawable_raw/2]).
+:- use_module(library(tui/hover)).
+:- use_module(library(tui/events)).
+:- reexport(library(tui/events), [stack_event_is/3]).
 :- use_module(library(tui/components)).
 :- use_module(library(ansi_term)).
 
@@ -78,50 +80,21 @@ terminal_size(Cols, Rows) :-
 
 '#rendering'.
 
-onscreen(X-Y) :-
-    X > 0,
-    Y > 0,
-    terminal_size(Cols, Rows), !,
-    X =< Cols,
-    Y =< Rows.
-
-raw_attributes_attributes([], []).
-raw_attributes_attributes([style_hovergroup(_, false)|T], Attr) :- !,
-    raw_attributes_attributes(T, Attr).
-raw_attributes_attributes([style_hovergroup(S, true)|T], Attr) :- !,
-    append(S, T, ST),
-    raw_attributes_attributes(ST, Attr).
-raw_attributes_attributes([H|T], [H|A]) :- !,
-    raw_attributes_attributes(T, A).
-
-apply_focus(X-Y, Commands) :-
-    member((X-Y)-(Stack-Attr-_), Commands),
-    member([style_hovergroup(_S, G)], Attr),
-    @ stack_focused(Stack),
-    G = true.
-apply_focus(_, _).
-
-stack_focused([]).
-stack_focused([hover(_,_,true) | Tail ]) :- !,
-    stack_focused(Tail).
-stack_focused([_ | Tail]) :-
-    stack_focused(Tail).
-
 cursor_pred(Pred, (X1-Y1)-_, (X2-Y2)-_) :-
     compare(Pred, Y1-X1, Y2-X2).
 
 % The frame's runs in standard order, with the cursor cell highlighted.
 % The highlight is part of the cell's style, so the cursor cell forms its
 % own run and moving the cursor changes the runs it touches.
-cursor_commands_runs(Cursor, Commands, Runs) :-
-    include(command_onscreen, Commands, Onscreen),
+limits_cursor_commands_runs(Limits, Cursor, Commands, Runs) :-
+    include(limits_command_within(Limits), Commands, Onscreen),
     maplist(cursor_command_cell(Cursor), Onscreen, Cells0),
     predsort(cursor_pred, Cells0, Cells),
     once(phrase(grouped_by_attributes(Runs0), Cells)),
     msort(Runs0, Runs).
 
-command_onscreen(XY-_) :-
-    onscreen(XY).
+limits_command_within(Limits, XY-_) :-
+    limits_point_within(Limits, XY).
 
 cursor_command_cell(Cursor, (X-Y)-(_-A-C), (X-Y)-(Attrs-Char)) :-
     flatten(A, A1),
@@ -155,27 +128,6 @@ run_chars(X0, Y, Attrs, [C | Cs]) -->
     [(X-Y)-(Attrs-C)], !,
     run_chars(X, Y, Attrs, Cs).
 run_chars(_, _, _, []) --> [].
-
-commands_eventmap([], []).
-commands_eventmap([((X-Y)-(S-_-_))|T], EM) :-
-    (  onscreen(X-Y)
-    -> E = (X-Y)-S,
-       EM = [E|EMT]
-    ;  EM = EMT
-    ),
-    commands_eventmap(T, EMT).
-
-
-'#builtin_components'.
-
-%!  alias_drawable(hover(+Style, +Term), -Drawable).
-%
-%  Wrap Term with a hover highlight. When the cursor is over this
-%  component, Style attributes are applied.
-alias_drawable(hover(Style, Term), hover(Style, Term, _Group)).
-
-alias_drawable(hover(Style, Term, Group), HoverTerm) :-
-    HoverTerm = style([style_hovergroup(Style, Group)], Term).
 
 
 '#app'.
@@ -355,15 +307,15 @@ app_event_state_display_next(App, E, S0, display(T0, Runs), Next) :-
 % cursor and passed to Update.
 :- meta_predicate frame_update_event_state0_state(+, 3, +, +, -).
 frame_update_event_state0_state(frame(_, EventAssoc, Extent), Update, E0, S0, S) :-
-    state_event_assoc_bubbled(S0, E0, EventAssoc, E1),
+    (X-Y)-Model0 = S0,
+    point_event_assoc_bubbled(X-Y, E0, EventAssoc, E1),
     (   E1 = result(_)
     ->  S = E1
     ;   direction(E1)
-    ->  (X-Y)-Model0 = S0,
-        limits_direction_from_to(Extent, E1, X-Y, NX-NY),
+    ->  limits_direction_from_to(Extent, E1, X-Y, NX-NY),
         (   X-Y = NX-NY
         ->  S = S0
-        ;   state_event_assoc_bubbled(S0, moved(E1, X-Y, NX-NY), EventAssoc, E2),
+        ;   point_event_assoc_bubbled(X-Y, moved(E1, X-Y, NX-NY), EventAssoc, E2),
             (   E2 = moved(E1, X-Y, NX-NY)
             ->  S = (NX-NY)-Model0
             ;   call(Update, E2, (NX-NY)-Model0, S)
@@ -396,40 +348,13 @@ view_state_frame(View, State, frame(Commands, EventAssoc, Extent)) :-
     call(View, State, Drawable),
     drawable__normalized_commands__end(Drawable, Commands, Extent),
     once(apply_focus(X-Y, Commands)),
-    commands_eventmap(Commands, EventMap),
+    terminal_size(Cols, Rows),
+    limits_commands_eventmap(Cols-Rows, Commands, EventMap),
     list_to_assoc(EventMap, EventAssoc).
 
 tty_render(Cursor, Commands, Previous, Runs) :-
     ansi_hide_cursor,
-    cursor_commands_runs(Cursor, Commands, Runs),
+    terminal_size(Cols, Rows),
+    limits_cursor_commands_runs(Cols-Rows, Cursor, Commands, Runs),
     previous_runs_rendered(Previous, Runs),
     flush_output.
-
-
-'#events'.
-
-%!  stack_event_is(+Stack, +RawEvent, -BubbledEvent) is det.
-%
-%  Walk the component Stack from innermost to outermost, giving each
-%  component a chance to rewrite the event via at_event_is/3. If no
-%  component rewrites the event, BubbledEvent = RawEvent.
-stack_event_is(V, _, _) :- var(V), domain_error(stack_event_is, stack:V).
-stack_event_is(_, V, _) :- var(V), domain_error(stack_event_is, event:V).
-stack_event_is([H|T], E, Is) :- !,
-    (  tui:at_event_is(H, E, Next)
-    -> stack_event_is([H|T], Next, Is)
-    ;  stack_event_is(T, E, Is)
-    ).
-stack_event_is([], E, Is) :- !,
-    (  tui:at_event_is([], E, Next)
-    -> stack_event_is([], Next, Is)
-    ;  Is = E
-    ).
-
-state_event_assoc_bubbled(S0, E0, EventAssoc, E1) :-
-    (X-Y)-_ = S0,
-    (  get_assoc(X-Y, EventAssoc, Stack)
-    -> true
-    ;  Stack = []
-    ),
-    stack_event_is(Stack, E0, E1).
