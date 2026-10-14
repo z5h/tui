@@ -3,9 +3,7 @@
             op(601, xfy, '.>'),
             op(601, xfy, '.<'),
             op(601, xfy, '.\\/'),
-            op(601, xfy, './\\'),
-            terminal_size/2,
-            app/4
+            op(601, xfy, './\\')
           ]).
 
 /** <module> Text User Interface framework
@@ -20,18 +18,15 @@ at_event_is/3.
 
 '#imports'.
 
-:- use_module(library(tui/utils)).
 :- reexport(library(tui/utils), [direction/1, limits_direction_from_to/4]).
-:- use_module(library(tui/terminal)).
 :- reexport(library(tui/terminal), [wait_for_input/0, get_single_input/1]).
-:- use_module(library(tui/drawable)).
 :- reexport(library(tui/drawable), [drawable//5, drawable_raw/2]).
-:- use_module(library(tui/hover)).
-:- use_module(library(tui/events)).
 :- reexport(library(tui/events), [stack_event_is/3]).
-:- use_module(library(tui/render)).
-:- use_module(library(tui/wake)).
+:- reexport(library(tui/loop), [app/4]).
 :- use_module(library(tui/components)).
+
+
+'#hooks'.
 
 %!  alias_drawable(+DrawableTerm, -ExpandedDrawable) is semidet.
 %
@@ -50,232 +45,3 @@ at_event_is/3.
 %
 %  @see stack_event_is/3
 :- multifile at_event_is/3.
-
-
-'#terminal_size'.
-
-:- dynamic terminal_size_/2.
-
-% IMPURE: mutable global — caches last-known terminal dimensions.
-:- det(set_terminal_size__requires_redraw/3).
-set_terminal_size__requires_redraw(Cols, Rows, Redraw) :-
-    ignore(terminal_size_(PrevCols, PrevRows)),
-    ignore(PrevCols = 0),
-    retractall(terminal_size_(_, _)),
-    asserta(terminal_size_(Cols, Rows)),
-    (  PrevCols-PrevRows = Cols-Rows
-    -> Redraw = false
-    ;  ansi_reset,
-       Redraw = true
-    ).
-
-%!  terminal_size(-Cols, -Rows) is det.
-%
-%  Current terminal dimensions in columns and rows.
-%  Updated automatically on SIGWINCH.
-:- det(terminal_size/2).
-terminal_size(Cols, Rows) :-
-    terminal_size_(Cols, Rows), !.
-
-
-'#app'.
-
-:- det(tui_init/0).
-tui_init :-
-    ansi_reset,
-    ansi_hide_cursor,
-    retractall(terminal_size_(_, _)),
-    tty_request_size,
-    wait_for_terminal_size.
-
-wait_for_terminal_size :-
-    get_single_input(In),
-    (  In = terminal_size(Cols, Rows)
-    -> set_terminal_size__requires_redraw(Cols, Rows, _)
-    ;  wait_for_terminal_size
-    ).
-
-%!  app(+State, :View, :Update, -Result) is det.
-%
-%  Run a TUI application. State is the initial (CursorX-CursorY)-Model.
-%  View is called as call(View, State, Drawable) to produce the current
-%  view. Update is called as call(Update, Event, State0, State1) to
-%  handle events. The app exits with Result when an event bubbles to
-%  result(Result), or when Update produces result(Result).
-%
-%  Everything runs in the calling thread, which must own the TTY. Other
-%  threads deliver events through a wake (see tui/wake.pl).
-:- meta_predicate(app(?, 2, 3, ?)).
-app(State, View, Update, Result) :-
-    setup_call_cleanup(
-        (   wake_open(Wake),
-            asserta(app_wake_(Wake))
-        ),
-        with_tty_raw(
-            (   tui_init,
-                on_signal(winch, _, sig_winch),
-                app_loop(app(View, Update, Wake), State, display(stale, []), Result)
-            )
-        ),
-        (   @ on_signal(winch, _, default),
-            @ retract(app_wake_(Wake)),
-            @ wake_close(Wake),
-            @ ansi_reset,
-            @ ansi_show_cursor
-        )
-    ).
-
-% Runs in the main thread, possibly mid-render, so it must not write to
-% the terminal. The loop issues the size request instead.
-sig_winch(_) :-
-    post(terminal_resized).
-
-
-'#posting'.
-
-% IMPURE: mutable global — the running app's wake, for senders that have
-% no other way to reach it (signal handlers, other threads).
-:- dynamic app_wake_/1.
-
-% IMPURE: deliver Event to the running app.
-post(Event) :-
-    app_wake_(Wake), !,
-    wake_post(Wake, Event).
-
-
-'#loop'.
-
-% Each iteration paints the current state if needed, waits, then folds
-% every ready event into the state before painting again.
-%
-% A frame is the rendered form of a state: frame(Commands, EventAssoc,
-% Extent). The loop tracks it as stale (not computed), fresh(Frame)
-% (computed, not on screen), or painted(Frame). Events are routed
-% through the frame of the state they apply to, so a batch of events
-% may compute several frames but paints only the last.
-%
-% The display is display(Tracked, Runs), where Runs are the sorted runs
-% currently on screen. Painting draws only runs not already there.
-
-app_loop(App, State0, Display0, Result) :-
-    App = app(View, _, Wake),
-    view_state_display_painted(View, State0, Display0, Display1),
-    wake_ready_events(Wake, Events),
-    app_events_state_display_outcome(App, Events, State0, Display1, Outcome),
-    (   Outcome = result(Result)
-    ->  true
-    ;   Outcome = continue(State, Display),
-        app_loop(App, State, Display, Result)
-    ).
-
-% IMPURE: blocks until input or a wake, then returns everything ready.
-wake_ready_events(Wake, Events) :-
-    wake_stream(Wake, WakeIn),
-    wait_for_input([user_input, WakeIn], Ready, infinite),
-    (   memberchk(WakeIn, Ready)
-    ->  wake_events(Wake, Posted)
-    ;   Posted = []
-    ),
-    (   memberchk(user_input, Ready)
-    ->  tty_events(Inputs)
-    ;   Inputs = []
-    ),
-    append(Posted, Inputs, Events).
-
-% IMPURE: one input, plus any others available without blocking.
-tty_events([In | Ins]) :-
-    get_single_input(In),
-    (   wait_for_input([user_input], [_], 0)
-    ->  tty_events(Ins)
-    ;   Ins = []
-    ).
-
-app_events_state_display_outcome(_, [], State, Display, continue(State, Display)).
-app_events_state_display_outcome(App, [E | Es], State0, Display0, Outcome) :-
-    app_event_state_display_next(App, E, State0, Display0, Next),
-    (   Next = result(_)
-    ->  Outcome = Next
-    ;   Next = continue(State1, Display1),
-        app_events_state_display_outcome(App, Es, State1, Display1, Outcome)
-    ).
-
-% Framework events. A redraw means the terminal was reset: nothing is on
-% screen.
-app_event_state_display_next(_, terminal_resized, S, D, continue(S, D)) :- !,
-    tty_request_size.
-app_event_state_display_next(_, terminal_size(Cols, Rows), S, D0, continue(S, D)) :- !,
-    set_terminal_size__requires_redraw(Cols, Rows, Redraw),
-    (   Redraw
-    ->  D = display(stale, [])
-    ;   D = D0
-    ).
-% App events.
-app_event_state_display_next(App, E, S0, display(T0, Runs), Next) :-
-    App = app(View, Update, _),
-    view_state_tracked_fresh(View, S0, T0, T1),
-    tracked_frame(T1, Frame),
-    frame_update_event_state0_state(Frame, Update, E, S0, S),
-    (   S = result(_)
-    ->  Next = S
-    ;   S == S0
-    ->  Next = continue(S0, display(T1, Runs))
-    ;   Next = continue(S, display(stale, Runs))
-    ).
-
-% The state an event leads to, or result(R). Cursor movement is handled
-% here; other events are bubbled through the component stack under the
-% cursor and passed to Update.
-:- meta_predicate frame_update_event_state0_state(+, 3, +, +, -).
-frame_update_event_state0_state(frame(_, EventAssoc, Extent), Update, E0, S0, S) :-
-    (X-Y)-Model0 = S0,
-    point_event_assoc_bubbled(X-Y, E0, EventAssoc, E1),
-    (   E1 = result(_)
-    ->  S = E1
-    ;   direction(E1)
-    ->  limits_direction_from_to(Extent, E1, X-Y, NX-NY),
-        (   X-Y = NX-NY
-        ->  S = S0
-        ;   point_event_assoc_bubbled(X-Y, moved(E1, X-Y, NX-NY), EventAssoc, E2),
-            (   E2 = moved(E1, X-Y, NX-NY)
-            ->  S = (NX-NY)-Model0
-            ;   call(Update, E2, (NX-NY)-Model0, S)
-            )
-        )
-    ;   call(Update, E1, S0, S)
-    ).
-
-
-'#frames'.
-
-tracked_frame(fresh(F), F).
-tracked_frame(painted(F), F).
-
-view_state_tracked_fresh(View, State, stale, fresh(F)) :- !,
-    view_state_frame(View, State, F).
-view_state_tracked_fresh(_, _, T, T).
-
-% IMPURE: paints the frame unless it is already on screen.
-view_state_display_painted(_, _, D, D) :-
-    D = display(painted(_), _), !.
-view_state_display_painted(View, State, display(T0, Previous), display(painted(F), Runs)) :-
-    view_state_tracked_fresh(View, State, T0, fresh(F)),
-    (X-Y)-_ = State,
-    F = frame(Commands, _, _),
-    tty_render(X-Y, Commands, Previous, Runs).
-
-view_state_frame(View, State, frame(Commands, EventAssoc, Extent)) :-
-    (X-Y)-_ = State,
-    call(View, State, Drawable),
-    drawable__normalized_commands__end(Drawable, Commands, Extent),
-    once(apply_focus(X-Y, Commands)),
-    terminal_size(Cols, Rows),
-    limits_commands_eventmap(Cols-Rows, Commands, EventMap),
-    list_to_assoc(EventMap, EventAssoc).
-
-tty_render(Cursor, Commands, Previous, Runs) :-
-    ansi_hide_cursor,
-    terminal_size(Cols, Rows),
-    limits_cursor_commands_runs(Cols-Rows, Cursor, Commands, Runs),
-    runs_previous_changed(Runs, Previous, Changed),
-    maplist(ansi_run, Changed),
-    flush_output.
