@@ -109,16 +109,20 @@ app_events_state_display_outcome(App, [E | Es], State0, Display0, Outcome) :-
         app_events_state_display_outcome(App, Es, State1, Display1, Outcome)
     ).
 
-% Framework events. A new size clears the substrate: nothing is on it.
-app_event_state_display_next(_, terminal_size(Cols, Rows), S, D0, continue(S, D)) :- !,
+% A new size clears the substrate: nothing is on it. The app then gets
+% the size like any other event, so it can lay itself out.
+app_event_state_display_next(App, terminal_size(Cols, Rows), S, D0, Next) :- !,
     D0 = display(Sub0, _, Size, _),
     (   Size == Cols-Rows
     ->  D = D0
     ;   substrate_cleared(Sub0, Sub),
         D = display(Sub, stale, Cols-Rows, [])
-    ).
-% App events.
-app_event_state_display_next(App, E, S0, display(Sub, T0, Size, Runs), Next) :-
+    ),
+    app_event_state_display_updated(App, terminal_size(Cols, Rows), S, D, Next).
+app_event_state_display_next(App, E, S0, D, Next) :-
+    app_event_state_display_updated(App, E, S0, D, Next).
+
+app_event_state_display_updated(App, E, S0, display(Sub, T0, Size, Runs), Next) :-
     App = app(View, Update, _),
     view_size_state_tracked_fresh(View, Size, S0, T0, T1),
     tracked_frame(T1, Frame),

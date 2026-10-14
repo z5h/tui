@@ -136,6 +136,22 @@ tui:alias_drawable(row([H]), H) :- !.
 tui:alias_drawable(row([]), []) :- !.
 tui:alias_drawable(row([H|T]), (H .> row(T))) :- !.
 
+%!  wrapped(+Width, +Chars)
+%
+%  Chars broken into rows of Width characters, top to bottom. N chars
+%  take N // Width + 1 rows, so the position just after the last char
+%  always lies on a row (the last row may be empty).
+tui:alias_drawable(wrapped(W, Chars), column(Rows)) :-
+    width_chars_rows(W, Chars, Rows).
+
+width_chars_rows(W, Chars, [chars(Row) | Rows]) :-
+    (   length(Row, W),
+        append(Row, Rest, Chars)
+    ->  width_chars_rows(W, Rest, Rows)
+    ;   Row = Chars,
+        Rows = []
+    ).
+
 
 '#input_controls'.
 

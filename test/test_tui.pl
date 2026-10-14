@@ -167,7 +167,7 @@ test(replay) :-
                expect(runs([(1-1)-([]-[h]), (2-1)-([negative]-[i])]))
              ],
     app(vcr(Script), (1-1)-[], vcr_view, vcr_update, Result),
-    Result == (2-1)-[a].
+    Result == (2-1)-[a, terminal_size(10, 3)].
 
 test(mismatch, [throws(error(vcr_mismatch(expect(runs(_)), expect(clear)), _))]) :-
     Script = [ send([terminal_size(10, 3)]),
