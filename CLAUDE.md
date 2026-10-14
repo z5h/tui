@@ -12,7 +12,8 @@ This is a SWI-Prolog pack. Library modules live in `prolog/`, internal modules i
 
 - `prolog/tui.pl` — public module `tui`: a facade of operators, re-exports, and the hook declarations (auto-loads components)
 - `prolog/tui/utils.pl` — `tui_utils`: debug helpers (`log/1`, `?`, `@`), list/DCG helpers, direction and limits geometry. Depends on nothing.
-- `prolog/tui/terminal.pl` — `tui_terminal`: generic ANSI output (`ansi_*`, `ansi_run/1`, size request) and keyboard input decoding (`get_single_input/1`)
+- `prolog/tui/terminal.pl` — `tui_terminal`: generic ANSI output (`ansi_*`, `ansi_run/1`), device-attributes and Kitty keyboard queries
+- `prolog/tui/input.pl` — `tui_input`: decodes terminal input codes into events (legacy xterm and Kitty keyboard protocol), with no side effects
 - `prolog/tui/drawable.pl` — `tui_drawable`: the drawable DSL (`drawable//5`), attributes, commands, cell resolution (conceal/reveal)
 - `prolog/tui/hover.pl` — `tui_hover`: the `hover/2` component and cursor-dependent hover styling
 - `prolog/tui/events.pl` — `tui_events`: event bubbling through component stacks, the event map
@@ -58,7 +59,13 @@ The loop's display is `display(Substrate, Tracked, Size, Runs)`. Size is `unknow
 
 A substrate is a term passed through the loop, never global: `terminal`, or `vcr(Script)`. `substrate.pl` branches on it for session setup, events, clearing, and painting runs.
 
-The terminal substrate owns raw mode and SIGWINCH. Its handler only posts `terminal_resized` to the wake; `substrate_events/4` answers that with a size request and drops it, so the loop only ever sees `terminal_size/2` replies.
+The terminal substrate (`terminal(Keyboard, Pending)`, from `terminal_substrate/1`) owns raw mode and SIGWINCH. The size comes from the OS (`tty_size/2`): at session start and from the SIGWINCH handler it is posted to the wake as `terminal_size(Cols, Rows)`.
+
+Input: the substrate reads available codes and decodes them with `input.pl`. Codes of an incomplete escape sequence stay in `Pending`; while any are pending it waits at most 10 ms (the escape grace period) before decoding them as they are, so a lone ESC becomes `escape`. End of input is the event `eos`.
+
+Keys: plain keys are atoms (`a`, `'A'`, `up`, `return`, `f5`); modified keys are `Mods+Key` with modifiers in the order ctrl, alt, shift, super, hyper, meta, e.g. `ctrl+shift+up`. Letters with modifiers are lowercase. Unrecognised sequences arrive as `unknown_input(Codes)`.
+
+Kitty keyboard protocol: at session start the substrate queries for it, then requests device attributes. A Kitty reply before the device-attributes reply means support, and the substrate enables flag 1 (disambiguate); otherwise `Keyboard` becomes `legacy`. The decoder accepts both encodings at all times. Replies are consumed by the substrate. Clearing uses erase-display, not a full reset, so the keyboard mode survives resizes.
 
 **Wake** (`wake.pl`): a `wake(Queue, In, Out)` term. Posting queues an event, then writes a byte to a pipe the loop waits on alongside `user_input`. Bytes are consumed before the queue is drained, so no event is stranded. `post/1` in `loop.pl` (not yet exported) delivers to the running app.
 

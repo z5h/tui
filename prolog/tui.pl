@@ -19,7 +19,6 @@ at_event_is/3.
 '#imports'.
 
 :- reexport(library(tui/utils), [direction/1, limits_direction_from_to/4]).
-:- reexport(library(tui/terminal), [wait_for_input/0, get_single_input/1]).
 :- reexport(library(tui/drawable), [drawable//5, drawable_raw/2]).
 :- reexport(library(tui/events), [stack_event_is/3]).
 :- reexport(library(tui/loop), [app/4]).

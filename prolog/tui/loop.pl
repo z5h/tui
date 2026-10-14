@@ -33,7 +33,8 @@ bubbling and the app's update, and repeats until a result.
 %  threads deliver events through a wake (see tui/wake.pl).
 :- meta_predicate(app(?, 2, 3, ?)).
 app(State, View, Update, Result) :-
-    app(terminal, State, View, Update, Result).
+    terminal_substrate(Substrate),
+    app(Substrate, State, View, Update, Result).
 
 %  app(+Substrate, +State, :View, :Update, -Result)
 %

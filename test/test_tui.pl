@@ -5,6 +5,7 @@
 :- use_module(library(tui/assocs)).
 :- use_module(library(tui/utils)).
 :- use_module(library(tui/loop), [app/5]).
+:- use_module(library(tui/input)).
 
 :- op(601, xfy, '.>').
 :- op(601, xfy, '.\\/').
@@ -175,3 +176,58 @@ test(mismatch, [throws(error(vcr_mismatch(expect(runs(_)), expect(clear)), _))])
     app(vcr(Script), (1-1)-[], vcr_view, vcr_update, _).
 
 :- end_tests(vcr).
+
+
+:- begin_tests(input).
+
+% Codes - Events, decoding completely.
+decoded(`a`,                [a]).
+decoded(`A`,                ['A']).
+decoded([1],                [ctrl+a]).
+decoded([0],                [ctrl+' ']).
+decoded([9],                [tab]).
+decoded([13],               [return]).
+decoded([127],              [backspace]).
+decoded(`\e[A`,             [up]).
+decoded(`\eOA`,             [up]).
+decoded(`\eOP`,             [f1]).
+decoded(`\e[13~`,           [f3]).
+decoded(`\e[24~`,           [f12]).
+decoded(`\e[3~`,            [delete]).
+decoded(`\e[1;5A`,          [ctrl+up]).
+decoded(`\e[1;8D`,          [ctrl+alt+shift+left]).
+decoded(`\e[5;2~`,          [shift+page_up]).
+decoded(`\e[1;5P`,          [ctrl+f1]).
+decoded(`\e[Z`,             [shift+tab]).
+decoded(`\ex`,              [alt+x]).
+decoded(`\eA`,              [alt+shift+a]).
+decoded([27, 1],            [ctrl+alt+a]).
+decoded(`\e\e[A`,           [escape, up]).
+decoded(`\e[27;5;105~`,     [ctrl+i]).
+decoded(`\e[105;5u`,        [ctrl+i]).
+decoded(`\e[97;6u`,         [ctrl+shift+a]).
+decoded(`\e[27u`,           [escape]).
+decoded(`\e[13;3u`,         [alt+return]).
+decoded(`\e[57376u`,        [f13]).
+decoded(`\e[1;10A`,         [shift+super+up]).
+decoded(`\e[?1u\e[?62;22c`, [kitty_keyboard(1), device_attributes([62, 22])]).
+decoded(`\e[3~x`,           [delete, x]).
+decoded(`\e[1;5X`,          [unknown_input(`\e[1;5X`)]).
+
+test(decoded, [forall(decoded(Codes, Expected))]) :-
+    codes_events_pending(Codes, Events, Pending),
+    Events == Expected,
+    Pending == [].
+
+test(pending, [forall(member(Codes, [`\e`, `\eO`, `\e[`, `\e[1;`, `x\e[1`]))]) :-
+    codes_events_pending(Codes, _, Pending),
+    once(append(_, Pending, Codes)),
+    Pending = [27 | _].
+
+test(flushed) :-
+    pending_events_flushed(`\e`, [escape]),
+    pending_events_flushed(`\e[`, [alt+'[']),
+    pending_events_flushed(`\eO`, [alt+shift+o]),
+    pending_events_flushed(`\e[1;`, [unknown_input(`\e[1;`)]).
+
+:- end_tests(input).

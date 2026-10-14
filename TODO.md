@@ -12,9 +12,15 @@ hover currently leaks into drawable.pl: is_attribute/1 accepts
 style_hovergroup (commented there).
 
 # input decoding
-some escape sequences for function keys and modifier combos are not
-decoded properly. decide which terminal protocols to target, and decode
-them properly.
+done: tui/input.pl decodes legacy xterm and the Kitty keyboard protocol,
+which is detected and enabled at startup.
+remaining:
+- macOS Terminal.app sends shift+up/down as plain up/down by default
+  (only shift+left/right have modified sequences), so they cannot be
+  told apart. users can add \033[1;2A / \033[1;2B in Profiles > Keyboard.
+- not yet decoded: mouse (SGR 1006), bracketed paste, focus in/out.
+- a key-inspector example app (show codes and decoded events) would
+  help diagnose terminals.
 
 # escape sequence test
 test the bytes terminal.pl produces (ansi_run/1 and the ansi_* helpers),
