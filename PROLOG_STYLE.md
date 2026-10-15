@@ -119,6 +119,26 @@ graph__shortest_path/4        % Graph, Start, End, ShortestPath
 
 Prefer the single-word form (`list_deduped/2`) when a concise word exists. The double-underscore form is for cases where compression would sacrifice clarity.
 
+### Parameterized Mappings: `_by` / `_with`
+
+When a predicate maps an input to an output under a parameter, and is expected to work (at least conceptually) as `(+, +, ?)`, name it `<param>_<relation_verb>_<by|with>(Param, In, Out)`. The parameter comes first, then the input, then the output. `<param>` is optional.
+
+```prolog
+integer_increment_by(Int, In, Out)
+increment_by(Inc, In, Out)
+solve_with(Solver, In, Out)
+command_update_with(Command, In, Out)
+```
+
+A name ending in `_by` or `_with` tells the reader what to expect: parameter, in, out. This shape also suits `foldl/4` (`foldl(command_update_with, Commands, M0, M)`).
+
+When the relation may be expected to work as `(?, ?, ?)`, don't use this form; name the relationship between the arguments instead:
+
+```prolog
+front_end_joined(Front, End, Joined) :-
+    append(Front, End, Joined).
+```
+
 ### Auxiliaries
 
 Auxiliary predicates for a main predicate `foo/N` should be named `foo_/M` or `foo_aux/M`, not given unrelated names.

@@ -25,6 +25,7 @@ This is a SWI-Prolog pack. Library modules live in `prolog/`, internal modules i
 - `prolog/tui/components.pl` — `tui_components`: reusable components, including `box/2`, `clear/1`, `line/3`
 - `prolog/tui/assocs.pl` — `tui_assocs`
 - `examples/demo.pl` — example app
+- `examples/atto.pl` — atto, a tiny text editor: key bindings and view; `examples/atto_lib.pl` is its editing model (document, cursor, scrolling, files), driven by commands
 - `test/test_tui.pl` — plunit tests
 - `pack.pl` — pack metadata
 
