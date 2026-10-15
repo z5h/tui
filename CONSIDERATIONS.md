@@ -143,6 +143,19 @@ atto lines were wrapped in `memoize`. Expansion time on the pipeline benchmark (
 
 The cached extent would let an off-screen `memoize(D)` emit nothing and cost one lookup, with layout still correct, turning `memoize` + `port` into a virtualized scroll view. It needs the clip rectangle passed down the drawable DCG (`drawable//5` becomes `drawable//6`, and `port` narrows the clip instead of filtering afterwards). Not worth the architectural change: an app that needs it (an editor with large files) knows its line sizes and draws only what is visible, which is simpler and faster. atto already scrolls its own source at vim speed.
 
+### What atto did instead
+
+atto's view now marks each line on or off screen, from its first screen row (a running sum of row counts, `Len // Width + 1`) against the visible rows. An off-screen `numbered_line` expands to `translate(0-(Rows-1), [])`: no cells, but an extent exactly `Rows` tall, so `column` still stacks the lines after it correctly. Row counts are computed each frame rather than tracked in the model: `length/2` is linear (it walks the list), but for 2000 lines and 266k characters all row counts take ~1.6 ms. Screens are identical before and after.
+
+Pipeline benchmark, 120x40, ms (median of 5, back to back):
+
+| atto | view | expand | total |
+|---|---|---|---|
+| 100 lines, before → after | 0.03 → 0.11 | 30.38 → 16.60 | 42.38 → 28.74 |
+| 2000 lines, before → after | 0.38 → 2.11 | 426.92 → 17.08 | 439.23 → 31.31 |
+
+Frame cost no longer grows with the document beyond the cheap row counting.
+
 ### Also learned
 
 `findall/3` copies each solution and loses sharing in the same way. Several components (`clear/1`, `line/3`) build cell lists with it; harmless at their sizes, but worth knowing.

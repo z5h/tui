@@ -53,9 +53,9 @@ scene(text, 120-40, (1-1)-none, text_view).
 scene(styled, 120-40, (1-1)-none, styled_view).
 scene(demo, 80-25, State, demo:view) :-
     demo:init(State).
-scene(atto_100, 120-40, _-M, atto:view) :-
+scene(atto_100, 120-40, _-M, atto:state_view) :-
     atto_model(100, 120-40, M).
-scene(atto_2000, 120-40, _-M, atto:view) :-
+scene(atto_2000, 120-40, _-M, atto:state_view) :-
     atto_model(2000, 120-40, M).
 
 % A full screen of text: one string per row.

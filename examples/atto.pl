@@ -135,15 +135,29 @@ model_text(M, editor_area(port(Cols-H, [clear(Cols1-H1), translate(0-NegTop, col
     Cols1 is Cols - 1,
     H1 is H - 1,
     NegTop is -Top,
-    mapindexed(index_number_with(layout(G, W, Cursor)), Lines, Numbered).
+    layout_index_row_lines_numbered(layout(G, W, Cursor, Top, H), 1, 0, Lines, Numbered).
 
-% Line N (1-based) as a numbered_line, with the cursor's column if the
-% cursor is on it.
-index_number_with(layout(G, W, L-C), N, Chars, numbered_line(N, G, W, Chars, Col)) :-
+% Lines as numbered_lines, the first being line N and starting at screen
+% row Row of the text. A line with no row in the visible Top..Top+H-1 is
+% marked offscreen(Rows); the cursor's line gets the cursor's column.
+layout_index_row_lines_numbered(_, _, _, [], []).
+layout_index_row_lines_numbered(Layout, N, Row, [Chars | Lines], [D | Ds]) :-
+    Layout = layout(G, W, L-C, Top, H),
+    width_line_rows(W, Chars, Rows),
+    (   (   Row + Rows =< Top
+        ;   Row >= Top + H
+        )
+    ->  Shown = offscreen(Rows)
+    ;   Shown = onscreen
+    ),
     (   N =:= L + 1
     ->  Col = C
     ;   Col = none
-    ).
+    ),
+    D = numbered_line(Shown, N, G, W, Chars, Col),
+    N1 is N + 1,
+    Row1 is Row + Rows,
+    layout_index_row_lines_numbered(Layout, N1, Row1, Lines, Ds).
 
 model__status_line(M, Line) :-
     model_lines(M, Lines),
@@ -174,7 +188,12 @@ tui:at_event_is(editor_area(_), D, move(D)) :-
 % Characters that would move the terminal's cursor are shown as spaces.
 % If the cursor is on the line, at column Col, the character there (or a
 % space past the end) is drawn again as cursor(Char), placing the cursor.
-tui:alias_drawable(numbered_line(N, G, W, Chars, Col),
+%
+% Off screen, a line draws nothing, but still takes its Rows rows, so the
+% lines after it stay in place.
+tui:alias_drawable(numbered_line(offscreen(Rows), _, _, _, _, _), translate(0-Last, [])) :- !,
+    Last is Rows - 1.
+tui:alias_drawable(numbered_line(onscreen, N, G, W, Chars, Col),
                    [style([faint], Gutter), G-0-wrapped(W, Shown) | Cursor]) :-
     G1 is G - 1,
     format(string(Gutter), "~t~d~*| ", [N, G1]),

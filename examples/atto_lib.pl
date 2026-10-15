@@ -10,7 +10,8 @@
             model_status/2,
             model_size/2,
             model_gutter_width_height/4,
-            model_fits/1
+            model_fits/1,
+            width_line_rows/3
           ]).
 
 /** <module> atto_lib — the editing model behind atto
@@ -113,7 +114,10 @@ model_fits(M) :-
     W >= 1,
     H >= 1.
 
-% Line, wrapped at W, takes Rows screen rows.
+%!  width_line_rows(+Width, +Line, -Rows) is det.
+%
+%  Line, wrapped at Width, takes Rows screen rows. The position after its
+%  last character always has a row.
 width_line_rows(W, Line, Rows) :-
     length(Line, Len),
     Rows is Len // W + 1.

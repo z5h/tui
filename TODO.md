@@ -42,10 +42,4 @@ the old TUI_PROFILE render-time overlay was removed. revisit as a broader
 mode: highlight regions being repainted, profile specific drawables or
 the loop.
 
-# atto with large files
-atto draws every line and lets the port clip, so each frame expands the
-whole document (~240 ms at 2000 lines on the pipeline benchmark). if it
-matters: track line heights and draw only the lines that can be visible.
-see CONSIDERATIONS.md (memoize, attempted and reverted).
-
 # merge single-threaded-loop into main
