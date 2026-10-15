@@ -33,6 +33,8 @@ This is a SWI-Prolog pack. Library modules live in `prolog/`, internal modules i
 - **Run the example app**: `swipl -p library=prolog -g go examples/demo.pl`
 - **Run the atto editor**: `swipl -p library=prolog examples/atto.pl -- FILE` (the `--` stops swipl from loading a `.pl` FILE as code)
 - **Verify modules load**: `swipl -p library=prolog -g halt examples/demo.pl`
+- **Painting benchmark** (needs a real terminal): `swipl -p library=prolog bench/paint.pl [FRAMES]` — how long the terminal takes to draw prepared runs, synced with a device-attributes round trip
+- **Pipeline benchmark** (runs anywhere): `swipl -p library=prolog bench/pipeline.pl [REPEATS]` — per-stage cost of turning a view into runs
 - **Reload code**: `make.` in a running SWI-Prolog session
 - **Run tests**: `swipl -p library=prolog -g "consult('test/test_tui.pl'), run_tests" -t halt`
 
