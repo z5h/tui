@@ -108,3 +108,41 @@ Absolute times vary between sessions (a whole run can be ~2x faster or slower); 
 
 - On kitty, tui's own logic dominates: ~7-23 ms per full 120x40 frame after the sort fix, versus ~1 ms to paint.
 - Expansion (drawables into commands) is now most of the remaining cost: 237 of 244 ms for atto with 2000 lines. The port clips after the whole document is expanded, so every line is expanded on every frame. Candidates: `memoize(Drawable)` (opt-in, keyed on ground drawables), and atto drawing only lines that can be visible.
+
+
+## memoize(Drawable) (Attempted, Reverted)
+
+### Idea
+
+An opt-in `memoize(D)` drawable: the developer marks subtrees worth caching, which avoids the failure of the earlier blanket alias caching (cheap aliases paying for the cache). `D` must be ground. Its expansion at 0-0 is cached and replayed through `raw(...)` embedding, which already translates cells and appends the outer stack and attributes. Because a drawable's output depends only on the drawable, the cache only ever affects speed.
+
+### Design
+
+- Key: `term_hash(D, H)`, checked with `==` against the stored `D`. Non-ground `D` is drawn without the cache.
+- Value: the cells and `D`'s own extent. The extent must be stored, not derived from the cells: `port(10-3, "a")` has a 10x3 extent but one cell, and layout (`.>`, `.\/`) depends on extents.
+- Lifetime: entries tagged with the last frame (generation) that used them; a hit updates only the tag, entries unused in the current or previous frame are dropped. `drawable__normalized_commands__end/3` advanced the generation, so the loop knew nothing of it.
+- On a hit, the cells are `copy_term`ed: they may hold variables that drawing binds (a hover's group variable, bound by `apply_focus/2`), and the stored copy must stay unbound.
+
+### Result
+
+atto lines were wrapped in `memoize`. Expansion time on the pipeline benchmark (120x40, ms):
+
+| store | atto, 100 lines off / cold / warm | atto, 2000 lines off / cold / warm |
+|---|---|---|
+| clauses (`assertz`/`clause`) | 17 / 242 / 115 | 209 / 5940 / out of memory (1 GB stack) |
+| global variables (`nb_setval`/`nb_current`) | 16.5 / 25.4 / 17.0 | 248 / 467 / 278 |
+
+*cold*: cache cleared before every expansion; *warm*: filled by the previous expansion, as in normal editing.
+
+### Why
+
+1. **Clauses lose sharing.** Each cell's stack holds the alias terms that drew it (`numbered_line(N, G, W, Chars, Col)`, `wrapped(W, Shown)`), each containing the whole line, all shared in memory. Compiling a term into a clause and retrieving it rebuilds it without sharing, so every cell got its own copy of its line: cells x line length. Measured on a 32 KB shared term, retrieval cost: clause 24 MB, `recorded/2` 48 KB (sharing kept, but copied), `nb_getval/2` 24 bytes (a reference, no copy), `copy_term/2` 32 bytes (ground subterms are shared).
+2. **Even without copying, replaying costs as much as drawing.** An atto line's expansion is almost all per-cell work (`chars(...)` emits one command per character and little else), and replaying cached cells is also per-cell work (raw embedding translates each cell and appends stacks and attributes). Add the hash, the `==` check and `copy_term`, and a hit costs about what a redraw does. memoize pays only for drawables that do much work per cell produced (layout calculations, deep alias nesting, formatting).
+
+### Not pursued: clip-aware expansion
+
+The cached extent would let an off-screen `memoize(D)` emit nothing and cost one lookup, with layout still correct, turning `memoize` + `port` into a virtualized scroll view. It needs the clip rectangle passed down the drawable DCG (`drawable//5` becomes `drawable//6`, and `port` narrows the clip instead of filtering afterwards). Not worth the architectural change: an app that needs it (an editor with large files) knows its line sizes and draws only what is visible, which is simpler and faster. atto already scrolls its own source at vim speed.
+
+### Also learned
+
+`findall/3` copies each solution and loses sharing in the same way. Several components (`clear/1`, `line/3`) build cell lists with it; harmless at their sizes, but worth knowing.
