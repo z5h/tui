@@ -125,8 +125,10 @@ width_fit_with(Avail, Path, Shown) :-
     ;   Shown = ''
     ).
 
-% The text area: numbered, wrapped lines, scrolled to Top and clipped.
-model_text(M, editor_area(port(Cols-H, [clear(Cols1-H1), translate(0-NegTop, column(Numbered))]))) :-
+% The text area: the numbered, wrapped lines with a row in the visible
+% Top..Top+H-1, offset so that row Top is at the top, and clipped. A line
+% only partly visible at either edge is drawn whole; the port clips it.
+model_text(M, editor_area(port(Cols-H, [clear(Cols1-H1), translate(0-Offset, column(Numbered))]))) :-
     model_lines(M, Lines),
     model_cursor(M, Cursor),
     model_top(M, Top),
@@ -134,27 +136,35 @@ model_text(M, editor_area(port(Cols-H, [clear(Cols1-H1), translate(0-NegTop, col
     model_gutter_width_height(M, G, W, H),
     Cols1 is Cols - 1,
     H1 is H - 1,
-    NegTop is -Top,
-    layout_index_row_lines_numbered(layout(G, W, Cursor, Top, H), 1, 0, Lines, Numbered).
+    width_top_start_lines_skipped(W, Top, 1-0, Lines, N-Row, Visible),
+    Offset is Row - Top,
+    layout_index_row_lines_numbered(layout(G, W, Cursor, Top, H), N, Row, Visible, Numbered).
+
+% Lines wrapped at W, without those entirely above screen row Top. The
+% first remaining is line N, starting at screen row Row (from Start0 =
+% N0-Row0 for the first line given).
+width_top_start_lines_skipped(W, Top, N0-Row0, [Chars | Lines], Start, Visible) :-
+    width_line_rows(W, Chars, Rows),
+    Row0 + Rows =< Top, !,
+    N1 is N0 + 1,
+    Row1 is Row0 + Rows,
+    width_top_start_lines_skipped(W, Top, N1-Row1, Lines, Start, Visible).
+width_top_start_lines_skipped(_, _, Start, Lines, Start, Lines).
 
 % Lines as numbered_lines, the first being line N and starting at screen
-% row Row of the text. A line with no row in the visible Top..Top+H-1 is
-% marked offscreen(Rows); the cursor's line gets the cursor's column.
-layout_index_row_lines_numbered(_, _, _, [], []).
+% row Row, up to the last with a row above Top + H. The cursor's line gets
+% the cursor's column.
+layout_index_row_lines_numbered(_, _, _, [], []) :- !.
+layout_index_row_lines_numbered(layout(_, _, _, Top, H), _, Row, _, []) :-
+    Row >= Top + H, !.
 layout_index_row_lines_numbered(Layout, N, Row, [Chars | Lines], [D | Ds]) :-
-    Layout = layout(G, W, L-C, Top, H),
+    Layout = layout(G, W, L-C, _, _),
     width_line_rows(W, Chars, Rows),
-    (   (   Row + Rows =< Top
-        ;   Row >= Top + H
-        )
-    ->  Shown = offscreen(Rows)
-    ;   Shown = onscreen
-    ),
     (   N =:= L + 1
     ->  Col = C
     ;   Col = none
     ),
-    D = numbered_line(Shown, N, G, W, Chars, Col),
+    D = numbered_line(N, G, W, Chars, Col),
     N1 is N + 1,
     Row1 is Row + Rows,
     layout_index_row_lines_numbered(Layout, N1, Row1, Lines, Ds).
@@ -188,12 +198,7 @@ tui:at_event_is(editor_area(_), D, move(D)) :-
 % Characters that would move the terminal's cursor are shown as spaces.
 % If the cursor is on the line, at column Col, the character there (or a
 % space past the end) is drawn again as cursor(Char), placing the cursor.
-%
-% Off screen, a line draws nothing, but still takes its Rows rows, so the
-% lines after it stay in place.
-tui:alias_drawable(numbered_line(offscreen(Rows), _, _, _, _, _), translate(0-Last, [])) :- !,
-    Last is Rows - 1.
-tui:alias_drawable(numbered_line(onscreen, N, G, W, Chars, Col),
+tui:alias_drawable(numbered_line(N, G, W, Chars, Col),
                    [style([faint], Gutter), G-0-wrapped(W, Shown) | Cursor]) :-
     G1 is G - 1,
     format(string(Gutter), "~t~d~*| ", [N, G1]),

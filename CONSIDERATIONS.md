@@ -145,16 +145,19 @@ The cached extent would let an off-screen `memoize(D)` emit nothing and cost one
 
 ### What atto did instead
 
-atto's view now marks each line on or off screen, from its first screen row (a running sum of row counts, `Len // Width + 1`) against the visible rows. An off-screen `numbered_line` expands to `translate(0-(Rows-1), [])`: no cells, but an extent exactly `Rows` tall, so `column` still stacks the lines after it correctly. Row counts are computed each frame rather than tracked in the model: `length/2` is linear (it walks the list), but for 2000 lines and 266k characters all row counts take ~1.6 ms. Screens are identical before and after.
+atto's view draws only the lines with a row on screen. It skips the lines entirely above the top visible row (summing their row counts, `Len // Width + 1`), takes lines until one starts below the last visible row, and puts those in the column, offset by the first one's starting row minus the top row. The port still clips, so a line only partly visible at either edge is drawn whole and cut. Row counts are computed each frame rather than tracked in the model: `length/2` is linear (it walks the list), but for 2000 lines and 266k characters all row counts take ~1.6 ms, and only lines above the view are counted.
 
-Pipeline benchmark, 120x40, ms (median of 5, back to back):
+A first version kept every line in the column and drew off-screen lines as `translate(0-(Rows-1), [])`, an empty drawable exactly `Rows` tall. It worked (a 20k-line file went from unworkable to usable), but still expanded one alias per line per frame.
 
-| atto | view | expand | total |
+Pipeline benchmark, 120x40, ms (median of 5; each row back to back with the one before it):
+
+| atto, 2000 lines | view | expand | total |
 |---|---|---|---|
-| 100 lines, before → after | 0.03 → 0.11 | 30.38 → 16.60 | 42.38 → 28.74 |
-| 2000 lines, before → after | 0.38 → 2.11 | 426.92 → 17.08 | 439.23 → 31.31 |
+| every line drawn | 0.38 | 426.92 | 439.23 |
+| off-screen lines as empty placeholders | 2.11 | 17.08 | 31.31 |
+| placeholders (rerun) → visible lines only | 1.18 → 0.06 | 9.77 → 8.00 | 17.73 → 14.83 |
 
-Frame cost no longer grows with the document beyond the cheap row counting.
+Screens are identical across all three. The benchmark's cursor is at the top of the file; near the end, skipping the lines above the view costs a few ms at 20k lines.
 
 ### Also learned
 
