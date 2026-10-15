@@ -70,4 +70,4 @@ Then open http://localhost:4000.
 
 ## License
 
-MIT — see [LICENSE](LICENSE).
+MIT — see [./LICENSE](LICENSE).
