@@ -130,7 +130,10 @@ solve_with(Solver, In, Out)
 command_update_with(Command, In, Out)
 ```
 
-A name ending in `_by` or `_with` tells the reader what to expect: parameter, in, out. This shape also suits `foldl/4` (`foldl(command_update_with, Commands, M0, M)`).
+A name ending in `_by` or `_with` tells the reader what to expect: parameter, in, out. The order also has practical benefits:
+
+- **It suits `foldl/4`**, which calls its goal with the list element first, then the accumulator in and out: `foldl(command_update_with, Commands, M0, M)`.
+- **It suits clause indexing.** The parameter is usually what clauses are distinguished by (each `command_update_with/3` clause handles one command), while the input usually has the same shape in every clause (any model). With the parameter first, first-argument indexing selects the matching clause directly, without trying the others or leaving choice points.
 
 When the relation may be expected to work as `(?, ?, ?)`, don't use this form; name the relationship between the arguments instead:
 
