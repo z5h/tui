@@ -1,10 +1,9 @@
-:- module(example, [go/0
+:- module(demo, [go/0
                    ]).
 
-:- use_module(tui).
-:- use_module(utils).
-:- use_module(assocs).
-:- use_module(components).
+:- use_module(library(tui)).
+:- use_module(library(tui/utils)).
+:- use_module(library(tui/assocs)).
 
 :- op(601, xfy, '.>').
 :- op(601, xfy, '.<').
@@ -47,13 +46,16 @@ int_text(I, T) :-
     nth0(M, [lorem, ipsum, dolor, sit, amet, consectetur, adipiscing, elit, 'sed do eiusmod tempor'], W),
     atomic_list_concat([I, ' ', W], T), !.
 
-alldif(_, []).
-alldif(A, [H|T]) :-
-    dif(A, H),
-    alldif(A, T),
-    alldif([H|T]).
+alldif([]).
+alldif([H|T]) :-
+    not_in(H, T),
+    alldif(T).
 
-alldif([H|T]) :- alldif(H, T).
+not_in(_, []).
+not_in(A, [B|T]) :-
+    dif(A,B),
+    not_in(A, T).
+   
 
 :- det(view/2).
 :- public(view/2).
@@ -73,9 +75,9 @@ view((X-Y)-M, View) :-
     View =
         titled_frame(80-25, "My App",
                      [
-                         my_scrolled_checks(C, M),
-                         my_scrolled_checks(B, M),
-                         my_scrolled_checks(A, M)
+                         hover([bold], my_scrolled_checks(C, M)),
+                         hover([bold], my_scrolled_checks(B, M)),
+                         hover([bold], my_scrolled_checks(A, M))
                      ]
                      ./\ clock(T)
                      ./\ intercepter(LastEvent)
@@ -101,35 +103,22 @@ tui:alias_drawable(my_scrolled_checks(Id, M), View) :-
                    checks-Checks
                  ]),
     moveable_style(Id, Style),
-    View = id(Id, moveable, MV,
-              1-1-style(Style,
-                        id(Id, scroll, 20-15, SO,
+    View = moveable(Id) : moveable(MV,
+              1-1-[hover([reset, underline], "*") .>style(Style,
+                         scroll(Id) : scroll(20-15, SO,
                            checks(Checks)
-                        ))
-           ).
+                        ))]
+                        ).
 
 moveable_style(1, [fg(red)]).
 moveable_style(2, [fg(green)]).
 moveable_style(3, [fg(blue)]).
 
-% Functor(P1, P2 ...), id(Id, Functor, P1, P2 ...)
-tui:alias_drawable(IDed, Drawable) :-
-    IDed =.. [id, _Id, Alias  |Parameters],
-    Drawable =.. [Alias  |Parameters].
-
-% Thing-Event --> Thing(Id)-Event
-tui:at_event_is(IDedAlias, Alias-Updated, IDed-Updated) :-
-    IDedAlias =.. [id, Id, Alias  |_],
-    IDed =.. [Alias, Id].
-
-to_ided_checkbox(I, T, id(I, check_box, L, T)) :- int_text(I, L).
+to_ided_checkbox(I, T, check_box(I) : check_box(L, T)) :- int_text(I, L).
 
 tui:alias_drawable(checks(Checks), View) :-
     mapindexed(to_ided_checkbox, Checks, IndexedChecks),
     View = column(IndexedChecks).
-
-tui:alias_drawable(indexed_check(I, Bool), View) :-
-    View = check_box(I, Bool).
 
 list_index_is_updated([_|T], 1, H, [H|T]) :- !.
 list_index_is_updated([H|T], N, Is, [H|U]) :-
