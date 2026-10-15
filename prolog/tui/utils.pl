@@ -59,11 +59,11 @@ function_list_from_mapped(F, [H  |T], I, [MH  |MT]) :-
     J is I + 1,
     function_list_from_mapped(F, T, J, MT).
 
-pair_key_pred(Delta, K1-_, K2-_) :- compare(Delta, K1, K2).
-
+% Sorted by key, keeping only the last pair for each key. sort/4 keeps
+% the first of equal keys, which after reversing is the last.
 keylist_deduped_prioritize_last(L0, LN) :-
     reverse(L0, R),
-    predsort(pair_key_pred, R, LN).
+    sort(1, @<, R, LN).
 
 
 '#dcg'.
