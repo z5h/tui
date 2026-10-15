@@ -40,17 +40,17 @@ main :-
 
 atto(Path) :-
     path_model(Path, Model),
-    app((1-1)-Model, view, update, _).
+    app((1-1)-Model, state_view, event_update_with, _).
 
 
 '#update'.
 
 % Events become editing commands; the screen cursor is left unbound,
 % because the view places it.
-:- det(update/3).
-update(E, _-M0, S) :-
+:- det(event_update_with/3).
+event_update_with(E, _-M0, S) :-
     (   event_command(E, Command)
-    ->  model_command_next(Command, M0, Next)
+    ->  command_update_with(Command, M0, Next)
     ;   Next = M0
     ),
     (   Next = result(R)
@@ -81,8 +81,8 @@ event_command(Ch, insert(Ch)) :-
 
 '#view'.
 
-:- det(view/2).
-view(_-M, View) :-
+:- det(state_view/2).
+state_view(_-M, View) :-
     model_view(M, View).
 
 model_view(M, []) :-
@@ -93,7 +93,7 @@ model_view(M, column([Title, Text, Status, Menu])) :-
     model_size(M, Cols-_),
     model_title(M, Title),
     model_text(M, Text),
-    model_status_line(M, Status),
+    model__status_line(M, Status),
     Cols1 is Cols - 1,
     Menu = [clear(Cols1-0),
             row([style([negative], "^S"), " Save    ",
@@ -109,11 +109,11 @@ model_title(M, style([negative], Line)) :-
     ),
     string_length(Flag, FlagLen),
     Avail is Cols - 8 - FlagLen,
-    width_path_shown(Avail, Path, Shown),
+    width_fit_with(Avail, Path, Shown),
     format(string(Line), " atto  ~w~t~w~*|", [Shown, Flag, Cols]).
 
 % Path, shortened from the left to fit Avail characters.
-width_path_shown(Avail, Path, Shown) :-
+width_fit_with(Avail, Path, Shown) :-
     atom_length(Path, Len),
     (   Len =< Avail
     ->  Shown = Path
@@ -131,20 +131,21 @@ model_text(M, editor_area(port(Cols-H, [clear(Cols1-H1), translate(0-NegTop, col
     model_cursor(M, Cursor),
     model_top(M, Top),
     model_size(M, Cols-_),
-    model_layout(M, G, W, H),
+    model_gutter_width_height(M, G, W, H),
     Cols1 is Cols - 1,
     H1 is H - 1,
     NegTop is -Top,
-    mapindexed(numbered_line(G, W, Cursor), Lines, Numbered).
+    mapindexed(index_number_with(layout(G, W, Cursor)), Lines, Numbered).
 
-% Line N, with the cursor's column if the cursor is on it.
-numbered_line(G, W, L-C, N, Chars, numbered_line(N, G, W, Chars, Col)) :-
+% Line N (1-based) as a numbered_line, with the cursor's column if the
+% cursor is on it.
+index_number_with(layout(G, W, L-C), N, Chars, numbered_line(N, G, W, Chars, Col)) :-
     (   N =:= L + 1
     ->  Col = C
     ;   Col = none
     ).
 
-model_status_line(M, Line) :-
+model__status_line(M, Line) :-
     model_lines(M, Lines),
     model_cursor(M, L-C),
     model_status(M, St),
