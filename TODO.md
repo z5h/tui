@@ -1,8 +1,3 @@
-# make scrolling better
-currently, scrolling, and page up/down code shares some logic, but also
-we can't page up/down when ON a scroll bar.
-refactor, simplify.
-
 # revisit focus/hover
 make it so a style element can have hover(style) and that is when it is applied.
 under the hood, we'll do hover(style, Group), then process the list

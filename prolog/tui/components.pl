@@ -108,17 +108,25 @@ title_r('╶').
 %!  scroll(+W-+H, +ScrollX-+ScrollY, +Content)
 %
 %  A scrollable frame. Content is rendered inside a W×H bordered
-%  viewport offset by ScrollX-ScrollY. On each axis where the content
-%  does not fit, a scrollbar replaces that edge of the border (bottom
-%  for horizontal, right for vertical), drawn with half-cell resolution.
+%  viewport offset by ScrollX-ScrollY (0 or negative). On each axis where
+%  the content does not fit, a scrollbar replaces that edge of the border
+%  (bottom for horizontal, right for vertical), drawn with half-cell
+%  resolution.
+%
+%  Shift+arrows drag what is under the cursor, as with a mouse:
+%
+%    * anywhere in the frame, the content, one row or column per press
+%    * on a scrollbar, along its axis, the thumb, one half-cell per press
+%
+%  Page up and page down move by a page, anywhere in the frame.
 %
 %  Events produced:
-%    * scroll-(NewX-NewY) on arrow keys when cursor is on a scrollbar
-tui:alias_drawable(scroll(W-H, X-Y, Content), [FramePart | Bars]) :-
+%    * scroll-(NewX-NewY), the new offset
+tui:alias_drawable(scroll(W-H, X-Y, Content), scroll_view(X-Y, MaxH-MaxV, PH, [FramePart | Bars])) :-
     HM1 is H - 1,
     WM1 is W - 1,
 
-    drawable_raw(frame(W-H, X-Y-scrollable(Content, MaxScrollH, MaxScrollV), EX-EY), FramePart),
+    drawable_raw(frame(W-H, X-Y-Content, EX-EY), FramePart),
 
     % The content's size: inside the frame its port starts at 1-1, and
     % the content is offset from there by X-Y.
@@ -128,54 +136,58 @@ tui:alias_drawable(scroll(W-H, X-Y, Content), [FramePart | Bars]) :-
     PH is H - 2,
     PW is W - 2,
 
-    MaxScrollH is max(0, CW - PW),
-    MaxScrollV is max(0, CH - PH),
+    MaxH is max(0, CW - PW),
+    MaxV is max(0, CH - PH),
 
     (   CW > PW
     ->  port_content_offset_axis_scrollbar(PW, CW, X, h, HScroll),
-        HBars = [hscroll(1-HM1-HScroll, MaxScrollH)]
+        port_content_step(PW, CW, StepH),
+        HBars = [hscroll(1-HM1-HScroll, StepH)]
     ;   HBars = []
     ),
     (   CH > PH
     ->  port_content_offset_axis_scrollbar(PH, CH, Y, v, VScroll),
-        VBars = [vscroll(WM1-1-VScroll, MaxScrollV)]
+        port_content_step(PH, CH, StepV),
+        VBars = [vscroll(WM1-1-VScroll, StepV)]
     ;   VBars = []
     ),
     append(HBars, VBars, Bars).
 
-tui:alias_drawable(scrollable(C, _, _), C).
+% scroll_view(Offset, Limits, PageHeight, Drawable): a scroll's frame and
+% bars, carrying what its events need.
+tui:alias_drawable(scroll_view(_, _, _, D), D).
 
-tui:alias_drawable(vscroll(C, _), C).
-tui:alias_drawable(hscroll(C, _), C).
+tui:alias_drawable(vscroll(D, _), D).
+tui:alias_drawable(hscroll(D, _), D).
 
-tui:at_event_is(frame(_-H, X-Y-scrollable(_, _, _MaxV), _), page_up, scroll-(X-Y1)) :-
-    Delta is (H - 2 - 1),
-    Y1 is min(0, Y + Delta).
-    
-tui:at_event_is(frame(_-H, X-Y-scrollable(_, _, MaxV), _), page_down, scroll-(X-Y1)) :-
-    Delta is (H - 2 - 1),
-    Y1 is max(Y - Delta, -MaxV).
+% On a scrollbar, Shift+arrows along its axis drag the thumb by Step.
+tui:at_event_is(vscroll(_, Step), shift+D, thumb_dragged(D, Step)) :-
+    memberchk(D, [up, down]).
+tui:at_event_is(hscroll(_, Step), shift+D, thumb_dragged(D, Step)) :-
+    memberchk(D, [left, right]).
 
-tui:at_event_is(vscroll(_, Max), up, scroll_up(Max)).
-tui:at_event_is(vscroll(_, Max), down, scroll_down(Max)).
+tui:at_event_is(scroll_view(X-Y, MaxH-MaxV, PH, _), E, scroll-(X1-Y1)) :-
+    page_event_shift(PH, E, DX-DY),
+    X1 is max(-MaxH, min(0, X + DX)),
+    Y1 is max(-MaxV, min(0, Y + DY)).
 
-tui:at_event_is(hscroll(_, Max), right, scroll_right(Max)).
-tui:at_event_is(hscroll(_, Max), left, scroll_left(Max)).
-
-tui:at_event_is(scroll(_-_, X-Y, _), ScrollD, scroll-(X1-Y1)) :-
-    ( ScrollD = scroll_down(Max),
-      Y1 is max(Y - 1, -Max),
-      X1 = X
-    ; ScrollD = scroll_up(_),
-      Y1 is min(0, Y + 1),
-      X1 = X
-    ; ScrollD = scroll_right(Max),
-      X1 is max(X - 1, -Max),
-      Y1 is Y
-    ; ScrollD = scroll_left(_),
-      X1 is min(0, X + 1),
-      Y1 is Y
-    ), !.
+% How an event shifts the content, for a page PH rows high. Dragging the
+% content moves it with the arrow; dragging the thumb moves the thumb
+% with the arrow, so the content the other way.
+page_event_shift(_, shift+up, 0-(-1)).
+page_event_shift(_, shift+down, 0-1).
+page_event_shift(_, shift+left, (-1)-0).
+page_event_shift(_, shift+right, 1-0).
+page_event_shift(_, thumb_dragged(up, S), 0-S).
+page_event_shift(_, thumb_dragged(down, S), 0-DY) :-
+    DY is -S.
+page_event_shift(_, thumb_dragged(left, S), S-0).
+page_event_shift(_, thumb_dragged(right, S), DX-0) :-
+    DX is -S.
+page_event_shift(PH, page_up, 0-Page) :-
+    Page is max(1, PH - 1).
+page_event_shift(PH, page_down, 0-DY) :-
+    DY is -max(1, PH - 1).
 
 
 '#helpers'.
@@ -215,23 +227,33 @@ scroll_char(v, s, f, '╽').
 scroll_char(v, f, s, '╿').
 
 % The scrollbar along axis S (h or v) for a port PD cells long, showing
-% content CD long scrolled to offset CO (0 or negative). The track is PD
-% cells of two halves each. The thumb's length, in whole halves, depends
-% only on PD and CD, and its start moves with the offset, from the first
-% half at offset 0 to the last at the largest offset. Fixing the length
-% first keeps it from changing as the thumb moves. If the content fits,
-% there is no thumb.
+% content CD long (CD > PD) scrolled to offset CO (0 or negative). Its
+% thumb starts at the first half at offset 0, and at the last half the
+% thumb can reach at the largest offset.
 port_content_offset_axis_scrollbar(PD, CD, CO, S, D) :-
-    Halves is 2 * PD,
-    (   PD >= CD
-    ->  Start = 0,
-        Len = 0
-    ;   Len is max(1, round(Halves * PD / CD)),
-        Travel is Halves - Len,
-        Start is max(0, min(Travel, round(Travel * -CO / (CD - PD))))
-    ),
+    port_content_thumb(PD, CD, Len, Travel),
+    Start is max(0, min(Travel, round(Travel * -CO / (CD - PD)))),
     End is Start + Len,
     axis_thumb_cells_scrollbar(S, Start-End, 0, PD, D).
+
+% The thumb for a port PD cells long showing content CD long (CD > PD):
+% the track is PD cells of two halves each; the thumb is Len halves long,
+% and its start can move Travel halves. The length depends only on PD and
+% CD, so it does not change as the thumb moves.
+port_content_thumb(PD, CD, Len, Travel) :-
+    Halves is 2 * PD,
+    Len is max(1, round(Halves * PD / CD)),
+    Travel is Halves - Len.
+
+% How far the content moves when the thumb is dragged one half: the
+% scroll range over the thumb's travel, at least 1.
+port_content_step(PD, CD, Step) :-
+    port_content_thumb(PD, CD, _, Travel),
+    Max is CD - PD,
+    (   Travel > 0
+    ->  Step is max(1, round(Max / Travel))
+    ;   Step = Max
+    ).
 
 % Cells N up to M of the track, with the thumb covering halves Start up
 % to (not including) End.

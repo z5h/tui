@@ -127,7 +127,7 @@ Lightweight association list library using plain `Key-Value` pair lists (not `li
 
 ### components.pl
 
-Ready-made, styled components, opt-in via `library(tui/components)`: `check_box/2`, `input/3`, `frame/2-3`, `titled_frame/3-4`, `scroll/3`. Components here make styling choices; building blocks without them belong in `drawable.pl`. Agreed conventions for this module: focus (the cursor on a component, via `hover/2`) is shown bold; Space and Return activate; faint means inactive or unset; components emit `Name-Value` events; buttons look like `[ OK ]`.
+Ready-made, styled components, opt-in via `library(tui/components)`: `check_box/2`, `input/3`, `frame/2-3`, `titled_frame/3-4`, `scroll/3`. Components here make styling choices; building blocks without them belong in `drawable.pl`. Agreed conventions for this module: focus (the cursor on a component, via `hover/2`) is shown bold; Space and Return activate; faint means inactive or unset; components emit `Name-Value` events; buttons look like `[ OK ]`; Shift+arrows drag what is under the cursor in the arrow's direction, as with a mouse (in a scroll area the content, on a scrollbar the thumb), leaving plain arrows to the cursor.
 
 ### TODO.md and CONSIDERATIONS.md
 
