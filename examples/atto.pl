@@ -94,8 +94,7 @@ model_view(M, column([Title, Text, Status, Menu])) :-
     model_title(M, Title),
     model_text(M, Text),
     model__status_line(M, Status),
-    Cols1 is Cols - 1,
-    Menu = [clear(Cols1-0),
+    Menu = [clear(Cols-1),
             row([style([negative], "^S"), " Save    ",
                  style([negative], "^R"), " Revert    ",
                  style([negative], "^Q"), " Quit"])].
@@ -128,14 +127,12 @@ width_fit_with(Avail, Path, Shown) :-
 % The text area: the numbered, wrapped lines with a row in the visible
 % Top..Top+H-1, offset so that row Top is at the top, and clipped. A line
 % only partly visible at either edge is drawn whole; the port clips it.
-model_text(M, editor_area(port(Cols-H, [clear(Cols1-H1), translate(0-Offset, column(Numbered))]))) :-
+model_text(M, editor_area(port(Cols-H, [clear(Cols-H), translate(0-Offset, column(Numbered))]))) :-
     model_lines(M, Lines),
     model_cursor(M, Cursor),
     model_top(M, Top),
     model_size(M, Cols-_),
     model_gutter_width_height(M, G, W, H),
-    Cols1 is Cols - 1,
-    H1 is H - 1,
     width_top_start_lines_skipped(W, Top, 1-0, Lines, N-Row, Visible),
     Offset is Row - Top,
     layout_index_row_lines_numbered(layout(G, W, Cursor, Top, H), N, Row, Visible, Numbered).

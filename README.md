@@ -41,7 +41,7 @@ Views are built from a term-based DSL:
 - **Layout**: `.>` (horizontal), `.<` (horizontal, right-aligned first), `.\/` (vertical), `./\` (vertical, bottom-aligned first)
 - **Combinators**: `translate(DX-DY, D)`, `X-Y-D`, `port(W-H, D)`, `style(Attrs, D)`
 - **Core drawables**: `row/1`, `column/1`, `wrapped(Width, Chars)`, `clear(W-H)`, `line(Char, From, To)`, `box(W-H, Chars)` (`thin`, `thick`, `double`, or your own characters), `hover(Style, D)`, `cursor(D)`
-- **Components** (opt-in, `:- use_module(library(tui/components))`): `check_box/2`, `input/3`, `frame/2`, `titled_frame/3`, `scroll/3`
+- **Components** (opt-in, `:- use_module(library(tui/components))`): `check_box/2`, `button/1`, `input/3`, `frame/2`, `titled_frame/3`, `scroll/3`
 - **Tagging**: `Key : Drawable` — attaches an identity for event routing
 
 ### Custom Components

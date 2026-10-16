@@ -311,12 +311,14 @@ width_chars_rows(W, Chars, [chars(Row) | Rows]) :-
 
 %!  clear(+W-+H)
 %
-%  A rectangle of spaces with reset styling, covering 0..W by 0..H (so
-%  W+1 by H+1 cells). Used to erase a region before drawing over it.
+%  A W×H rectangle of spaces with reset styling. Used to erase a region
+%  before drawing over it.
 tui:alias_drawable(clear(W-H), style([reset, bg(default)], Spaces)) :-
+    W1 is W - 1,
+    H1 is H - 1,
     findall((X-Y)-' ',
-            ( between(0, W, X),
-              between(0, H, Y) ),
+            ( between(0, W1, X),
+              between(0, H1, Y) ),
             Spaces).
 
 %!  line(+Char, +From, +To)

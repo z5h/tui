@@ -122,8 +122,8 @@ test(box_corners) :-
     L > 0.
 
 test(clear_fills) :-
-    drawable_raw(clear(2-2), raw(Cmds)),
-    length(Cmds, 9).  % 0..2 x 0..2 = 3x3
+    drawable_raw(clear(3-2), raw(Cmds)),
+    length(Cmds, 6).
 
 :- end_tests(drawables).
 
@@ -242,12 +242,16 @@ test(relative, [forall(member(View, [probe_view, raw_probe_view]))]) :-
 :- use_module(library(tui/drawable), [drawable__normalized_commands__end/3]).
 :- use_module(library(tui/events), [point_event_assoc_bubbled/4]).
 
-% What E at point X-Y becomes, on an input showing Value at 1-1.
-value_point_event_bubbled(Value, X-Y, E, Es) :-
-    drawable__normalized_commands__end(name : input(4, "", Value), Commands, _),
+% What E at point X-Y becomes, on D drawn at 1-1.
+drawable_point_event_bubbled(D, X-Y, E, Es) :-
+    drawable__normalized_commands__end(D, Commands, _),
     findall(P-S, member(P-(S-_-_), Commands), Pairs),
     list_to_assoc(Pairs, Assoc),
     findall(E1, point_event_assoc_bubbled(X-Y, E, Assoc, E1), Es).
+
+% What E at point X-Y becomes, on an input showing Value.
+value_point_event_bubbled(Value, XY, E, Es) :-
+    drawable_point_event_bubbled(name : input(4, "", Value), XY, E, Es).
 
 test(typed) :-
     value_point_event_bubbled(_, 3-1, a, Es),
@@ -280,6 +284,19 @@ test(on_prompt) :-
 test(not_an_edit) :-
     value_point_event_bubbled("a", 3-1, up, Es),
     Es == [up].
+
+test(button, [forall(member(E, [' ', return]))]) :-
+    drawable_point_event_bubbled(ok : button("OK"), 3-1, E, Es),
+    Es == [ok-pressed].
+
+test(check_box) :-
+    drawable_point_event_bubbled(c : check_box("a", false), 1-1, ' ', Es),
+    Es == [c-true].
+
+test(clear_inside_frame) :-
+    drawable__normalized_commands__end(frame(4-3, []), Commands, _),
+    forall(member((X-Y)-(_-_-' '), Commands),
+           ( X == 2, Y == 2 ; X == 3, Y == 2 )).
 
 :- end_tests(input_component).
 

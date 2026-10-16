@@ -23,23 +23,33 @@ tagging, cursor) are core, in library(tui/drawable).
 
 %!  check_box(+Title, +Bool)
 %
-%  A toggleable checkbox. Displays [x] or [ ] followed by Title.
-%  Highlighted with underline on hover. Faint when unchecked.
+%  A toggleable checkbox. Displays [x] or [ ] followed by Title, faint
+%  when unchecked, bold with the cursor on it.
 %
 %  Events produced:
 %    * check_box-NewBool on space or return (toggles Bool)
-tui:alias_drawable(check_box(Title, Bool), CheckWithHover) :-
+tui:alias_drawable(check_box(Title, Bool), hover([bold], Check)) :-
     (  Bool = true
     -> Check = style([     ], ('[x]' .> ': ' .> Title))
     ;  Check = style([faint], ('[ ]' .> ': ' .> Title))
-    ),
-    CheckWithHover = hover([underline], Check).
+    ).
 
 not(true, false).
 not(false, true).
 
 tui:at_event_is(check_box(_Title, Bool), _-' ', check_box-T) :- not(Bool, T).
 tui:at_event_is(check_box(_Title, Bool), _-return, check_box-T) :- not(Bool, T).
+
+%!  button(+Label)
+%
+%  A button, shown as [ Label ], bold with the cursor on it.
+%
+%  Events produced:
+%    * button-pressed on space or return
+tui:alias_drawable(button(Label), hover([bold], '[ ' .> Label .> ' ]')).
+
+tui:at_event_is(button(_), _-' ', button-pressed).
+tui:at_event_is(button(_), _-return, button-pressed).
 
 %!  input(+Width, +Placeholder, ?Value)
 %
@@ -137,22 +147,15 @@ tui:alias_drawable(frame(W-H, Contents, Extent), [Clear, Box, Port]) :-
 %!  titled_frame(+W-+H, +Title, +Contents)
 %!  titled_frame(+W-+H, +Title, +Contents, -Extent)
 %
-%  A frame with a bold Title rendered in the top border. Title is
-%  truncated if it exceeds the frame width.
+%  A frame with Title in its top border, cut off at the frame's edge.
+%  Title is any drawable.
 tui:alias_drawable(titled_frame(W-H, Title, Contents), titled_frame(W-H, Title, Contents, _)).
 tui:alias_drawable(titled_frame(W-H, Title, Contents, Extent), [FramePart, 1-0-TitlePart]) :-
     title_l(TL),
     title_r(TR),
     FramePart = frame(W-H, Contents, Extent),
     MaxTitleLength is W - 2,
-    TitlePart = [TL .> port(MaxTitleLength-1, Title .> TR) ].
-    
-    % string_length(Title, TitleLength),
-    % (  TitleLength > MaxTitleLength
-    % -> string_length_adjusted(Title, MaxTitleLength, TitleText),
-    %    TitlePart = TL .> style([bold], TitleText) .> TR
-    % ;  TitlePart = TL .> style([bold], Title) .> TR
-    % ).
+    TitlePart = port(MaxTitleLength-1, TL .> Title .> TR).
 
 title_l('╴').
 title_r('╶').
