@@ -24,16 +24,16 @@ This is a SWI-Prolog pack. Library modules live in `prolog/`, internal modules i
 - `prolog/tui/loop.pl` — `tui_loop`: `app/4`, `app/5` and the event loop
 - `prolog/tui/components.pl` — `tui_components`: ready-made, styled components (opt-in, not loaded by `library(tui)`)
 - `prolog/tui/assocs.pl` — `tui_assocs`
-- `examples/demo.pl` — example app
+- `examples/` — one topic each: `hello.pl`, `layout.pl`, `events.pl`, `cursor.pl`, `gallery.pl` (the components), `move.pl`
 - `examples/atto.pl` — atto, a tiny text editor: key bindings and view; `examples/atto_lib.pl` is its editing model (document, cursor, scrolling, files), driven by commands
 - `test/test_tui.pl` — plunit tests
 - `pack.pl` — pack metadata
 
 ## Commands
 
-- **Run the example app**: `swipl -p library=prolog -g go examples/demo.pl`
+- **Run an example**: `swipl -p library=prolog examples/gallery.pl` (each example runs on load)
 - **Run the atto editor**: `swipl -p library=prolog examples/atto.pl -- FILE` (the `--` stops swipl from loading a `.pl` FILE as code)
-- **Verify modules load**: `swipl -p library=prolog -g halt examples/demo.pl`
+- **Verify an example loads**: `swipl -p library=prolog -g "list_undefined, halt" examples/gallery.pl` (`-g` goals run before the example's main)
 - **Painting benchmark** (needs a real terminal): `swipl -p library=prolog bench/paint.pl [FRAMES]` — how long the terminal takes to draw prepared runs, synced with a device-attributes round trip
 - **Pipeline benchmark** (runs anywhere): `swipl -p library=prolog bench/pipeline.pl [REPEATS]` — per-stage cost of turning a view into runs
 - **Reload code**: `make.` in a running SWI-Prolog session

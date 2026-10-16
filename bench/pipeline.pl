@@ -28,7 +28,7 @@ milliseconds. Stages, in the order the loop runs them:
 :- use_module(library(tui/render)).
 :- use_module(library(tui/loop)).
 
-:- use_module('../examples/demo', []).
+:- use_module('../examples/gallery', []).
 :- use_module('../examples/atto', []).
 
 :- initialization(main, main).
@@ -51,8 +51,8 @@ main :-
 % scene(Name, Cols-Rows, State, View)
 scene(text, 120-40, (1-1)-none, text_view).
 scene(styled, 120-40, (1-1)-none, styled_view).
-scene(demo, 80-25, State, demo:view) :-
-    demo:init(State).
+scene(gallery, 80-25, State, gallery:view) :-
+    gallery:state0(State).
 scene(atto_100, 120-40, _-M, atto:state_view) :-
     atto_model(100, 120-40, M).
 scene(atto_2000, 120-40, _-M, atto:state_view) :-

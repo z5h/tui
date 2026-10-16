@@ -11,21 +11,33 @@ A TUI framework inspired by TEA (The Elm Architecture). Define your app with a m
 ## Quick Start
 
 ```prolog
-:- module(hello, [go/0]).
+:- module(hello, []).
 :- use_module(library(tui)).
 
-:- op(601, xfy, '.\\/').
+:- initialization(main, main).
 
-view(_State, "Press q to quit" .\/ "Hello, TUI!").
+main :-
+    app((1-1)-[], view, update, _).
 
-update(q, State, result(State)).
-update(_, State, State).
+view(_, "Hello, TUI!" .\/ "Press q to quit").
 
-go :-
-    app(1-1-[], view, update, _Result).
+update(q, S, result(S)).
+update(_, S, S).
 ```
 
-Run with `swipl -g go hello.pl`.
+Run with `swipl hello.pl`. The state is `(CursorX-CursorY)-Model`; update returns a new state, or `result(R)` to quit.
+
+## Examples
+
+In `examples/`, each runnable as `swipl -p library=prolog examples/NAME.pl` from a clone:
+
+- `hello.pl` — the above
+- `layout.pl` — the core drawables
+- `events.pl` — a custom component, and tagging instances with `Key : Drawable`
+- `cursor.pl` — the default cursor, and placing it from the view with `cursor/1`
+- `gallery.pl` — the ready-made components
+- `move.pl` — dragging with Shift+arrows, and `moved(Direction)`
+- `atto.pl` — a small text editor: `swipl -p library=prolog examples/atto.pl -- FILE`
 
 ## Architecture
 
