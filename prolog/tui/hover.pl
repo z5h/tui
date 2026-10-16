@@ -39,7 +39,7 @@ apply_focus(X-Y, Commands) :-
 apply_focus(_, _).
 
 stack_focused([]).
-stack_focused([hover(_,_,true) | Tail ]) :- !,
+stack_focused([_-hover(_,_,true) | Tail ]) :- !,
     stack_focused(Tail).
 stack_focused([_ | Tail]) :-
     stack_focused(Tail).

@@ -38,8 +38,8 @@ tui:alias_drawable(check_box(Title, Bool), CheckWithHover) :-
 not(true, false).
 not(false, true).
 
-tui:at_event_is(check_box(_Title, Bool), ' ', check_box-T) :- not(Bool, T).
-tui:at_event_is(check_box(_Title, Bool), return, check_box-T) :- not(Bool, T).
+tui:at_event_is(check_box(_Title, Bool), _-' ', check_box-T) :- not(Bool, T).
+tui:at_event_is(check_box(_Title, Bool), _-return, check_box-T) :- not(Bool, T).
 
 %!  input(+Width, +Placeholder, ?Value)
 %
@@ -161,12 +161,12 @@ tui:alias_drawable(vscroll(D, _), D).
 tui:alias_drawable(hscroll(D, _), D).
 
 % On a scrollbar, Shift+arrows along its axis drag the thumb by Step.
-tui:at_event_is(vscroll(_, Step), shift+D, thumb_dragged(D, Step)) :-
+tui:at_event_is(vscroll(_, Step), _-(shift+D), thumb_dragged(D, Step)) :-
     memberchk(D, [up, down]).
-tui:at_event_is(hscroll(_, Step), shift+D, thumb_dragged(D, Step)) :-
+tui:at_event_is(hscroll(_, Step), _-(shift+D), thumb_dragged(D, Step)) :-
     memberchk(D, [left, right]).
 
-tui:at_event_is(scroll_view(X-Y, MaxH-MaxV, PH, _), E, scroll-(X1-Y1)) :-
+tui:at_event_is(scroll_view(X-Y, MaxH-MaxV, PH, _), _-E, scroll-(X1-Y1)) :-
     page_event_shift(PH, E, DX-DY),
     X1 is max(-MaxH, min(0, X + DX)),
     Y1 is max(-MaxV, min(0, Y + DY)).

@@ -103,7 +103,11 @@ Expansion produces a flat list of `(X-Y)-(Stack-Attrs-Char)` commands, deduplica
 
 Custom components are defined as multifile `tui:alias_drawable(Term, Drawable)` clauses. During rendering, the alias stack tracks which components produced each character at each coordinate.
 
-Event rewriting uses multifile `tui:at_event_is(AliasOrStack, RawEvent, RewrittenEvent)` — components intercept and transform events before they bubble up. This is how checkboxes turn `' '` into `check_box-true/false`, scrollables turn arrow keys into scroll offsets, and moveables capture direction events.
+Event rewriting uses multifile `tui:at_event_is(AliasOrStack, X-Y-RawEvent, RewrittenEvent)` — components intercept and transform events before they bubble up. This is how checkboxes turn `' '` into `check_box-true/false`, scrollables turn Shift+arrows into scroll offsets, and moveables capture direction events.
+
+Stack entries are `Origin-Alias`, Origin being the offset the alias was drawn at (the `raw` clause shifts the origins of embedded commands). `stack_event_is/3` (`events.pl`) takes the absolute `X-Y-Event` and gives each component the event relative to its origin, so an input knows where in it the cursor is. Under a scroll, relative positions are content positions. `[]` sees the absolute position, or the bare event when there is no cursor.
+
+Bubbling is nondeterministic: `at_event_is/3` may have several solutions (`*->`), each bubbling on from the same component. The loop collects them all (`findall`) and folds them in order: a direction moves the cursor, anything else goes to update, and `result(R)` stops. All are routed through the frame the raw event arrived at. A cursor movement bubbles `moved(Dir)` from the old position; the cursor moves regardless, and whatever `moved(Dir)` becomes (other than itself) goes to update with the cursor moved. So a component can, e.g., answer a key with both a new value and `right` to advance the cursor.
 
 ### Tagging with `Key : Drawable`
 

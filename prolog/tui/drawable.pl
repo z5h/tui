@@ -14,7 +14,9 @@
 
 A term language for drawing onto a grid of styled characters. Drawables
 expand to commands (X-Y)-(Stack-Attrs-Char), where Stack records which
-aliases (see tui:alias_drawable/2) produced the character.
+aliases (see tui:alias_drawable/2) produced the character, innermost
+first, each as Origin-Alias: Origin is the X-Y offset the alias was
+drawn at.
 
 Besides the primitives in drawable//5, this module defines the core
 drawables that make no styling choices: layout (row/1, column/1,
@@ -45,7 +47,7 @@ drawable__normalized_commands__end(Drawables, Deduped, MXY) :-
 %
 %  True if Command is a valid drawing command.
 %  A command is (X-Y)-(Stack-Attrs-Char) where X,Y are integers,
-%  Stack is the alias component stack, Attrs is a list of style
+%  Stack is the alias component stack (Origin-Alias entries), Attrs is a list of style
 %  attributes, and Char is a single-character atom.
 :- public(command/1).
 command((X-Y)-(Stack-Attrs-C)) :-
@@ -179,7 +181,7 @@ drawable(raw([H|T]), Stack, Attr, DX-DY, MX-MY) --> !,
       X1 is X + DX,
       Y1 is Y + DY,
       append(AttrH, Attr, Attr1),
-      append(StackH, Stack, Stack1),
+      stack_offset_outer_placed(StackH, DX-DY, Stack, Stack1),
       H1 = (X1-Y1)-(Stack1-Attr1-C)
     }, !,
     [H1],
@@ -256,10 +258,20 @@ drawable(B ./\ A, Stack, Attr, DX-DY, MX-MY) --> !,
 
 drawable(A, Stack, Attr, DX-DY, MX-MY) -->
     { tui:alias_drawable(A, D) }, !,
-    drawable(D, [A | Stack], Attr, DX-DY, MX-MY).
+    drawable(D, [(DX-DY)-A | Stack], Attr, DX-DY, MX-MY).
 
 drawable(D, _, _, _, _) -->
     { domain_error(drawable, D) }.
+
+% The stack of a raw command placed at offset DX-DY inside Outer: its
+% origins move with it, then Outer follows.
+stack_offset_outer_placed(Stack, 0-0, Outer, Placed) :- !,
+    append(Stack, Outer, Placed).
+stack_offset_outer_placed([], _, Outer, Outer).
+stack_offset_outer_placed([(OX-OY)-A | T], DX-DY, Outer, [(OX1-OY1)-A | T1]) :-
+    OX1 is OX + DX,
+    OY1 is OY + DY,
+    stack_offset_outer_placed(T, DX-DY, Outer, T1).
 
 
 '#layout'.
@@ -376,7 +388,7 @@ style_box_chars(double, box_chars('═', '║', '╔', '╗', '╚', '╝')).
 %  turns scroll-(0-5) from the scroll into scroll(Id)-(0-5).
 tui:alias_drawable(_:D, D).
 
-tui:at_event_is(Key:Inner, Name-Value, Key-Value) :-
+tui:at_event_is(Key:Inner, _-(Name-Value), Key-Value) :-
     functor(Inner, Name, _).
 
 

@@ -8,7 +8,8 @@
 /** <module> Event bubbling
 
 Events at a screen point bubble through the stack of components drawn
-there, each of which may rewrite the event via tui:at_event_is/3.
+there, each of which may rewrite the event via tui:at_event_is/3. A
+component sees where the event happened relative to its origin.
 */
 
 :- use_module(library(tui/utils)).
@@ -16,31 +17,50 @@ there, each of which may rewrite the event via tui:at_event_is/3.
 
 '#bubbling'.
 
-%!  stack_event_is(+Stack, +RawEvent, -BubbledEvent) is det.
+%!  stack_event_is(+Stack, +X-Y-RawEvent, -BubbledEvent) is multi.
 %
-%  Walk the component Stack from innermost to outermost, giving each
-%  component a chance to rewrite the event via at_event_is/3. If no
-%  component rewrites the event, BubbledEvent = RawEvent.
-stack_event_is(V, _, _) :- var(V), domain_error(stack_event_is, stack:V).
-stack_event_is(_, V, _) :- var(V), domain_error(stack_event_is, event:V).
-stack_event_is([H|T], E, Is) :- !,
-    (  tui:at_event_is(H, E, Next)
-    -> stack_event_is([H|T], Next, Is)
-    ;  stack_event_is(T, E, Is)
+%  Walk the component Stack, entries Origin-Alias, from innermost to
+%  outermost. Each component sees the event at X-Y relative to its
+%  origin, RX-RY-RawEvent, and may rewrite it via at_event_is/3, once or
+%  in several ways; each rewrite bubbles on from the same component. The
+%  bottom of the stack, [], sees X-Y-RawEvent. If no component rewrites
+%  the event, BubbledEvent = RawEvent.
+stack_event_is(Stack, (X-Y)-E, Is) :-
+    point_stack_event_is(X-Y, Stack, E, Is).
+
+% As stack_event_is/3, at Point, which is X-Y or none. With no point,
+% the bottom of the stack sees the event bare.
+point_stack_event_is(_, V, _, _) :- var(V), domain_error(stack_event_is, stack:V).
+point_stack_event_is(_, _, V, _) :- var(V), domain_error(stack_event_is, event:V).
+point_stack_event_is(X-Y, [(OX-OY)-A | T], E, Is) :- !,
+    RX is X - OX,
+    RY is Y - OY,
+    (   tui:at_event_is(A, (RX-RY)-E, Next)
+    *-> point_stack_event_is(X-Y, [(OX-OY)-A | T], Next, Is)
+    ;   point_stack_event_is(X-Y, T, E, Is)
     ).
-stack_event_is([], E, Is) :- !,
-    (  tui:at_event_is([], E, Next)
-    -> stack_event_is([], Next, Is)
-    ;  Is = E
+point_stack_event_is(Point, [], E, Is) :- !,
+    point_event_positioned(Point, E, PE),
+    (   tui:at_event_is([], PE, Next)
+    *-> point_stack_event_is(Point, [], Next, Is)
+    ;   Is = E
     ).
 
-% The event E0 becomes as it bubbles through the stack at point X-Y.
+point_event_positioned(none, E, E).
+point_event_positioned(X-Y, E, (X-Y)-E).
+
+%!  point_event_assoc_bubbled(+Point, +E0, +EventAssoc, -E1) is multi.
+%
+%  E1 is what E0 becomes as it bubbles through the stack at Point (X-Y,
+%  or none for no cursor).
+point_event_assoc_bubbled(none, E0, _, E1) :- !,
+    point_stack_event_is(none, [], E0, E1).
 point_event_assoc_bubbled(X-Y, E0, EventAssoc, E1) :-
     (  get_assoc(X-Y, EventAssoc, Stack)
     -> true
     ;  Stack = []
     ),
-    stack_event_is(Stack, E0, E1).
+    point_stack_event_is(X-Y, Stack, E0, E1).
 
 
 '#event_map'.

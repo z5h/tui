@@ -50,8 +50,10 @@ Define components via multifile hooks:
 
 ```prolog
 tui:alias_drawable(my_widget(Label), style([bold], Label)).
-tui:at_event_is(my_widget(_), return, my_widget-activated).
+tui:at_event_is(my_widget(_), _X-_Y-return, my_widget-activated).
 ```
+
+A component sees each event with where it happened, relative to the component. It may rewrite an event in several ways (for example a new value, and `right` to advance the cursor); each reaches `update/3` in turn.
 
 ### Event Bubbling
 

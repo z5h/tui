@@ -200,6 +200,41 @@ test(mismatch, [throws(error(vcr_mismatch(expect(runs(_)), expect(clear)), _))])
 :- end_tests(vcr).
 
 
+:- begin_tests(events).
+
+:- multifile tui:alias_drawable/2.
+:- multifile tui:at_event_is/3.
+
+% probe(D): k becomes where it hit, relative to the probe, and a move
+% right; a move away from the probe is reported, with where it started.
+tui:alias_drawable(probe(D), D).
+
+tui:at_event_is(probe(_), (X-Y)-k, hit(X-Y)).
+tui:at_event_is(probe(_), _-k, right).
+tui:at_event_is(probe(_), (X-Y)-moved(D), moved_from(D, X-Y)).
+
+probe_update(eos, S, result(S)) :- !.
+probe_update(E, (X-Y)-Es, (X-Y)-[E | Es]).
+
+probe_view(_, "ab" .> probe("xyz")).
+
+% Drawn on its own, then embedded: its origin moves with it.
+raw_probe_view(_, "ab" .> R) :-
+    drawable_raw(probe("xyz"), R).
+
+test(relative, [forall(member(View, [probe_view, raw_probe_view]))]) :-
+    Script = [ send([terminal_size(10, 3)]),
+               expect(clear),
+               expect(runs([(1-1)-([]-[a, b, x]), (4-1)-([negative]-[y]), (5-1)-([]-[z])])),
+               send([k]),
+               expect(runs([(1-1)-([]-[a, b, x, y]), (5-1)-([negative]-[z])]))
+             ],
+    app(vcr(Script), (4-1)-[], View, probe_update, Result),
+    Result == (5-1)-[moved_from(right, 1-0), hit(1-0), terminal_size(10, 3)].
+
+:- end_tests(events).
+
+
 :- begin_tests(input).
 
 % Codes - Events, decoding completely.

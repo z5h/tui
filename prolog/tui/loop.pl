@@ -148,33 +148,56 @@ frame_state_shown(frame(_, _, _, Cursor), Cursor0-Model, Shown) :-
     ;   Shown = Cursor-Model
     ).
 
-% The state an event leads to, or result(R). Cursor movement is handled
-% here; other events are bubbled through the component stack under the
-% cursor and passed to Update.
+% The state an event leads to, or result(R). The event bubbles through
+% the component stack under the cursor; each event it becomes, in order,
+% is either a cursor movement, handled here, or passed to Update. All
+% are routed through Frame, the frame the event arrived at.
 :- meta_predicate frame_update_event_state0_state(+, 3, +, +, -).
-frame_update_event_state0_state(frame(_, EventAssoc, Extent, Cursor), Update, E0, S0, S) :-
-    _-Model0 = S0,
-    cursor_event_assoc_bubbled(Cursor, E0, EventAssoc, E1),
-    (   E1 = result(_)
-    ->  S = E1
-    ;   direction(E1),
-        Cursor = X-Y
-    ->  limits_direction_from_to(Extent, E1, X-Y, NX-NY),
-        (   X-Y = NX-NY
-        ->  S = S0
-        ;   point_event_assoc_bubbled(X-Y, moved(E1, X-Y, NX-NY), EventAssoc, E2),
-            (   E2 = moved(E1, X-Y, NX-NY)
-            ->  S = (NX-NY)-Model0
-            ;   call(Update, E2, (NX-NY)-Model0, S)
-            )
-        )
-    ;   call(Update, E1, S0, S)
+frame_update_event_state0_state(Frame, Update, E0, S0, S) :-
+    Frame = frame(_, EventAssoc, _, Cursor),
+    findall(E1, point_event_assoc_bubbled(Cursor, E0, EventAssoc, E1), Es),
+    frame_update_bubbled_state0_state(Frame, Update, Es, S0, S).
+
+:- meta_predicate frame_update_bubbled_state0_state(+, 3, +, +, -).
+frame_update_bubbled_state0_state(_, _, [], S, S).
+frame_update_bubbled_state0_state(Frame, Update, [E | Es], S0, S) :-
+    frame_update_one_state0_state(Frame, Update, E, S0, S1),
+    (   S1 = result(_)
+    ->  S = S1
+    ;   frame_update_bubbled_state0_state(Frame, Update, Es, S1, S)
     ).
 
-cursor_event_assoc_bubbled(none, E0, _, E1) :- !,
-    stack_event_is([], E0, E1).
-cursor_event_assoc_bubbled(XY, E0, EventAssoc, E1) :-
-    point_event_assoc_bubbled(XY, E0, EventAssoc, E1).
+% A direction moves the cursor, if there is one, within the frame's
+% extent. moved(Dir) then bubbles at the cursor's old position; what it
+% becomes, if anything else, is passed to Update with the cursor moved.
+:- meta_predicate frame_update_one_state0_state(+, 3, +, +, -).
+frame_update_one_state0_state(frame(_, EventAssoc, Extent, _), Update, E, S0, S) :-
+    (   E = result(_)
+    ->  S = E
+    ;   direction(E),
+        S0 = (X-Y)-Model0,
+        ground(X-Y)
+    ->  limits_direction_from_to(Extent, E, X-Y, NX-NY),
+        (   X-Y = NX-NY
+        ->  S = S0
+        ;   findall(E2, point_event_assoc_bubbled(X-Y, moved(E), EventAssoc, E2), E2s),
+            exclude(==(moved(E)), E2s, Claimed),
+            update_events_state0_state(Update, Claimed, (NX-NY)-Model0, S)
+        )
+    ;   call(Update, E, S0, S)
+    ).
+
+:- meta_predicate update_events_state0_state(3, +, +, -).
+update_events_state0_state(_, [], S, S).
+update_events_state0_state(Update, [E | Es], S0, S) :-
+    (   E = result(_)
+    ->  S = E
+    ;   call(Update, E, S0, S1),
+        (   S1 = result(_)
+        ->  S = S1
+        ;   update_events_state0_state(Update, Es, S1, S)
+        )
+    ).
 
 
 '#frames'.
@@ -215,7 +238,7 @@ view_size_state_frame(View, Size, State, frame(Commands, EventAssoc, Extent, Cur
 % cursor if update bound it; otherwise none.
 state_eventmap_cursor(Cursor0-_, EventMap, Cursor) :-
     findall(Y-X, ( member((X-Y)-Stack, EventMap),
-                   memberchk(cursor(_), Stack) ), Marked),
+                   memberchk(_-cursor(_), Stack) ), Marked),
     (   Marked \== []
     ->  min_member(Y-X, Marked),
         Cursor = X-Y

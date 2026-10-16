@@ -88,7 +88,7 @@ view((X-Y)-M, View) :-
 tui:alias_drawable(quit(_), View) :-
     View = style([bg('#FFF')], "Quit").
 
-tui:at_event_is(quit(M), ' ', result(M)).
+tui:at_event_is(quit(M), _-' ', result(M)).
 
 tui:alias_drawable(intercepter(LastEvent), View) :-
     View = style([bg('#EEE')],
@@ -127,7 +127,7 @@ list_index_is_updated([H|T], N, Is, [H|U]) :-
     Next is N - 1,
     list_index_is_updated(T, Next, Is, U).
 
-tui:at_event_is(checks(Checks), check_box(I)-T, checks-Updated) :-
+tui:at_event_is(checks(Checks), _-(check_box(I)-T), checks-Updated) :-
     list_index_is_updated(Checks, I, T, Updated).
 
 % moveable
@@ -143,10 +143,10 @@ tui:alias_drawable(moveable(DX-DY-Moving, Drawable), View) :-
 not(true, false).
 not(false, true).
 
-tui:at_event_is(moveable(DX-DY-Moving, _), ' ', moveable-(DX-DY-MovingToggle)) :-
+tui:at_event_is(moveable(DX-DY-Moving, _), _-' ', moveable-(DX-DY-MovingToggle)) :-
     not(Moving, MovingToggle), !.
 
-tui:at_event_is(moveable(DX-DY-true, _), moved(D, _, _), moveable-(DX1-DY1-true)) :-
+tui:at_event_is(moveable(DX-DY-true, _), _-moved(D), moveable-(DX1-DY1-true)) :-
     (   D = left, DX1 is DX - 1, DY1 is DY
     ;   D = right, DX1 is DX + 1, DY1 is DY
     ;   D = up, DX1 is DX, DY1 is DY - 1

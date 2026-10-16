@@ -191,7 +191,7 @@ status_text(confirm_quit, "Unsaved changes: ^Q again to quit, ^S to save").
 % rather than the framework's cursor.
 tui:alias_drawable(editor_area(D), D).
 
-tui:at_event_is(editor_area(_), D, move(D)) :-
+tui:at_event_is(editor_area(_), _-D, move(D)) :-
     direction(D).
 
 % Line N: its number in a gutter G wide, then its text wrapped to W.
