@@ -104,7 +104,7 @@ tui:alias_drawable(my_scrolled_checks(Id, M), View) :-
                  ]),
     moveable_style(Id, Style),
     View = moveable(Id) : moveable(MV,
-              1-1-[hover([reset, underline], "*") .>style(Style,
+              1-1-[style(Style,
                          scroll(Id) : scroll(20-15, SO,
                            checks(Checks)
                         ))]

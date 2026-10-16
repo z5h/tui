@@ -79,21 +79,25 @@ tui:alias_drawable(clear(W-H), style([reset, bg(default)], Spaces)) :-
 tui:alias_drawable(line(Char, From, To), Line) :-
     char_from_to_line(Char, From, To, Line).
 
+at_towards_next(At, Towards, Next) :-
+    (   At < Towards
+    ->  Next is At + 1
+    ;   At > Towards
+    ->  Next is At - 1
+    ;   fail
+    ).  
 % Line and box-drawing character tables.
 
-char_from_to_line(C, X1-Y, X2-Y, L) :- !,
-    (  X1 > X2
-    -> From = X2, To = X1
-    ;  From = X1, To = X2
-    ),
-    findall((X-Y)-C, between(From, To, X), L).
-char_from_to_line(C, X-Y1, X-Y2, L) :- !,
-    (  Y1 > Y2
-    -> From = Y2, To = Y1
-    ;  From = Y1, To = Y2
-    ),
-    findall((X-Y)-C, between(From, To, Y), L).
+char_from_to_line(C, X-Y, X-Y, [X-Y-C]) :- !.
 
+char_from_to_line(C, X1-Y, X2-Y, [X1-Y-C | Tail]) :- !,
+    at_towards_next(X1, X2, Next),
+    char_from_to_line(C, Next-Y, X2-Y, Tail).
+
+char_from_to_line(C, X-Y1, X-Y2, [X-Y1-C | Tail]) :- !,
+    at_towards_next(Y1, Y2, Next),
+    char_from_to_line(C, X-Next, X-Y2, Tail).
+    
 :- discontiguous style_corner_char/3.
 :- discontiguous style_horizontal/2.
 :- discontiguous style_vertical/2.
