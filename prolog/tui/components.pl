@@ -108,16 +108,13 @@ title_r('╶').
 %!  scroll(+W-+H, +ScrollX-+ScrollY, +Content)
 %
 %  A scrollable frame. Content is rendered inside a W×H bordered
-%  viewport offset by ScrollX-ScrollY. Scroll indicators appear on
-%  the bottom and right edges using half-block line-drawing characters.
+%  viewport offset by ScrollX-ScrollY. On each axis where the content
+%  does not fit, a scrollbar replaces that edge of the border (bottom
+%  for horizontal, right for vertical), drawn with half-cell resolution.
 %
 %  Events produced:
 %    * scroll-(NewX-NewY) on arrow keys when cursor is on a scrollbar
-tui:alias_drawable(scroll(W-H, X-Y, Content),
-                   [FramePart,
-                    hscroll(1-HM1-HScroll, MaxScrollH),
-                    vscroll(WM1-1-VScroll, MaxScrollV)
-                   ]) :-
+tui:alias_drawable(scroll(W-H, X-Y, Content), [FramePart | Bars]) :-
     HM1 is H - 1,
     WM1 is W - 1,
 
@@ -131,11 +128,20 @@ tui:alias_drawable(scroll(W-H, X-Y, Content),
     PH is H - 2,
     PW is W - 2,
 
-    MaxScrollH is CW - PW,
-    MaxScrollV is CH - PH,
+    MaxScrollH is max(0, CW - PW),
+    MaxScrollV is max(0, CH - PH),
 
-    port_content_offset_axis_scrollbar(PW, CW, X, h, HScroll),
-    port_content_offset_axis_scrollbar(PH, CH, Y, v, VScroll).
+    (   CW > PW
+    ->  port_content_offset_axis_scrollbar(PW, CW, X, h, HScroll),
+        HBars = [hscroll(1-HM1-HScroll, MaxScrollH)]
+    ;   HBars = []
+    ),
+    (   CH > PH
+    ->  port_content_offset_axis_scrollbar(PH, CH, Y, v, VScroll),
+        VBars = [vscroll(WM1-1-VScroll, MaxScrollV)]
+    ;   VBars = []
+    ),
+    append(HBars, VBars, Bars).
 
 tui:alias_drawable(scrollable(C, _, _), C).
 
