@@ -191,6 +191,30 @@ test(no_cursor) :-
     \+ ground(Cursor),
     Events == [right, terminal_size(10, 3)].
 
+% A cursor where nothing is drawn shows as a highlighted space.
+gap_view(_, ["a", 2-0-"c"]).
+
+test(cursor_on_nothing) :-
+    Script = [ send([terminal_size(10, 3)]),
+               expect(clear),
+               expect(runs([(1-1)-([]-[a]), (2-1)-([negative]-[' ']), (3-1)-([]-[c])]))
+             ],
+    app(vcr(Script), (2-1)-[], gap_view, vcr_update, _).
+
+% What is no longer drawn is erased; what is drawn over is not.
+shrinking_view(_-Es, "AB") :-
+    memberchk(x, Es), !.
+shrinking_view(_, "abcd").
+
+test(erased) :-
+    Script = [ send([terminal_size(10, 3)]),
+               expect(clear),
+               expect(runs([(1-1)-([]-[a, b, c, d])])),
+               send([x]),
+               expect(runs([(1-1)-([]-['A', 'B']), (3-1)-([]-[' ', ' '])]))
+             ],
+    app(vcr(Script), _-[], shrinking_view, vcr_update, _).
+
 test(mismatch, [throws(error(vcr_mismatch(expect(runs(_)), expect(clear)), _))]) :-
     Script = [ send([terminal_size(10, 3)]),
                expect(runs([]))

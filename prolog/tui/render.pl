@@ -20,11 +20,13 @@ frame needs only the runs not already on screen.
 
 % The frame's runs in standard order, with the cursor cell highlighted.
 % The highlight is part of the cell's style, so the cursor cell forms its
-% own run and moving the cursor changes the runs it touches.
+% own run and moving the cursor changes the runs it touches. A cursor on
+% a cell nothing was drawn on shows as a highlighted space.
 limits_cursor_commands_runs(Limits, Cursor, Commands, Runs) :-
     include(limits_command_within(Limits), Commands, Onscreen),
     maplist(cursor_command_cell(Cursor), Onscreen, Cells0),
-    keysort(Cells0, Cells),
+    limits_cursor_cells_shown(Limits, Cursor, Cells0, Cells1),
+    keysort(Cells1, Cells),
     once(phrase(grouped_by_attributes(Runs0), Cells)),
     msort(Runs0, Runs).
 
@@ -40,6 +42,11 @@ cursor_command_cell(Cursor, (X-Y)-(_-A-C), (Y-X)-(Attrs-Char)) :-
     ->  append(Attrs0, [negative], Attrs)
     ;   Attrs = Attrs0
     ).
+
+limits_cursor_cells_shown(Limits, X-Y, Cells, [(Y-X)-([negative]-' ') | Cells]) :-
+    limits_point_within(Limits, X-Y),
+    \+ memberchk((Y-X)-_, Cells), !.
+limits_cursor_cells_shown(_, _, Cells, Cells).
 
 % Runs of cells on the same row, at consecutive X, with equal attributes.
 % Cells are keyed Y-X and sorted; runs are keyed X-Y.
@@ -58,7 +65,30 @@ run_chars(_, _, _, []) --> [].
 
 '#changes'.
 
-% The runs not already on screen. Runs within a frame never overlap, so
-% a run in Previous is exactly what is at those cells.
+% The runs to paint: those not already on screen, and blank runs for the
+% cells drawn before but no longer. Runs within a frame never overlap, so
+% a run in Previous is exactly what is at those cells, and a removed run
+% can only be covered by a new one.
 runs_previous_changed(Runs, Previous, Changed) :-
-    ord_subtract(Runs, Previous, Changed).
+    ord_subtract(Runs, Previous, New),
+    ord_subtract(Previous, Runs, Removed),
+    (   Removed == []
+    ->  Changed = New
+    ;   runs_cells(Removed, Gone0),
+        runs_cells(New, Drawn),
+        ord_subtract(Gone0, Drawn, Gone),
+        findall((Y-X)-([]-' '), member(Y-X, Gone), BlankCells),
+        once(phrase(grouped_by_attributes(Blanks0), BlankCells)),
+        msort(Blanks0, Blanks),
+        ord_union(New, Blanks, Changed)
+    ).
+
+% The cells Runs cover, as a sorted list of Y-X.
+runs_cells(Runs, Cells) :-
+    findall(Y-X,
+            ( member((X0-Y)-(_-Chars), Runs),
+              length(Chars, N),
+              X1 is X0 + N - 1,
+              between(X0, X1, X) ),
+            Cells0),
+    sort(Cells0, Cells).
