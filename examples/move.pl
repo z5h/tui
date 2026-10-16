@@ -24,9 +24,9 @@ unless configured otherwise (see TODO.md).
 :- initialization(main, main).
 
 main :-
-    app((3-5)-model([ piece(a, 2-1, red),
-                      piece(b, 16-4, green),
-                      piece(c, 30-8, blue) ],
+    app((7-7)-model([ piece(a, 5-3, red),
+                      piece(b, 20-6, green),
+                      piece(c, 35-9, blue) ],
                     "Shift+arrows drag a piece"),
         view, update, _).
 
@@ -44,7 +44,7 @@ tui:alias_drawable(piece(Id, Color),
 
 tui:at_event_is(piece(_, _), _-(shift+D), piece-D) :-
     direction(D).
-tui:at_event_is(piece(_, _), (X-Y)-moved(D), piece-left) :-
+tui:at_event_is(piece(_, _), (X-Y)-moved(D), piece-exited) :-
     piece_size(W-H),
     direction_delta(D, DX-DY),
     X1 is X + DX,
@@ -75,7 +75,7 @@ view(_-model(Pieces, Status),
             Drawn).
 
 update(q, S, result(S)) :- !.
-update(Id-left, C-model(Pieces, _), C-model(Pieces, Status)) :- !,
+update(Id-exited, C-model(Pieces, _), C-model(Pieces, Status)) :- !,
     format(string(Status), "The cursor left ~w", [Id]).
 update(Id-D, C0-model(Pieces0, _), C-model(Pieces, Status)) :-
     direction(D),
