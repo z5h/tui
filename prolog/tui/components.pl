@@ -123,14 +123,16 @@ tui:alias_drawable(scroll(W-H, X-Y, Content),
 
     drawable_raw(frame(W-H, X-Y-scrollable(Content, MaxScrollH, MaxScrollV), EX-EY), FramePart),
 
-    CW is EX - X + 1,
-    CH is EY - Y + 1,
+    % The content's size: inside the frame its port starts at 1-1, and
+    % the content is offset from there by X-Y.
+    CW is EX - X,
+    CH is EY - Y,
 
     PH is H - 2,
     PW is W - 2,
 
-    MaxScrollH is CW - W + 1,
-    MaxScrollV is CH - H + 1,
+    MaxScrollH is CW - PW,
+    MaxScrollV is CH - PH,
 
     port_content_offset_axis_scrollbar(PW, CW, X, h, HScroll),
     port_content_offset_axis_scrollbar(PH, CH, Y, v, VScroll).
