@@ -43,10 +43,19 @@ tui:at_event_is(check_box(_Title, Bool), _-return, check_box-T) :- not(Bool, T).
 
 %!  input(+Width, +Placeholder, ?Value)
 %
-%  A text input field of fixed Width. When Value is unbound, displays
-%  the Placeholder in faint underlined style. When bound, displays the
-%  value underlined.
-tui:alias_drawable(input(W, PlaceholderA, ValueA), D) :-
+%  A one-line text field Width wide, after a faint '> ', bold with the
+%  cursor on it. Shows Value underlined, or while Value is unbound, the
+%  Placeholder faint and underlined. Text beyond Width is not shown.
+%
+%  With the cursor in the field: typing inserts at the cursor (at the end
+%  of the text, if the cursor is past it) and advances it, backspace
+%  deletes before the cursor, delete deletes at it, and a paste is
+%  inserted, its line breaks as spaces.
+%
+%  Events produced:
+%    * input-NewValue, a string, followed by the moves (right or left)
+%      that keep the cursor after the edit
+tui:alias_drawable(input(W, PlaceholderA, ValueA), hover([bold], D)) :-
     atomics_to_string([PlaceholderA], Placeholder),
     (  var(ValueA)
     -> string_length_adjusted(Placeholder, W, Displayed),
@@ -57,6 +66,52 @@ tui:alias_drawable(input(W, PlaceholderA, ValueA), D) :-
     ),
     D = [style([faint], 0-0-'> '),
          2-0-Field].
+
+tui:at_event_is(input(_, _, ValueA), (X-_)-E, Is) :-
+    I0 is X - 2,
+    I0 >= 0,
+    (   var(ValueA)
+    ->  Value = ""
+    ;   atomics_to_string([ValueA], Value)
+    ),
+    string_length(Value, L),
+    I is min(I0, L),
+    event_index_value_edited(E, I, Value, Edited, Moves),
+    (   Is = input-Edited
+    ;   member(Is, Moves)
+    ).
+
+% Value with E applied at index I, and the cursor moves that follow.
+event_index_value_edited(paste(Text), I, Value, Edited, Moves) :- !,
+    split_string(Text, "\n", "", Lines),
+    atomic_list_concat(Lines, ' ', Inserted),
+    string_index_inserted_edited(Inserted, I, Value, Edited),
+    atom_length(Inserted, N),
+    length(Moves, N),
+    maplist(=(right), Moves).
+event_index_value_edited(backspace, I, Value, Edited, [left]) :- !,
+    I > 0,
+    sub_string(Value, 0, I, _, Before0),
+    sub_string(Before0, 0, _, 1, Before),
+    sub_string(Value, I, _, 0, After),
+    string_concat(Before, After, Edited).
+event_index_value_edited(delete, I, Value, Edited, []) :- !,
+    sub_string(Value, 0, I, _, Before),
+    sub_string(Value, I, _, 0, After0),
+    sub_string(After0, 1, _, 0, After),
+    string_concat(Before, After, Edited).
+event_index_value_edited(C, I, Value, Edited, [right]) :-
+    atom(C),
+    atom_length(C, 1),
+    char_code(C, Code),
+    Code >= 32,
+    Code =\= 127,
+    string_index_inserted_edited(C, I, Value, Edited).
+
+string_index_inserted_edited(S, I, Value, Edited) :-
+    sub_string(Value, 0, I, _, Before),
+    sub_string(Value, I, _, 0, After),
+    atomics_to_string([Before, S, After], Edited).
 
 
 '#containers'.

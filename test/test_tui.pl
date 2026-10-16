@@ -235,6 +235,55 @@ test(relative, [forall(member(View, [probe_view, raw_probe_view]))]) :-
 :- end_tests(events).
 
 
+:- begin_tests(input_component).
+
+:- use_module(library(tui/components)).
+
+:- use_module(library(tui/drawable), [drawable__normalized_commands__end/3]).
+:- use_module(library(tui/events), [point_event_assoc_bubbled/4]).
+
+% What E at point X-Y becomes, on an input showing Value at 1-1.
+value_point_event_bubbled(Value, X-Y, E, Es) :-
+    drawable__normalized_commands__end(name : input(4, "", Value), Commands, _),
+    findall(P-S, member(P-(S-_-_), Commands), Pairs),
+    list_to_assoc(Pairs, Assoc),
+    findall(E1, point_event_assoc_bubbled(X-Y, E, Assoc, E1), Es).
+
+test(typed) :-
+    value_point_event_bubbled(_, 3-1, a, Es),
+    Es == [name-"a", right].
+
+test(inserted_at_cursor) :-
+    value_point_event_bubbled("ac", 4-1, b, Es),
+    Es == [name-"abc", right].
+
+test(past_the_end) :-
+    value_point_event_bubbled("a", 5-1, b, Es),
+    Es == [name-"ab", right].
+
+test(backspace) :-
+    value_point_event_bubbled("abc", 5-1, backspace, Es),
+    Es == [name-"ac", left].
+
+test(delete) :-
+    value_point_event_bubbled("abc", 4-1, delete, Es),
+    Es == [name-"ac"].
+
+test(paste) :-
+    value_point_event_bubbled("", 3-1, paste("a\nb"), Es),
+    Es == [name-"a b", right, right, right].
+
+test(on_prompt) :-
+    value_point_event_bubbled("a", 1-1, b, Es),
+    Es == [b].
+
+test(not_an_edit) :-
+    value_point_event_bubbled("a", 3-1, up, Es),
+    Es == [up].
+
+:- end_tests(input_component).
+
+
 :- begin_tests(input).
 
 % Codes - Events, decoding completely.
