@@ -57,19 +57,6 @@ app(Substrate, State, View, Update, Result) :-
     ).
 
 
-'#cursor'.
-
-:- multifile tui:alias_drawable/2.
-
-%!  cursor(+Drawable)
-%
-%  Drawable, with the cursor on its top-left cell. This overrides any
-%  cursor in the state update produced. If several are drawn, the
-%  top-left cell of them all wins; if Drawable draws nothing, it places
-%  no cursor.
-tui:alias_drawable(cursor(D), D).
-
-
 '#posting'.
 
 % IMPURE: mutable global — the running app's wake, for senders that have

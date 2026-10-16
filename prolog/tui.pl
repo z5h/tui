@@ -12,6 +12,9 @@ A TUI framework for SWI-Prolog, inspired by TEA (The Elm Architecture).
 Components are defined via the multifile hooks alias_drawable/2 and
 at_event_is/3.
 
+This module gives the event loop and the core drawables. Ready-made,
+styled components are opt-in: load library(tui/components).
+
 @author Mark Bolusmjak
 @see app/4
 */
@@ -22,7 +25,6 @@ at_event_is/3.
 :- reexport(library(tui/drawable), [drawable//5, drawable_raw/2]).
 :- reexport(library(tui/events), [stack_event_is/3]).
 :- reexport(library(tui/loop), [app/4]).
-:- use_module(library(tui/components)).
 
 
 '#hooks'.

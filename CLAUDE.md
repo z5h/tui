@@ -14,7 +14,7 @@ This is a SWI-Prolog pack. Library modules live in `prolog/`, internal modules i
 - `prolog/tui/utils.pl` — `tui_utils`: debug helpers (`log/1`, `?`, `@`), list/DCG helpers, direction and limits geometry. Depends on nothing.
 - `prolog/tui/terminal.pl` — `tui_terminal`: generic ANSI output (`ansi_*`, `ansi_run/1`), device-attributes and Kitty keyboard queries
 - `prolog/tui/input.pl` — `tui_input`: decodes terminal input codes into events (legacy xterm and Kitty keyboard protocol), with no side effects
-- `prolog/tui/drawable.pl` — `tui_drawable`: the drawable DSL (`drawable//5`), attributes, commands, cell resolution (conceal/reveal)
+- `prolog/tui/drawable.pl` — `tui_drawable`: the drawable DSL (`drawable//5`), attributes, commands, cell resolution (conceal/reveal), and the core drawables that make no styling choices: `row/1`, `column/1`, `wrapped/2`, `clear/1`, `line/3`, `box/2`, `Key:Drawable` tagging, `cursor/1`
 - `prolog/tui/hover.pl` — `tui_hover`: the `hover/2` component and cursor-dependent hover styling
 - `prolog/tui/events.pl` — `tui_events`: event bubbling through component stacks, the event map
 - `prolog/tui/render.pl` — `tui_render`: commands → runs, and which runs changed (no side effects)
@@ -22,7 +22,7 @@ This is a SWI-Prolog pack. Library modules live in `prolog/`, internal modules i
 - `prolog/tui/substrate.pl` — `tui_substrate`: what the loop draws onto and gets events from (`terminal` or `vcr(Script)`)
 - `prolog/tui/vcr.pl` — `tui_vcr`: scripted replay for headless tests
 - `prolog/tui/loop.pl` — `tui_loop`: `app/4`, `app/5` and the event loop
-- `prolog/tui/components.pl` — `tui_components`: reusable components, including `box/2`, `clear/1`, `line/3`
+- `prolog/tui/components.pl` — `tui_components`: ready-made, styled components (opt-in, not loaded by `library(tui)`)
 - `prolog/tui/assocs.pl` — `tui_assocs`
 - `examples/demo.pl` — example app
 - `examples/atto.pl` — atto, a tiny text editor: key bindings and view; `examples/atto_lib.pl` is its editing model (document, cursor, scrolling, files), driven by commands
@@ -94,7 +94,7 @@ Drawables are a term-based DSL rendered via the DCG `drawable//5`. Key drawable 
   - `.\/` — vertical concat (top then bottom)
   - `./\` — vertical concat, bottom-aligned first
 - **Combinators**: `translate(DX-DY, D)`, `port(W-H, D)`, `style(Attrs, D)`, `X-Y-D` (shorthand for translate)
-- **Builtins**: `box(W-H, Style)`, `clear(W-H)`, `hover(Style, D)`
+- **Core drawables**: `row/1`, `column/1`, `wrapped(Width, Chars)`, `clear(W-H)`, `line(Char, From, To)`, `box(W-H, Chars)` (Chars is `box_chars(H, V, TL, TR, BL, BR)` or `thin`/`thick`/`double`), `hover(Style, D)`, `cursor(D)`
 - **Tagging**: `Key : Drawable` — annotates a drawable with a tag for event routing (see below)
 
 Expansion produces a flat list of `(X-Y)-(Stack-Attrs-Char)` commands, deduplicated (last wins). `render.pl` resolves each cell (hover, conceal, cursor highlight) and groups cells into runs `(X-Y)-(Attrs-Chars)`.
@@ -127,7 +127,7 @@ Lightweight association list library using plain `Key-Value` pair lists (not `li
 
 ### components.pl
 
-Reusable components: `box/2`, `clear/1`, `line/3`, `Key:Drawable` (tagging), `column/1`, `row/1`, `check_box/2`, `input/3`, `frame/2-3`, `titled_frame/3-4`, `scroll/3`.
+Ready-made, styled components, opt-in via `library(tui/components)`: `check_box/2`, `input/3`, `frame/2-3`, `titled_frame/3-4`, `scroll/3`. Components here make styling choices; building blocks without them belong in `drawable.pl`. Agreed conventions for this module: focus (the cursor on a component, via `hover/2`) is shown bold; Space and Return activate; faint means inactive or unset; components emit `Name-Value` events; buttons look like `[ OK ]`.
 
 ### TODO.md and CONSIDERATIONS.md
 

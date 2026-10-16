@@ -1,9 +1,11 @@
 :- module(tui_components, []).
 
-/** <module> Reusable TUI components
+/** <module> Ready-made TUI components
 
-Standard components defined via tui:alias_drawable/2 and
-tui:at_event_is/3 multifile hooks. Auto-loaded by library(tui).
+Styled components defined via the tui:alias_drawable/2 and
+tui:at_event_is/3 hooks. Opt-in: load library(tui/components) to use
+them. The unstyled building blocks they are made of (layout, shapes,
+tagging, cursor) are core, in library(tui/drawable).
 */
 
 :- use_module(library(tui)).
@@ -15,146 +17,6 @@ tui:at_event_is/3 multifile hooks. Auto-loaded by library(tui).
 :- multifile tui:at_event_is/3.
 :- discontiguous tui:alias_drawable/2.
 :- discontiguous tui:at_event_is/3.
-
-
-'#tagging'.
-
-%!  Key:Drawable — annotation operator.
-%
-%  Attaches a tag to a drawable. The left-hand side is ignored for
-%  rendering — Drawable is drawn as-is.
-%
-%  For event bubbling: when a component event (ComponentName-Value)
-%  passes through a Key:Component node, and ComponentName matches
-%  the functor of Component, the event is rewritten to Key-Value.
-%  This replaces the component's own name with the tag, namespacing
-%  the event for routing.
-%
-%  Events from deeper nested components (whose functor doesn't match)
-%  pass through unmodified. Raw events (atoms, non-pair terms) also
-%  pass through — they are not component events.
-%
-%  Example:
-%    scroll(Id) : scroll(20-15, Offset, Content)
-%    %% scroll fires scroll-(0-5), tag rewrites to scroll(1)-(0-5)
-%
-tui:alias_drawable(_:D, D).
-tui:at_event_is(Key:Inner, ComponentKey-Value, Key-Value) :-
-    functor(Inner, ComponentKey, _).
-
-
-'#shapes'.
-
-%!  box(+W-+H, +Style)
-%
-%  A W×H box border in the given Style (thin, thick, or double).
-%  The box is hollow — only the border characters are drawn.
-tui:alias_drawable(box(W0-H0, Style), [Top, Bottom, Left, Right, Corners]) :-
-    W is W0 - 1,
-    H is H0 - 1,
-    style_corner_char(Style, tl, TL),
-    style_corner_char(Style, tr, TR),
-    style_corner_char(Style, bl, BL),
-    style_corner_char(Style, br, BR),
-    style_horizontal(Style, Hoz),
-    style_vertical(Style, Vrt),
-    Corners = [(0-0)-TL, (W-0)-TR, (0-H)-BL, (W-H)-BR],
-    WM is W - 1,
-    HM is H - 1,
-    Top    = line(Hoz, 1-0, WM-0),
-    Bottom = line(Hoz, 1-H, WM-H),
-    Left   = line(Vrt, 0-1, 0-HM),
-    Right  = line(Vrt, W-1, W-HM).
-
-%!  clear(+W-+H)
-%
-%  A W×H rectangle of spaces with reset styling. Used to erase a
-%  region before drawing over it.
-tui:alias_drawable(clear(W-H), style([reset, bg(default)], Spaces)) :-
-    findall((X-Y)-' ',
-            ( between(0, W, X),
-              between(0, H, Y) ),
-            Spaces).
-
-tui:alias_drawable(line(Char, From, To), Line) :-
-    char_from_to_line(Char, From, To, Line).
-
-at_towards_next(At, Towards, Next) :-
-    (   At < Towards
-    ->  Next is At + 1
-    ;   At > Towards
-    ->  Next is At - 1
-    ;   fail
-    ).  
-% Line and box-drawing character tables.
-
-char_from_to_line(C, X-Y, X-Y, [X-Y-C]) :- !.
-
-char_from_to_line(C, X1-Y, X2-Y, [X1-Y-C | Tail]) :- !,
-    at_towards_next(X1, X2, Next),
-    char_from_to_line(C, Next-Y, X2-Y, Tail).
-
-char_from_to_line(C, X-Y1, X-Y2, [X-Y1-C | Tail]) :- !,
-    at_towards_next(Y1, Y2, Next),
-    char_from_to_line(C, X-Next, X-Y2, Tail).
-    
-:- discontiguous style_corner_char/3.
-:- discontiguous style_horizontal/2.
-:- discontiguous style_vertical/2.
-
-style_corner_char(thick, tl, '┏').
-style_corner_char(thick, bl, '┗').
-style_corner_char(thick, tr, '┓').
-style_corner_char(thick, br, '┛').
-style_horizontal(thick, '━').
-style_vertical(thick, '┃').
-
-style_corner_char(thin, tl, '┌').
-style_corner_char(thin, bl, '└').
-style_corner_char(thin, tr, '┐').
-style_corner_char(thin, br, '┘').
-style_horizontal(thin, '─').
-style_vertical(thin, '│').
-
-style_corner_char(double, tl, '╔').
-style_corner_char(double, tr, '╗').
-style_corner_char(double, bl, '╚').
-style_corner_char(double, br, '╝').
-style_horizontal(double, '═').
-style_vertical(double, '║').
-
-
-'#layout'.
-
-%!  column(+Drawables)
-%
-%  Vertically stack a list of drawables using .\/ (top to bottom).
-tui:alias_drawable(column([H]), H) :- !.
-tui:alias_drawable(column([]), []) :- !.
-tui:alias_drawable(column([H|T]), (H .\/ column(T))) :- !.
-
-%!  row(+Drawables)
-%
-%  Horizontally concatenate a list of drawables using .> (left to right).
-tui:alias_drawable(row([H]), H) :- !.
-tui:alias_drawable(row([]), []) :- !.
-tui:alias_drawable(row([H|T]), (H .> row(T))) :- !.
-
-%!  wrapped(+Width, +Chars)
-%
-%  Chars broken into rows of Width characters, top to bottom. N chars
-%  take N // Width + 1 rows, so the position just after the last char
-%  always lies on a row (the last row may be empty).
-tui:alias_drawable(wrapped(W, Chars), column(Rows)) :-
-    width_chars_rows(W, Chars, Rows).
-
-width_chars_rows(W, Chars, [chars(Row) | Rows]) :-
-    (   length(Row, W),
-        append(Row, Rest, Chars)
-    ->  width_chars_rows(W, Rest, Rows)
-    ;   Row = Chars,
-        Rows = []
-    ).
 
 
 '#input_controls'.

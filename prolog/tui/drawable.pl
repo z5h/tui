@@ -15,9 +15,17 @@
 A term language for drawing onto a grid of styled characters. Drawables
 expand to commands (X-Y)-(Stack-Attrs-Char), where Stack records which
 aliases (see tui:alias_drawable/2) produced the character.
+
+Besides the primitives in drawable//5, this module defines the core
+drawables that make no styling choices: layout (row/1, column/1,
+wrapped/2), shapes (clear/1, line/3, box/2), tagging (Key:Drawable) and
+cursor/1. Ready-made, styled components are in library(tui/components).
 */
 
 :- use_module(library(tui/utils)).
+
+:- multifile tui:alias_drawable/2.
+:- multifile tui:at_event_is/3.
 
 
 '#commands'.
@@ -252,3 +260,132 @@ drawable(A, Stack, Attr, DX-DY, MX-MY) -->
 
 drawable(D, _, _, _, _) -->
     { domain_error(drawable, D) }.
+
+
+'#layout'.
+
+%!  column(+Drawables)
+%
+%  Drawables stacked top to bottom, using .\/.
+tui:alias_drawable(column([H]), H) :- !.
+tui:alias_drawable(column([]), []) :- !.
+tui:alias_drawable(column([H|T]), (H .\/ column(T))) :- !.
+
+%!  row(+Drawables)
+%
+%  Drawables side by side, left to right, using .>.
+tui:alias_drawable(row([H]), H) :- !.
+tui:alias_drawable(row([]), []) :- !.
+tui:alias_drawable(row([H|T]), (H .> row(T))) :- !.
+
+%!  wrapped(+Width, +Chars)
+%
+%  Chars broken into rows of Width characters, top to bottom. N chars
+%  take N // Width + 1 rows, so the position just after the last char
+%  always lies on a row (the last row may be empty).
+tui:alias_drawable(wrapped(W, Chars), column(Rows)) :-
+    width_chars_rows(W, Chars, Rows).
+
+width_chars_rows(W, Chars, [chars(Row) | Rows]) :-
+    (   length(Row, W),
+        append(Row, Rest, Chars)
+    ->  width_chars_rows(W, Rest, Rows)
+    ;   Row = Chars,
+        Rows = []
+    ).
+
+
+'#shapes'.
+
+%!  clear(+W-+H)
+%
+%  A rectangle of spaces with reset styling, covering 0..W by 0..H (so
+%  W+1 by H+1 cells). Used to erase a region before drawing over it.
+tui:alias_drawable(clear(W-H), style([reset, bg(default)], Spaces)) :-
+    findall((X-Y)-' ',
+            ( between(0, W, X),
+              between(0, H, Y) ),
+            Spaces).
+
+%!  line(+Char, +From, +To)
+%
+%  Char repeated from point From to point To, inclusive. The line must
+%  be horizontal or vertical.
+tui:alias_drawable(line(Char, From, To), Line) :-
+    char_from_to_line(Char, From, To, Line).
+
+char_from_to_line(C, X-Y, X-Y, [X-Y-C]) :- !.
+char_from_to_line(C, X1-Y, X2-Y, [X1-Y-C | Tail]) :- !,
+    at_towards_next(X1, X2, Next),
+    char_from_to_line(C, Next-Y, X2-Y, Tail).
+char_from_to_line(C, X-Y1, X-Y2, [X-Y1-C | Tail]) :- !,
+    at_towards_next(Y1, Y2, Next),
+    char_from_to_line(C, X-Next, X-Y2, Tail).
+
+% Next is one step from At towards Towards; fails if they are equal.
+at_towards_next(At, Towards, Next) :-
+    (   At < Towards
+    ->  Next is At + 1
+    ;   At > Towards
+    ->  Next is At - 1
+    ;   fail
+    ).
+
+%!  box(+W-+H, +Chars)
+%
+%  The border of a W×H box; the inside is not drawn. Chars is either
+%  box_chars(Horizontal, Vertical, TopLeft, TopRight, BottomLeft,
+%  BottomRight), or one of the standard sets thin, thick, double.
+tui:alias_drawable(box(W-H, Style), box(W-H, Chars)) :-
+    atom(Style), !,
+    style_box_chars(Style, Chars).
+tui:alias_drawable(box(W0-H0, box_chars(Hz, Vt, TL, TR, BL, BR)),
+                   [Top, Bottom, Left, Right, Corners]) :-
+    W is W0 - 1,
+    H is H0 - 1,
+    Corners = [(0-0)-TL, (W-0)-TR, (0-H)-BL, (W-H)-BR],
+    WM is W - 1,
+    HM is H - 1,
+    Top    = line(Hz, 1-0, WM-0),
+    Bottom = line(Hz, 1-H, WM-H),
+    Left   = line(Vt, 0-1, 0-HM),
+    Right  = line(Vt, W-1, W-HM).
+
+style_box_chars(thin,   box_chars('─', '│', '┌', '┐', '└', '┘')).
+style_box_chars(thick,  box_chars('━', '┃', '┏', '┓', '┗', '┛')).
+style_box_chars(double, box_chars('═', '║', '╔', '╗', '╚', '╝')).
+
+
+'#tagging'.
+
+%!  Key:Drawable
+%
+%  Drawable, tagged with Key for event routing; Key does not affect
+%  drawing.
+%
+%  When a component event Name-Value bubbles through Key:Component, and
+%  Name is the functor of Component, the event becomes Key-Value: the
+%  component's own name is replaced by the tag. Events from components
+%  nested deeper (other names) and raw events (up, ' ', ...) pass
+%  through unchanged.
+%
+%  Example:
+%
+%      scroll(Id) : scroll(20-15, Offset, Content)
+%
+%  turns scroll-(0-5) from the scroll into scroll(Id)-(0-5).
+tui:alias_drawable(_:D, D).
+
+tui:at_event_is(Key:Inner, Name-Value, Key-Value) :-
+    functor(Inner, Name, _).
+
+
+'#cursor'.
+
+%!  cursor(+Drawable)
+%
+%  Drawable, with the cursor on its top-left cell. This overrides any
+%  cursor in the state update produced. If several are drawn, the
+%  top-left cell of them all wins; if Drawable draws nothing, it places
+%  no cursor.
+tui:alias_drawable(cursor(D), D).

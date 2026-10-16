@@ -2,6 +2,7 @@
                    ]).
 
 :- use_module(library(tui)).
+:- use_module(library(tui/components)).
 :- use_module(library(tui/utils)).
 :- use_module(library(tui/assocs)).
 
