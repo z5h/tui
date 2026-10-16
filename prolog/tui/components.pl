@@ -99,8 +99,8 @@ tui:alias_drawable(titled_frame(W-H, Title, Contents, Extent), [FramePart, 1-0-T
     % ;  TitlePart = TL .> style([bold], Title) .> TR
     % ).
 
-title_l('\u2574').
-title_r('\u2576').
+title_l('╴').
+title_r('╶').
 
 
 '#scrolling'.
@@ -132,8 +132,8 @@ tui:alias_drawable(scroll(W-H, X-Y, Content),
     MaxScrollH is CW - W + 1,
     MaxScrollV is CH - H + 1,
 
-    portd_contentd_contento_style_drawable(PW, CW, X, h, HScroll),
-    portd_contentd_contento_style_drawable(PH, CH, Y, v, VScroll).
+    port_content_offset_axis_scrollbar(PW, CW, X, h, HScroll),
+    port_content_offset_axis_scrollbar(PH, CH, Y, v, VScroll).
 
 tui:alias_drawable(scrollable(C, _, _), C).
 
@@ -193,59 +193,58 @@ string_length_adjusted(S, L, A) :-
        string_chars(A, AC)
     ).
 
-overlap(A-B, C-D, O) :-
-    B < A, !,
-    overlap(B-A, C-D, O).
-overlap(A-B, C-D, O) :-
-    D < C, !,
-    overlap(A-B, D-C, O).
-overlap(A-B, C-D, O) :-
-    C < A, !,
-    overlap(C-D, A-B, O).
-overlap(_-B, C-D, O) :-
-    (  C < B
-    -> O is min(B-C, D-C)
-    ;  O is 0
+% Scroll indicator characters: each cell shows two halves, thin (s) or
+% thick (f), so the thumb has half-cell resolution.
+
+scroll_char(h, s, s, '─').
+scroll_char(h, f, f, '━').
+scroll_char(h, s, f, '╼').
+scroll_char(h, f, s, '╾').
+
+scroll_char(v, s, s, '│').
+scroll_char(v, f, f, '┃').
+scroll_char(v, s, f, '╽').
+scroll_char(v, f, s, '╿').
+
+% The scrollbar along axis S (h or v) for a port PD cells long, showing
+% content CD long scrolled to offset CO (0 or negative). The track is PD
+% cells of two halves each. The thumb's length, in whole halves, depends
+% only on PD and CD, and its start moves with the offset, from the first
+% half at offset 0 to the last at the largest offset. Fixing the length
+% first keeps it from changing as the thumb moves. If the content fits,
+% there is no thumb.
+port_content_offset_axis_scrollbar(PD, CD, CO, S, D) :-
+    Halves is 2 * PD,
+    (   PD >= CD
+    ->  Start = 0,
+        Len = 0
+    ;   Len is max(1, round(Halves * PD / CD)),
+        Travel is Halves - Len,
+        Start is max(0, min(Travel, round(Travel * -CO / (CD - PD))))
+    ),
+    End is Start + Len,
+    axis_thumb_cells_scrollbar(S, Start-End, 0, PD, D).
+
+% Cells N up to M of the track, with the thumb covering halves Start up
+% to (not including) End.
+axis_thumb_cells_scrollbar(_, _, M, M, []) :- !.
+axis_thumb_cells_scrollbar(S, Thumb, N, M, [X-Y-Char | Cells]) :-
+    I is 2 * N,
+    J is I + 1,
+    thumb_half_weight(Thumb, I, A),
+    thumb_half_weight(Thumb, J, B),
+    scroll_char(S, A, B, Char),
+    (   S = h
+    ->  X = N, Y = 0
+    ;   X = 0, Y = N
+    ),
+    N1 is N + 1,
+    axis_thumb_cells_scrollbar(S, Thumb, N1, M, Cells).
+
+% Half I is thick (f) inside the thumb, thin (s) outside it.
+thumb_half_weight(Start-End, I, W) :-
+    (   I >= Start,
+        I < End
+    ->  W = f
+    ;   W = s
     ).
-
-% Scroll indicator characters — half-block line drawing for
-% sub-cell-resolution scroll position display.
-
-scroll_char(h, s, s, '\u2500').
-scroll_char(h, f, f, '\u2501').
-scroll_char(h, s, f, '\u257c').
-scroll_char(h, f, s, '\u257e').
-
-scroll_char(v, s, s, '\u2502').
-scroll_char(v, f, f, '\u2503').
-scroll_char(v, s, f, '\u257d').
-scroll_char(v, f, s, '\u257f').
-
-nofm_seg_style_drawable(M/M, _, _, []) :- !.
-nofm_seg_style_drawable(N/M, P1-P2, S, [X-Y-H|T]) :-
-    N0 is N/M,
-    Np5 is (N + 0.5)/M,
-    N1 is (N + 1)/M,
-    (  overlap(N0-Np5, P1-P2, O1), O1 > 0
-    -> A = f
-    ;  A = s
-    ),
-    (  overlap(Np5-N1, P1-P2, O2), O2 > 0
-    -> B = f
-    ;  B = s
-    ),
-    scroll_char(S, A, B, H),
-    (  S = h
-    -> X = N, Y = 0
-    ;  Y = N, X = 0
-    ),
-    Next is N + 1,
-    nofm_seg_style_drawable(Next/M, P1-P2, S, T).
-
-portd_contentd_contento_style_drawable(PD, CD, _, S, D) :-
-    PD >= CD, !,
-    nofm_seg_style_drawable(0/PD, (-1)-(-1), S, D).
-portd_contentd_contento_style_drawable(PD, CD, CO, S, D) :-
-    (P1 is (-CO)/CD),
-    (P2 is P1 + PD/CD),
-    nofm_seg_style_drawable(0/PD, P1-P2, S, D).
