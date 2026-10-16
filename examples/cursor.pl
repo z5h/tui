@@ -40,7 +40,7 @@ tui:alias_drawable(menu(Items, Sel, Active), column(Rows)) :-
               item_row(I, Sel, Active, Item, Row) ),
             Rows).
 
-item_row(Sel, Sel, true, Item, "> " .> cursor(Item)) :- !.
+item_row(Sel, Sel, true, Item, style([bold], "> " .> cursor(Item))) :- !.
 item_row(Sel, Sel, false, Item, style([bold], "> " .> Item)) :- !.
 item_row(_, _, _, Item, "  " .> Item).
 
