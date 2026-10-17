@@ -29,6 +29,11 @@ bubbling and the app's update, and repeats until a result.
 %  handle events. The app exits with Result when an event bubbles to
 %  result(Result), or when Update produces result(Result).
 %
+%  Besides keys, Update receives terminal_size(Cols, Rows) at the start
+%  and after every resize, and terminal_properties(Properties) once,
+%  shortly after the start: program(Program) (TERM_PROGRAM, or unknown)
+%  and extended_keys(Bool), in no guaranteed order.
+%
 %  Everything runs in the calling thread, which must own the TTY. Other
 %  threads deliver events through a wake (see tui/wake.pl).
 :- meta_predicate(app(?, 2, 3, ?)).

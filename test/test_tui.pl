@@ -386,3 +386,28 @@ test(flushed) :-
     pending_events_flushed(`\e[1;`, [unknown_input(`\e[1;`)]).
 
 :- end_tests(input).
+
+
+:- begin_tests(substrate).
+
+% Replies are consumed; the device attributes reply ends detection and
+% becomes the terminal's properties. The Kitty push is written to output.
+replies_keyboard_keys(Replies, K, Keys) :-
+    with_output_to(string(_),
+                   tui_substrate:keyboard_events_keys(detecting, Replies, K, Keys)).
+
+test(legacy) :-
+    replies_keyboard_keys([a, device_attributes([1]), b], K, Keys),
+    K == legacy,
+    Keys = [a, terminal_properties(Ps), b],
+    memberchk(extended_keys(false), Ps),
+    memberchk(program(P), Ps),
+    atom(P).
+
+test(kitty) :-
+    replies_keyboard_keys([kitty_keyboard(0), device_attributes([1])], K, Keys),
+    K == kitty,
+    Keys = [terminal_properties(Ps)],
+    memberchk(extended_keys(true), Ps).
+
+:- end_tests(substrate).

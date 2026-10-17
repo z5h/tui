@@ -39,6 +39,15 @@ In `examples/`, each runnable as `swipl -p library=prolog examples/NAME.pl` from
 - `move.pl` — dragging with Shift+arrows, and `moved(Direction)`
 - `atto.pl` — a small text editor: `swipl -p library=prolog examples/atto.pl -- FILE`
 
+## Terminals
+
+The ready-made components drag with Shift+arrows: what is under the cursor moves in the arrow's direction. macOS Terminal.app sends Shift+↑ and Shift+↓ as plain ↑ and ↓ by default. To fix it, in Settings → Profiles → Keyboard add:
+
+- Shift+↑: Send Text `\033[1;2A`
+- Shift+↓: Send Text `\033[1;2B`
+
+Apps can work around a terminal's limits: shortly after starting, `update/3` receives `terminal_properties(Properties)`, holding `program(Program)` (from `TERM_PROGRAM`, e.g. `'Apple_Terminal'`, or `unknown`) and `extended_keys(Bool)` (whether modified keys are unambiguous, via the Kitty keyboard protocol). `examples/move.pl` uses it to show this caveat.
+
 ## Architecture
 
 A single event loop in the main thread reads input, runs `update/3`, and paints the view. Painting is incremental: the view is grouped into runs of same-styled text, and only runs that changed since the last paint are written.

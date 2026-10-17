@@ -11,7 +11,8 @@ from where the cursor was, relative to the piece. So it can tell when
 the cursor leaves it.
 
 macOS Terminal.app sends Shift+up and Shift+down as plain up and down
-unless configured otherwise (see TODO.md).
+unless configured otherwise (see the README). The app learns which
+terminal it runs in from terminal_properties/1, and says so.
 
     swipl -p library=prolog examples/move.pl
 */
@@ -27,7 +28,7 @@ main :-
     app((7-7)-model([ piece(a, 5-3, red),
                       piece(b, 20-6, green),
                       piece(c, 35-9, blue) ],
-                    "Shift+arrows drag a piece"),
+                    "Shift+arrows drag a piece", ""),
         view, update, _).
 
 
@@ -62,11 +63,12 @@ direction_delta(right, 1-0).
 
 arena_size(60-18).
 
-view(_-model(Pieces, Status),
+view(_-model(Pieces, Status, Note),
      column([style([bold], "Move"),
              style([faint], "Arrows move the cursor, Shift+arrows drag, q quits"),
              [box(AW-AH, thin) | Drawn],
-             Status])) :-
+             Status,
+             style([faint], Note)])) :-
     arena_size(AW-AH),
     findall(X1-Y1-(Id : piece(Id, Color)),
             ( member(piece(Id, X-Y, Color), Pieces),
@@ -75,9 +77,14 @@ view(_-model(Pieces, Status),
             Drawn).
 
 update(q, S, result(S)) :- !.
-update(Id-exited, C-model(Pieces, _), C-model(Pieces, Status)) :- !,
+update(terminal_properties(Ps), C-model(Pieces, Status, _), C-model(Pieces, Status, Note)) :- !,
+    (   memberchk(program('Apple_Terminal'), Ps)
+    ->  Note = "Terminal.app: Shift+up/down need a profile setting (see the README)"
+    ;   Note = ""
+    ).
+update(Id-exited, C-model(Pieces, _, Note), C-model(Pieces, Status, Note)) :- !,
     format(string(Status), "The cursor left ~w", [Id]).
-update(Id-D, C0-model(Pieces0, _), C-model(Pieces, Status)) :-
+update(Id-D, C0-model(Pieces0, _, Note), C-model(Pieces, Status, Note)) :-
     direction(D),
     selectchk(piece(Id, XY0, Color), Pieces0, Others), !,
     arena_direction_from_to(D, XY0, XY),

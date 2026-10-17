@@ -10,9 +10,6 @@ style_hovergroup (commented there).
 done: tui/input.pl decodes legacy xterm and the Kitty keyboard protocol,
 which is detected and enabled at startup.
 remaining:
-- macOS Terminal.app sends shift+up/down as plain up/down by default
-  (only shift+left/right have modified sequences), so they cannot be
-  told apart. users can add \033[1;2A / \033[1;2B in Profiles > Keyboard.
 - not yet decoded: mouse (SGR 1006), focus in/out.
 - a key-inspector example app (show codes and decoded events) would
   help diagnose terminals.

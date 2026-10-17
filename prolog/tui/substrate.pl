@@ -15,9 +15,11 @@ terminal_substrate/1), or vcr(Script) to replay a script (see
 tui/vcr.pl). Operations take a substrate and give back the substrate as
 it is afterwards.
 
-Events are already decoded (see tui/input.pl): keys, and
+Events are already decoded (see tui/input.pl): keys,
 terminal_size(Cols, Rows), which arrives at the start of a session and
-after every resize.
+after every resize, and terminal_properties(Properties), which arrives
+once, shortly after the start. Properties holds program(Program) and
+extended_keys(Bool), in no guaranteed order.
 */
 
 :- use_module(library(tui/utils)).
@@ -131,7 +133,9 @@ user_input_codes(Codes) :-
 
 % IMPURE: terminal replies drive Kitty keyboard detection and are not
 % passed on. A Kitty reply before the device attributes reply means the
-% protocol is supported, and it is enabled.
+% protocol is supported, and it is enabled. The device attributes reply,
+% requested once at session start, ends detection: it becomes
+% terminal_properties(Properties).
 keyboard_events_keys(K, [], K, []).
 keyboard_events_keys(K0, [E | Es], K, Keys) :-
     (   E = kitty_keyboard(_)
@@ -147,11 +151,25 @@ keyboard_events_keys(K0, [E | Es], K, Keys) :-
         ->  K1 = legacy
         ;   K1 = K0
         ),
-        Keys = Keys1
+        keyboard_properties(K1, Properties),
+        Keys = [terminal_properties(Properties) | Keys1]
     ;   K1 = K0,
         Keys = [E | Keys1]
     ),
     keyboard_events_keys(K1, Es, K, Keys1).
+
+% IMPURE: reads the environment. program(P) is TERM_PROGRAM, as set by
+% the terminal (e.g. 'Apple_Terminal'), or unknown; extended_keys(B) is
+% whether modified keys are unambiguous (the Kitty keyboard protocol).
+keyboard_properties(K, [program(P), extended_keys(B)]) :-
+    (   getenv('TERM_PROGRAM', P0)
+    ->  atom_string(P, P0)
+    ;   P = unknown
+    ),
+    (   K == kitty
+    ->  B = true
+    ;   B = false
+    ).
 
 
 '#painting'.
