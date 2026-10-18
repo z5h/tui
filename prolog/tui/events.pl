@@ -24,7 +24,8 @@ component sees where the event happened relative to its origin.
 %  origin, RX-RY-RawEvent, and may rewrite it via at_event_is/3, once or
 %  in several ways; each rewrite bubbles on from the same component. The
 %  bottom of the stack, [], sees X-Y-RawEvent. If no component rewrites
-%  the event, BubbledEvent = RawEvent.
+%  the event, BubbledEvent = RawEvent. A rewrite to noop (the component
+%  takes the event, to do nothing) bubbles no further.
 stack_event_is(Stack, (X-Y)-E, Is) :-
     point_stack_event_is(X-Y, Stack, E, Is).
 
@@ -36,15 +37,20 @@ point_stack_event_is(X-Y, [(OX-OY)-A | T], E, Is) :- !,
     RX is X - OX,
     RY is Y - OY,
     (   tui:at_event_is(A, (RX-RY)-E, Next)
-    *-> point_stack_event_is(X-Y, [(OX-OY)-A | T], Next, Is)
+    *-> next_stack_event_is(Next, X-Y, [(OX-OY)-A | T], Is)
     ;   point_stack_event_is(X-Y, T, E, Is)
     ).
 point_stack_event_is(Point, [], E, Is) :- !,
     point_event_positioned(Point, E, PE),
     (   tui:at_event_is([], PE, Next)
-    *-> point_stack_event_is(Point, [], Next, Is)
+    *-> next_stack_event_is(Next, Point, [], Is)
     ;   Is = E
     ).
+
+% noop, a component taking an event to do nothing, bubbles no further.
+next_stack_event_is(noop, _, _, noop) :- !.
+next_stack_event_is(Next, Point, Stack, Is) :-
+    point_stack_event_is(Point, Stack, Next, Is).
 
 point_event_positioned(none, E, E).
 point_event_positioned(X-Y, E, (X-Y)-E).

@@ -57,7 +57,8 @@ styled components are opt-in: load library(tui/components).
 %  Besides events for update, a component may produce a direction, which
 %  moves the cursor one cell, or cursor_by(DX-DY), which moves it by an
 %  offset; e.g. to keep the cursor after an edit, or, answering
-%  arrived(Direction), on a cell where it belongs.
+%  arrived(Direction), on a cell where it belongs. noop takes the event
+%  to do nothing: it bubbles no further, and update never sees it.
 %
 %  @see stack_event_is/3
 :- multifile at_event_is/3.

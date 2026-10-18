@@ -237,11 +237,13 @@ frame_update_bubbled_state0_state(Frame, Update, E0, [E | Es], S0, S) :-
 % they become, other than themselves, is handled with the cursor moved.
 % A direction a component produced bubbles no arrived(Dir): its frame
 % may predate the update it follows (an edit, say). cursor_by(DX-DY)
-% moves the cursor by DX-DY, bubbling nothing.
+% moves the cursor by DX-DY, bubbling nothing. noop is dropped.
 :- meta_predicate frame_update_one_state0_state(+, 3, +, +, +, -).
 frame_update_one_state0_state(frame(_, EventAssoc, Extent, _, _), Update, Unclaimed, E, S0, S) :-
     (   E = result(_)
     ->  S = E
+    ;   E == noop
+    ->  S = S0
     ;   E = cursor_by(Offset)
     ->  extent_offset_state0_state(Extent, Offset, S0, S)
     ;   direction(E),
@@ -270,6 +272,8 @@ update_events_state0_state(Extent, Update, [E | Es], S0, S) :-
     ->  S = E
     ;   (   E = cursor_by(Offset)
         ->  extent_offset_state0_state(Extent, Offset, S0, S1)
+        ;   E == noop
+        ->  S1 = S0
         ;   call(Update, E, S0, S1)
         ),
         (   S1 = result(_)

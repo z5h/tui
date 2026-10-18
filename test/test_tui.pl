@@ -392,7 +392,10 @@ test(wheel) :-
     drawable_point_event_bubbled(S, 3-3, mouse(scroll, down), Es1),
     Es1 == [scroll-(0-(-6))],
     drawable_point_event_bubbled(S, 3-3, mouse(scroll, up), Es2),
-    Es2 == [scroll-(0-(-4))].
+    Es2 == [scroll-(0-(-4))],
+    lines_scroll(0-0, Top),
+    drawable_point_event_bubbled(Top, 3-3, mouse(scroll, up), Es3),
+    Es3 == [noop].
 
 test(thumb_to_mouse) :-
     lines_scroll(0-(-5), S),
@@ -429,17 +432,22 @@ test(delete) :-
     value_point_event_bubbled("abc", 4-1, delete, Es),
     Es == [name-"ac"].
 
-% With nothing to delete, the field still takes the key: the value is
-% unchanged, and nothing bubbles on.
+% With nothing to delete, the field still takes the key, to do nothing:
+% noop, which the tag passes through untouched.
 test(nothing_to_delete) :-
     value_point_event_bubbled(_, 3-1, backspace, Es1),
-    Es1 == [name-""],
+    Es1 == [noop],
     value_point_event_bubbled(_, 3-1, delete, Es2),
-    Es2 == [name-""],
+    Es2 == [noop],
     value_point_event_bubbled("ab", 3-1, backspace, Es3),
-    Es3 == [name-"ab"],
+    Es3 == [noop],
     value_point_event_bubbled("ab", 5-1, delete, Es4),
-    Es4 == [name-"ab"].
+    Es4 == [noop].
+
+% Past the end, delete has nothing to delete but brings the cursor back.
+test(delete_past_the_end) :-
+    value_point_event_bubbled("a", 6-1, delete, Es),
+    Es == [cursor_by((-2)-0)].
 
 test(paste) :-
     value_point_event_bubbled("", 3-1, paste("a\nb"), Es),

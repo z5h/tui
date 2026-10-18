@@ -103,9 +103,14 @@ tui:at_event_is(input(_, _, ValueA), (X-_)-E, Is) :-
     I is min(I0, L),
     event_index_value_edited(E, I, Value, Edited, I1),
     DX is I1 - I0,
-    (   Is = input-Edited
-    ;   DX =\= 0,
-        Is = cursor_by(DX-0)
+    (   Edited == Value,
+        DX =:= 0
+    ->  Is = noop
+    ;   (   Edited \== Value,
+            Is = input-Edited
+        ;   DX =\= 0,
+            Is = cursor_by(DX-0)
+        )
     ).
 
 arrival_event(arrived(_)).
@@ -125,7 +130,7 @@ event_index_value_edited(paste(Text), I, Value, Edited, I1) :- !,
     atom_length(Inserted, N),
     I1 is I + N.
 % Backspace at the start and delete at the end change nothing, but are
-% still the field's: they do not bubble on.
+% still the field's (noop): they do not bubble on.
 event_index_value_edited(backspace, I, Value, Edited, I1) :- !,
     (   I > 0
     ->  sub_string(Value, 0, I, _, Before0),
@@ -275,10 +280,15 @@ tui:at_event_is(hscroll(_, _, PD-CD), (N-_)-mouse(A, left), thumb_at(h, O)) :-
 
 tui:at_event_is(scroll_view(X-_, _, _, _), _-thumb_at(v, O), scroll-(X-O)).
 tui:at_event_is(scroll_view(_-Y, _, _, _), _-thumb_at(h, O), scroll-(O-Y)).
-tui:at_event_is(scroll_view(X-Y, MaxH-MaxV, PH, _), _-E, scroll-(X1-Y1)) :-
+% At its limits the scroll still takes the event, to do nothing.
+tui:at_event_is(scroll_view(X-Y, MaxH-MaxV, PH, _), _-E, Is) :-
     page_event_shift(PH, E, DX-DY),
     X1 is max(-MaxH, min(0, X + DX)),
-    Y1 is max(-MaxV, min(0, Y + DY)).
+    Y1 is max(-MaxV, min(0, Y + DY)),
+    (   X1-Y1 == X-Y
+    ->  Is = noop
+    ;   Is = scroll-(X1-Y1)
+    ).
 
 % How an event shifts the content, for a page PH rows high. Dragging the
 % content moves it with the arrow; dragging the thumb moves the thumb
