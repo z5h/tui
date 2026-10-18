@@ -16,6 +16,7 @@ milliseconds. Stages, in the order the loop runs them:
   * map     — the event map (on-screen cells and their stacks)
   * assoc   — indexing the event map
   * cursor  — finding a cursor(_) cell, and hover focus
+  * images  — finding the image/3 terms on screen
   * runs    — resolving cells and grouping them into runs
   * diff    — runs that changed (against an identical frame)
 */
@@ -40,8 +41,8 @@ main :-
     ;   Repeats = 10
     ),
     format("Pipeline benchmark: median of ~d, in ms~n~n", [Repeats]),
-    format("~w~t~14|~w~t~8+~w~t~7+~w~t~8+~w~t~8+~w~t~8+~w~t~8+~w~t~8+~w~t~8+~w~t~8+~w~t~8+~w~t~9+~n",
-           [scene, cells, runs, view, expand, dedupe, map, assoc, cursor, runs, diff, total]),
+    format("~w~t~14|~w~t~8+~w~t~7+~w~t~8+~w~t~8+~w~t~8+~w~t~8+~w~t~8+~w~t~8+~w~t~8+~w~t~8+~w~t~8+~w~t~9+~n",
+           [scene, cells, runs, view, expand, dedupe, map, assoc, cursor, images, runs, diff, total]),
     forall(scene(Name, Size, State, View),
            scene_reported(Name, Size, State, View, Repeats)).
 
@@ -105,13 +106,14 @@ scene_reported(Name, Size, State, View, Repeats) :-
     stage_ms(Repeats, limits_commands_eventmap(Size, Cmds, EventMap), TMap),
     stage_ms(Repeats, list_to_assoc(EventMap, _), TAssoc),
     stage_ms(Repeats, cursor_focused(State, EventMap, Cmds, Cursor), TCursor),
+    stage_ms(Repeats, tui_loop:limits_commands_images(Size, Cmds, _), TImages),
     stage_ms(Repeats, limits_cursor_commands_runs(Size, Cursor, Cmds, Runs), TRuns),
     stage_ms(Repeats, runs_previous_changed(Runs, Runs, _), TDiff),
     length(Cmds, Cells),
     length(Runs, RunCount),
-    Total is TView + TExpand + TDedupe + TMap + TAssoc + TCursor + TRuns + TDiff,
-    format("~w~t~14|~d~t~8+~d~t~7+~2f~t~8+~2f~t~8+~2f~t~8+~2f~t~8+~2f~t~8+~2f~t~8+~2f~t~8+~2f~t~8+~2f~t~9+~n",
-           [Name, Cells, RunCount, TView, TExpand, TDedupe, TMap, TAssoc, TCursor, TRuns, TDiff, Total]).
+    Total is TView + TExpand + TDedupe + TMap + TAssoc + TCursor + TImages + TRuns + TDiff,
+    format("~w~t~14|~d~t~8+~d~t~7+~2f~t~8+~2f~t~8+~2f~t~8+~2f~t~8+~2f~t~8+~2f~t~8+~2f~t~8+~2f~t~8+~2f~t~8+~2f~t~9+~n",
+           [Name, Cells, RunCount, TView, TExpand, TDedupe, TMap, TAssoc, TCursor, TImages, TRuns, TDiff, Total]).
 
 cursor_focused(State, EventMap, Cmds, Cursor) :-
     tui_loop:state_eventmap_cursor(State, EventMap, Cursor),

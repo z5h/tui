@@ -4,7 +4,8 @@
             substrate_session/3,
             substrate_events/4,
             substrate_cleared/2,
-            substrate_runs_painted/3
+            substrate_runs_painted/3,
+            substrate_graphics_sent/3
           ]).
 
 /** <module> Substrates
@@ -18,8 +19,8 @@ it is afterwards.
 Events are already decoded (see tui/input.pl): keys,
 terminal_size(Cols, Rows), which arrives at the start of a session and
 after every resize, and terminal_properties(Properties), which arrives
-once, shortly after the start. Properties holds program(Program) and
-extended_keys(Bool), in no guaranteed order.
+once, shortly after the start. Properties holds program(Program),
+extended_keys(Bool) and graphics(Bool), in no guaranteed order.
 */
 
 :- use_module(library(tui/utils)).
@@ -34,11 +35,12 @@ escape_grace(0.01).
 
 '#session'.
 
-% A terminal before its session: Keyboard is detecting until the
-% terminal reveals whether it supports the Kitty keyboard protocol
-% (then kitty) or not (then legacy). Pending holds codes of an
+% A terminal before its session. Detected is Keyboard-Graphics: Keyboard
+% is detecting until the terminal reveals whether it supports the Kitty
+% keyboard protocol (then kitty) or not (then legacy); Graphics becomes
+% true if it answers the Kitty graphics query. Pending holds codes of an
 % incomplete escape sequence.
-terminal_substrate(terminal(detecting, [])).
+terminal_substrate(terminal(detecting-false, [])).
 
 %  substrate_session(+Substrate, +Wake, :Goal)
 %
@@ -54,6 +56,7 @@ substrate_session(terminal(_, _), Wake, Goal) :-
                 ansi_hide_cursor,
                 ansi_bracketed_paste_on,
                 ansi_kitty_keyboard_query,
+                ansi_kitty_graphics_query,
                 ansi_primary_device_attributes,
                 flush_output,
                 size_posted(Wake)
@@ -131,42 +134,55 @@ user_input_codes(Codes) :-
     fill_buffer(user_input),
     read_pending_codes(user_input, Codes, []).
 
-% IMPURE: terminal replies drive Kitty keyboard detection and are not
-% passed on. A Kitty reply before the device attributes reply means the
-% protocol is supported, and it is enabled. The device attributes reply,
-% requested once at session start, ends detection: it becomes
+% IMPURE: terminal replies drive detection and are not passed on. A
+% Kitty keyboard reply before the device attributes reply means the
+% protocol is supported, and it is enabled; an OK graphics reply means
+% images can be shown. The device attributes reply, requested once at
+% session start, ends detection: it becomes
 % terminal_properties(Properties).
 keyboard_events_keys(K, [], K, []).
-keyboard_events_keys(K0, [E | Es], K, Keys) :-
+keyboard_events_keys(Kb0-G0, [E | Es], K, Keys) :-
     (   E = kitty_keyboard(_)
-    ->  (   K0 == detecting
+    ->  (   Kb0 == detecting
         ->  ansi_kitty_keyboard_push(1),
             flush_output,
-            K1 = kitty
-        ;   K1 = K0
+            Kb1 = kitty
+        ;   Kb1 = Kb0
         ),
+        G1 = G0,
+        Keys = Keys1
+    ;   E = kitty_graphics(Reply)
+    ->  (   string_concat(_, ";OK", Reply)
+        ->  G1 = true
+        ;   G1 = G0
+        ),
+        Kb1 = Kb0,
         Keys = Keys1
     ;   E = device_attributes(_)
-    ->  (   K0 == detecting
-        ->  K1 = legacy
-        ;   K1 = K0
+    ->  (   Kb0 == detecting
+        ->  Kb1 = legacy
+        ;   Kb1 = Kb0
         ),
-        keyboard_properties(K1, Properties),
+        G1 = G0,
+        detected_properties(Kb1-G1, Properties),
         Keys = [terminal_properties(Properties) | Keys1]
-    ;   K1 = K0,
+    ;   Kb1 = Kb0,
+        G1 = G0,
         Keys = [E | Keys1]
     ),
-    keyboard_events_keys(K1, Es, K, Keys1).
+    keyboard_events_keys(Kb1-G1, Es, K, Keys1).
 
 % IMPURE: reads the environment. program(P) is TERM_PROGRAM, as set by
 % the terminal (e.g. 'Apple_Terminal'), or unknown; extended_keys(B) is
-% whether modified keys are unambiguous (the Kitty keyboard protocol).
-keyboard_properties(K, [program(P), extended_keys(B)]) :-
+% whether modified keys are unambiguous (the Kitty keyboard protocol);
+% graphics(G) is whether images can be shown (the Kitty graphics
+% protocol).
+detected_properties(Kb-G, [program(P), extended_keys(B), graphics(G)]) :-
     (   getenv('TERM_PROGRAM', P0)
     ->  atom_string(P, P0)
     ;   P = unknown
     ),
-    (   K == kitty
+    (   Kb == kitty
     ->  B = true
     ;   B = false
     ).
@@ -187,3 +203,16 @@ substrate_runs_painted(terminal(K, P), Runs, terminal(K, P)) :-
     flush_output.
 substrate_runs_painted(vcr(Script0), Runs, vcr(Script)) :-
     vcr_runs_painted(Script0, Runs, Script).
+
+% IMPURE: sends image Actions, transmit(Id, Source) and place(Id, W-H)
+% (see tui/image.pl).
+substrate_graphics_sent(terminal(K, P), Actions, terminal(K, P)) :-
+    maplist(graphics_action_sent, Actions),
+    flush_output.
+substrate_graphics_sent(vcr(Script0), Actions, vcr(Script)) :-
+    vcr_graphics_sent(Script0, Actions, Script).
+
+graphics_action_sent(transmit(Id, Source)) :-
+    ansi_kitty_image_transmit(Id, Source).
+graphics_action_sent(place(Id, WH)) :-
+    ansi_kitty_image_place(Id, WH).

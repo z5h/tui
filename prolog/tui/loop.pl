@@ -17,6 +17,7 @@ bubbling and the app's update, and repeats until a result.
 :- use_module(library(tui/render)).
 :- use_module(library(tui/wake)).
 :- use_module(library(tui/substrate)).
+:- use_module(library(tui/image)).
 
 
 '#app'.
@@ -31,8 +32,9 @@ bubbling and the app's update, and repeats until a result.
 %
 %  Besides keys, Update receives terminal_size(Cols, Rows) at the start
 %  and after every resize, and terminal_properties(Properties) once,
-%  shortly after the start: program(Program) (TERM_PROGRAM, or unknown)
-%  and extended_keys(Bool), in no guaranteed order.
+%  shortly after the start: program(Program) (TERM_PROGRAM, or unknown),
+%  extended_keys(Bool) and graphics(Bool) (whether image/3 can be shown),
+%  in no guaranteed order.
 %
 %  Everything runs in the calling thread, which must own the TTY. Other
 %  threads deliver events through a wake (see tui/wake.pl).
@@ -54,7 +56,7 @@ app(Substrate, State, View, Update, Result) :-
             Substrate,
             Wake,
             app_loop(app(View, Update, Wake), State,
-                     display(Substrate, stale, unknown, []), Result)
+                     display(Substrate, stale, unknown, [], []), Result)
         ),
         (   @ retract(app_wake_(Wake)),
             @ wake_close(Wake)
@@ -80,7 +82,7 @@ post(Event) :-
 % every ready event into the state before painting again.
 %
 % A frame is the rendered form of a state: frame(Commands, EventAssoc,
-% Extent, Cursor). The loop tracks it as stale (not computed),
+% Extent, Cursor, Images). The loop tracks it as stale (not computed),
 % fresh(Frame) (computed, not on screen), or painted(Frame). Events are
 % routed through the frame of the state they apply to, so a batch of
 % events may compute several frames but paints only the last.
@@ -90,10 +92,15 @@ post(Event) :-
 % bound it, otherwise none. With no cursor nothing is highlighted, and
 % events bubble through no components.
 %
-% The display is display(Substrate, Tracked, Size, Runs). Size is Cols-Rows,
-% or unknown until the substrate reports it; nothing is painted before
-% then. Runs are the sorted runs currently on the substrate. Painting
-% draws only runs not already there.
+% Images are the image(Id, Source, W-H) drawn on screen, found on the
+% stacks of their cells (see tui/image.pl).
+%
+% The display is display(Substrate, Tracked, Size, Runs, Images). Size is
+% Cols-Rows, or unknown until the substrate reports it; nothing is
+% painted before then. Runs are the sorted runs currently on the
+% substrate. Painting draws only runs not already there. Images are
+% those the substrate has been sent; painting sends only what is missing.
+% A clear forgets them too, in case clearing deletes them.
 
 app_loop(App, State0, Display0, Result) :-
     App = app(View, _, Wake),
@@ -107,7 +114,7 @@ app_loop(App, State0, Display0, Result) :-
     ).
 
 % IMPURE: blocks until the substrate has events.
-wake_display_events(Wake, display(S0, T, Size, Runs), Events, display(S, T, Size, Runs)) :-
+wake_display_events(Wake, display(S0, T, Size, Runs, Is), Events, display(S, T, Size, Runs, Is)) :-
     substrate_events(S0, Wake, Events, S).
 
 app_events_state_display_outcome(_, [], State, Display, continue(State, Display)).
@@ -122,17 +129,17 @@ app_events_state_display_outcome(App, [E | Es], State0, Display0, Outcome) :-
 % A new size clears the substrate: nothing is on it. The app then gets
 % the size like any other event, so it can lay itself out.
 app_event_state_display_next(App, terminal_size(Cols, Rows), S, D0, Next) :- !,
-    D0 = display(Sub0, _, Size, _),
+    D0 = display(Sub0, _, Size, _, _),
     (   Size == Cols-Rows
     ->  D = D0
     ;   substrate_cleared(Sub0, Sub),
-        D = display(Sub, stale, Cols-Rows, [])
+        D = display(Sub, stale, Cols-Rows, [], [])
     ),
     app_event_state_display_updated(App, terminal_size(Cols, Rows), S, D, Next).
 app_event_state_display_next(App, E, S0, D, Next) :-
     app_event_state_display_updated(App, E, S0, D, Next).
 
-app_event_state_display_updated(App, E, S0, display(Sub, T0, Size, Runs), Next) :-
+app_event_state_display_updated(App, E, S0, display(Sub, T0, Size, Runs, Is), Next) :-
     App = app(View, Update, _),
     view_size_state_tracked_fresh(View, Size, S0, T0, T1),
     tracked_frame(T1, Frame),
@@ -141,13 +148,13 @@ app_event_state_display_updated(App, E, S0, display(Sub, T0, Size, Runs), Next) 
     (   S = result(_)
     ->  Next = S
     ;   S == Shown
-    ->  Next = continue(Shown, display(Sub, T1, Size, Runs))
-    ;   Next = continue(S, display(Sub, stale, Size, Runs))
+    ->  Next = continue(Shown, display(Sub, T1, Size, Runs, Is))
+    ;   Next = continue(S, display(Sub, stale, Size, Runs, Is))
     ).
 
 % The state as shown: with the frame's cursor, which the view may have
 % placed. Update receives this state.
-frame_state_shown(frame(_, _, _, Cursor), Cursor0-Model, Shown) :-
+frame_state_shown(frame(_, _, _, Cursor, _), Cursor0-Model, Shown) :-
     (   Cursor == none
     ->  Shown = Cursor0-Model
     ;   Shown = Cursor-Model
@@ -159,7 +166,7 @@ frame_state_shown(frame(_, _, _, Cursor), Cursor0-Model, Shown) :-
 % are routed through Frame, the frame the event arrived at.
 :- meta_predicate frame_update_event_state0_state(+, 3, +, +, -).
 frame_update_event_state0_state(Frame, Update, E0, S0, S) :-
-    Frame = frame(_, EventAssoc, _, Cursor),
+    Frame = frame(_, EventAssoc, _, Cursor, _),
     findall(E1, point_event_assoc_bubbled(Cursor, E0, EventAssoc, E1), Es),
     frame_update_bubbled_state0_state(Frame, Update, Es, S0, S).
 
@@ -176,7 +183,7 @@ frame_update_bubbled_state0_state(Frame, Update, [E | Es], S0, S) :-
 % extent. moved(Dir) then bubbles at the cursor's old position; what it
 % becomes, if anything else, is passed to Update with the cursor moved.
 :- meta_predicate frame_update_one_state0_state(+, 3, +, +, -).
-frame_update_one_state0_state(frame(_, EventAssoc, Extent, _), Update, E, S0, S) :-
+frame_update_one_state0_state(frame(_, EventAssoc, Extent, _, _), Update, E, S0, S) :-
     (   E = result(_)
     ->  S = E
     ;   direction(E),
@@ -217,23 +224,28 @@ view_size_state_tracked_fresh(_, _, _, T, T).
 % IMPURE: paints the frame unless it is already on the substrate, or the
 % substrate's size is not yet known.
 view_state_display_painted(_, _, D, D) :-
-    D = display(_, painted(_), _, _), !.
+    D = display(_, painted(_), _, _, _), !.
 view_state_display_painted(_, _, D, D) :-
-    D = display(_, _, unknown, _), !.
-view_state_display_painted(View, State, display(Sub0, T0, Size, Previous), display(Sub, painted(F), Size, Runs)) :-
+    D = display(_, _, unknown, _, _), !.
+view_state_display_painted(View, State,
+                           display(Sub0, T0, Size, Previous, Sent0),
+                           display(Sub, painted(F), Size, Runs, Sent)) :-
     view_size_state_tracked_fresh(View, Size, State, T0, fresh(F)),
-    F = frame(Commands, _, _, Cursor),
+    F = frame(Commands, _, _, Cursor, Images),
+    images_sent_actions(Images, Sent0, Actions, Sent),
+    substrate_graphics_sent(Sub0, Actions, Sub1),
     limits_cursor_commands_runs(Size, Cursor, Commands, Runs),
     runs_previous_changed(Runs, Previous, Changed),
-    substrate_runs_painted(Sub0, Changed, Sub).
+    substrate_runs_painted(Sub1, Changed, Sub).
 
-view_size_state_frame(View, Size, State, frame(Commands, EventAssoc, Extent, Cursor)) :-
+view_size_state_frame(View, Size, State, frame(Commands, EventAssoc, Extent, Cursor, Images)) :-
     call(View, State, Drawable0),
     size_drawable_zoned(Size, Drawable0, Drawable),
     drawable__normalized_commands__end(Drawable, Commands, Extent),
     size_limits(Size, Limits),
     limits_commands_eventmap(Limits, Commands, EventMap),
     state_eventmap_cursor(State, EventMap, Cursor),
+    limits_commands_images(Limits, Commands, Images),
     (   Cursor = X-Y
     ->  once(apply_focus(X-Y, Commands))
     ;   true
@@ -258,6 +270,25 @@ state_eventmap_cursor(Cursor0-_, EventMap, Cursor) :-
     ->  Cursor = Cursor0
     ;   Cursor = none
     ).
+
+% The images with a cell on screen. Every placeholder starts with
+% U+10EEEE, above any other character in use, so one comparison rules
+% out ordinary cells; only placeholders have their stacks searched.
+% findall/3 copies, and every cell of an image holds its Source, so only
+% the Ids are collected; each image is then taken, uncopied, from one of
+% its cells.
+limits_commands_images(Limits, Commands, Images) :-
+    findall(Id, ( member(XY-(Stack-_-C), Commands),
+                  C @> '\U0010EEED',
+                  limits_point_within(Limits, XY),
+                  memberchk(_-image(Id, _, _), Stack) ), Ids0),
+    sort(Ids0, Ids),
+    maplist(commands_id_image(Commands), Ids, Images).
+
+commands_id_image(Commands, Id, image(Id, S, WH)) :-
+    once(( member(_-(Stack-_-C), Commands),
+           C @> '\U0010EEED',
+           memberchk(_-image(Id, S, WH), Stack) )).
 
 % Before the size is known, events may land anywhere.
 size_limits(unknown, inf-inf) :- !.

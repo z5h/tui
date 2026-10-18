@@ -466,6 +466,16 @@ test(pending, [forall(member(Codes, [`\e`, `\eO`, `\e[`, `\e[1;`, `x\e[1`, `\e[2
     once(append(_, Pending, Codes)),
     Pending = [27 | _].
 
+test(graphics_reply) :-
+    codes_events_pending(`\e_Gi=31;OK\e\\a`, Events, Pending),
+    Events == [kitty_graphics("i=31;OK"), a],
+    Pending == [].
+
+test(apc_incomplete) :-
+    codes_events_pending(`a\e_Gi=31;O`, Events, Pending),
+    Events == [a],
+    Pending == `\e_Gi=31;O`.
+
 test(flushed) :-
     pending_events_flushed(`\e`, [escape]),
     pending_events_flushed(`\e[`, [alt+'[']),
@@ -481,20 +491,99 @@ test(flushed) :-
 % becomes the terminal's properties. The Kitty push is written to output.
 replies_keyboard_keys(Replies, K, Keys) :-
     with_output_to(string(_),
-                   tui_substrate:keyboard_events_keys(detecting, Replies, K, Keys)).
+                   tui_substrate:keyboard_events_keys(detecting-false, Replies, K, Keys)).
 
 test(legacy) :-
     replies_keyboard_keys([a, device_attributes([1]), b], K, Keys),
-    K == legacy,
+    K == legacy-false,
     Keys = [a, terminal_properties(Ps), b],
     memberchk(extended_keys(false), Ps),
+    memberchk(graphics(false), Ps),
     memberchk(program(P), Ps),
     atom(P).
 
 test(kitty) :-
-    replies_keyboard_keys([kitty_keyboard(0), device_attributes([1])], K, Keys),
-    K == kitty,
+    replies_keyboard_keys([kitty_keyboard(0), kitty_graphics("i=31;OK"), device_attributes([1])], K, Keys),
+    K == kitty-true,
     Keys = [terminal_properties(Ps)],
-    memberchk(extended_keys(true), Ps).
+    memberchk(extended_keys(true), Ps),
+    memberchk(graphics(true), Ps).
+
+test(graphics_error) :-
+    replies_keyboard_keys([kitty_graphics("i=31;EINVAL:bad"), device_attributes([1])], _, Keys),
+    Keys = [terminal_properties(Ps)],
+    memberchk(graphics(false), Ps).
 
 :- end_tests(substrate).
+
+
+:- begin_tests(image).
+
+:- use_module(library(tui/image)).
+:- use_module(library(tui/terminal)).
+
+test(placeholders) :-
+    drawable_raw(image(0x01022A, png("x"), 2-2), raw(Cmds)),
+    Cmds = [(0-0)-(Stack-Attrs-C00) | _],
+    memberchk(_-image(0x01022A, png("x"), 2-2), Stack),
+    flatten(Attrs, [fg(1, 2, 42)]),
+    atom_codes(C00, [0x10EEEE, 0x0305, 0x0305]),
+    findall(XY-Cs, ( member(XY-(_-_-C), Cmds), atom_codes(C, [_ | Cs]) ), Cells),
+    Cells == [(0-0)-[0x0305, 0x0305], (1-0)-[0x0305, 0x030D],
+              (0-1)-[0x030D, 0x0305], (1-1)-[0x030D, 0x030D]].
+
+test(sent_actions) :-
+    images_sent_actions([image(1, png("a"), 2-2)], [], A1, S1),
+    A1 == [transmit(1, png("a")), place(1, 2-2)],
+    images_sent_actions([image(1, png("a"), 2-2)], S1, A2, S1),
+    A2 == [],
+    images_sent_actions([image(1, png("a"), 3-1)], S1, A3, S3),
+    A3 == [place(1, 3-1)],
+    images_sent_actions([image(1, png("b"), 3-1)], S3, A4, S4),
+    A4 == [transmit(1, png("b")), place(1, 3-1)],
+    S4 == [image(1, png("b"), 3-1)],
+    images_sent_actions([], S4, A5, S5),
+    A5 == [],
+    S5 == S4.
+
+test(transmit_escape) :-
+    with_output_to(string(S), ansi_kitty_image_transmit(7, png("abc"))),
+    S == "\e_Ga=t,f=100,i=7,q=2;YWJj\e\\".
+
+test(transmit_chunked) :-
+    length(Codes, 4000),
+    maplist(=(0), Codes),
+    with_output_to(string(S), ansi_kitty_image_transmit(7, rgb(10-10, Codes))),
+    split_string(S, "\e", "", Parts),
+    Parts = ["", First, "\\", Last, "\\"],
+    sub_string(First, 0, _, _, "_Ga=t,f=24,s=10,v=10,i=7,q=2,m=1;"),
+    sub_string(Last, 0, _, _, "_Gm=0,q=2;").
+
+test(place_escape) :-
+    with_output_to(string(S), ansi_kitty_image_place(7, 3-2)),
+    S == "\e_Ga=p,U=1,i=7,p=1,c=3,r=2,q=2\e\\".
+
+% The view draws an image once the terminal reports graphics; the upload
+% and placement are sent once, before the runs.
+image_view(_-false, "no graphics").
+image_view(_-true, image(5, png("x"), 1-1)).
+
+image_update(terminal_properties(Ps), C-_, C-G) :- !,
+    memberchk(graphics(G), Ps).
+image_update(eos, S, result(S)) :- !.
+image_update(_, S, S).
+
+test(vcr) :-
+    atom_codes(P, [0x10EEEE, 0x0305, 0x0305]),
+    Script = [ send([terminal_size(12, 2)]),
+               expect(clear),
+               expect(runs([(1-1)-([]-[n, o, ' ', g, r, a, p, h, i, c, s])])),
+               send([terminal_properties([graphics(true)])]),
+               expect(graphics([transmit(5, png("x")), place(5, 1-1)])),
+               expect(runs([(1-1)-([fg(0, 0, 5)]-[P]),
+                            (2-1)-([]-[' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '])])),
+               send([x])
+             ],
+    app(vcr(Script), _-false, image_view, image_update, _).
+
+:- end_tests(image).

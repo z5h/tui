@@ -38,6 +38,7 @@ In `examples/`, each runnable as `swipl -p library=prolog examples/NAME.pl` from
 - `cursor.pl` — the default cursor, and placing it from the view with `cursor/1`
 - `gallery.pl` — the ready-made components
 - `move.pl` — dragging with Shift+arrows, and `moved(Direction)`
+- `image.pl` — an image, through the Kitty graphics protocol
 - `atto.pl` — a small text editor: `swipl -p library=prolog examples/atto.pl -- FILE`
 
 ## Terminals
@@ -47,7 +48,7 @@ The ready-made components drag with Shift+arrows: what is under the cursor moves
 - Shift+↑: Send Text `\033[1;2A`
 - Shift+↓: Send Text `\033[1;2B`
 
-Apps can work around a terminal's limits: shortly after starting, `update/3` receives `terminal_properties(Properties)`, holding `program(Program)` (from `TERM_PROGRAM`, e.g. `'Apple_Terminal'`, or `unknown`) and `extended_keys(Bool)` (whether modified keys are unambiguous, via the Kitty keyboard protocol). `examples/move.pl` uses it to show this caveat.
+Apps can work around a terminal's limits: shortly after starting, `update/3` receives `terminal_properties(Properties)`, holding `program(Program)` (from `TERM_PROGRAM`, e.g. `'Apple_Terminal'`, or `unknown`), `extended_keys(Bool)` (whether modified keys are unambiguous, via the Kitty keyboard protocol) and `graphics(Bool)` (whether images can be shown, via the Kitty graphics protocol). `examples/move.pl` uses it to show this caveat.
 
 ## Architecture
 
@@ -66,6 +67,10 @@ Views are built from a term-based DSL:
 - **Core drawables**: `row/1`, `column/1`, `table(Style, Rows)` (`empty`, `space`, `thin`, `thick`, `double`; each cell is a zone), `wrapped(Width, Chars)`, `clear(W-H)`, `line(Char, From, To)`, `box(W-H, Chars)` (`thin`, `thick`, `double`, or your own characters), `hover(Style, D)`, `cursor(D)`
 - **Components** (opt-in, `:- use_module(library(tui/components))`): `check_box/2`, `button/1`, `input/3`, `frame/2`, `titled_frame/3`, `scroll/3`
 - **Tagging**: `Key : Drawable` — attaches an identity for event routing
+
+### Images
+
+In terminals with the Kitty graphics protocol (Kitty, Ghostty), `image(Id, Source, W-H)` shows an image in W×H cells. Source is `png(Bytes)`, `rgba(PW-PH, Bytes)`, `rgb(PW-PH, Bytes)` (Bytes being octets, as read from a binary stream) or `file(Path)`. The image is uploaded once, and its cells behave like text: they can be clipped, overdrawn and erased. Draw images only once `update/3` receives `terminal_properties(Ps)` with `graphics(true)` in Ps. See `examples/image.pl`.
 
 ### Custom Components
 

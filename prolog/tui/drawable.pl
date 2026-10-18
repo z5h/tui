@@ -94,6 +94,10 @@ is_stlye_attribute(A) :-
                faint,
                crossed_out]).
 
+is_color_attribute(fg(R, G, B)) :- !,
+    maplist(between(0, 255), [R, G, B]).
+is_color_attribute(bg(R, G, B)) :- !,
+    maplist(between(0, 255), [R, G, B]).
 is_color_attribute(A) :-
     ( A = fg(Color)
     ; A = bg(Color)

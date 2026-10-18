@@ -22,7 +22,8 @@ Events:
     alone on a printable key gives the shifted character ('A').
   * paste(Text): text pasted while bracketed paste is on, as a string.
     Line breaks are normalised to "\n".
-  * Terminal replies: kitty_keyboard(Flags), device_attributes(Params).
+  * Terminal replies: kitty_keyboard(Flags), device_attributes(Params),
+    kitty_graphics(Reply) (Reply a string, e.g. "i=31;OK").
   * unknown_input(Codes) for a well-formed sequence with no meaning here.
 
 Without the Kitty protocol some keys are indistinguishable: tab and
@@ -75,6 +76,9 @@ token(T) --> [27, 0'[], !,
     csi_end(Ps, Is, T).
 % SS3: ESC O code.
 token(ss3(C)) --> [27, 0'O], !, [C].
+% APC: ESC _ codes ESC \ (ST). Without the ST it is incomplete; legacy
+% alt+_ alone is resolved by the escape grace period.
+token(apc(Codes)) --> [27, 0'_], !, apc_codes(Codes).
 % Escape followed by escape: the first is the escape key.
 token(char(27)) --> [27], peek(27), !.
 % Escape followed by any other code: that key with alt.
@@ -100,6 +104,9 @@ paste_end --> [27, 0'[, 0'2, 0'0, 0'1, 0'~].
 paste_codes([]) --> paste_end, !.
 paste_codes([C | Cs]) --> [C], paste_codes(Cs).
 
+apc_codes([]) --> [27, 0'\\], !.
+apc_codes([C | Cs]) --> [C], apc_codes(Cs).
+
 
 '#events'.
 
@@ -121,6 +128,13 @@ token_event(csi(Ps, Is, F), E) :-
         E = unknown_input(Codes)
     ).
 token_event(unknown(Codes), unknown_input(Codes)).
+token_event(apc(Codes), E) :-
+    (   Codes = [0'G | Reply]
+    ->  string_codes(Text, Reply),
+        E = kitty_graphics(Text)
+    ;   append([27, 0'_ | Codes], [27, 0'\\], All),
+        E = unknown_input(All)
+    ).
 token_event(paste(Codes), paste(Text)) :-
     phrase(line_breaks_normalised(Normalised), Codes),
     string_codes(Text, Normalised).

@@ -2,7 +2,8 @@
           [
             vcr_events/3,
             vcr_cleared/2,
-            vcr_runs_painted/3
+            vcr_runs_painted/3,
+            vcr_graphics_sent/3
           ]).
 
 /** <module> VCR
@@ -13,6 +14,8 @@ and what the substrate sends back. A script is a list of:
   * send(Events)      — the next batch of events the app receives
   * expect(clear)     — the app clears the substrate
   * expect(runs(Runs)) — the app paints exactly Runs, (X-Y)-(Attrs-Chars)
+  * expect(graphics(Actions)) — the app sends exactly these image actions
+    (see tui/image.pl), before the runs of the same paint
 
 Entries are consumed in order. Anything the app does that does not match
 the next entry throws error(vcr_mismatch(Expected, Actual), _), where
@@ -46,6 +49,12 @@ vcr_runs_painted([expect(runs(Expected)) | Script], Runs, Script) :-
     Expected == Runs, !.
 vcr_runs_painted(Script, Runs, _) :-
     script_mismatch(Script, expect(runs(Runs))).
+
+vcr_graphics_sent(Script, [], Script) :- !.
+vcr_graphics_sent([expect(graphics(Expected)) | Script], Actions, Script) :-
+    Expected == Actions, !.
+vcr_graphics_sent(Script, Actions, _) :-
+    script_mismatch(Script, expect(graphics(Actions))).
 
 script_mismatch([], Actual) :-
     throw(error(vcr_mismatch(end_of_script, Actual), _)).

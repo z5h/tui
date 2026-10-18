@@ -16,6 +16,7 @@ This is a SWI-Prolog pack. Library modules live in `prolog/`, internal modules i
 - `prolog/tui/input.pl` — `tui_input`: decodes terminal input codes into events (legacy xterm and Kitty keyboard protocol), with no side effects
 - `prolog/tui/drawable.pl` — `tui_drawable`: the drawable DSL (`drawable//5`), attributes, commands, cell resolution (conceal/reveal), and the core drawables that make no styling choices: `row/1`, `column/1`, `table/2`, `wrapped/2`, `clear/1`, `line/3`, `box/2`, `Key:Drawable` tagging, `cursor/1`
 - `prolog/tui/hover.pl` — `tui_hover`: the `hover/2` component and cursor-dependent hover styling
+- `prolog/tui/image.pl` — `tui_image`: `image/3` (Kitty graphics placeholders) and which uploads and placements a frame needs (design: `CONSIDERATIONS.md`)
 - `prolog/tui/events.pl` — `tui_events`: event bubbling through component stacks, the event map
 - `prolog/tui/render.pl` — `tui_render`: commands → runs, and which runs changed (no side effects)
 - `prolog/tui/wake.pl` — `tui_wake`: a message queue that `wait_for_input/3` can wait on
@@ -24,7 +25,7 @@ This is a SWI-Prolog pack. Library modules live in `prolog/`, internal modules i
 - `prolog/tui/loop.pl` — `tui_loop`: `app/4`, `app/5` and the event loop
 - `prolog/tui/components.pl` — `tui_components`: ready-made, styled components (opt-in, not loaded by `library(tui)`)
 - `prolog/tui/assocs.pl` — `tui_assocs`
-- `examples/` — one topic each: `hello.pl`, `layout.pl`, `align.pl`, `events.pl`, `cursor.pl`, `gallery.pl` (the components), `move.pl`
+- `examples/` — one topic each: `hello.pl`, `layout.pl`, `align.pl`, `events.pl`, `cursor.pl`, `gallery.pl` (the components), `move.pl`, `image.pl`
 - `examples/atto.pl` — atto, a tiny text editor: key bindings and view; `examples/atto_lib.pl` is its editing model (document, cursor, scrolling, files), driven by commands
 - `test/test_tui.pl` — plunit tests
 - `pack.pl` — pack metadata
@@ -57,9 +58,9 @@ Everything runs in the main thread, which owns the TTY (`wait_for_input/3` on `u
 
 **The cursor.** Update may bind the state's cursor `X-Y`, or leave it unbound. The view may draw `cursor(Drawable)` (an alias defined in `loop.pl`), which places the cursor on the top-left cell drawn by it; because the view runs after update, this overrides any cursor update bound. If several are drawn, the top-left cell of them all wins. With neither, there is no cursor: nothing is highlighted, and events bubble through an empty stack (so only `at_event_is([], ...)` sees them) and arrows do not move anything. Arrow keys not claimed by a component move the cursor by default (the loop binds the new position). Update receives the state with the cursor as shown.
 
-A frame is `frame(Commands, EventAssoc, Extent, Cursor)`, computed from a state; `Cursor` is the resolved cursor or `none`. It is tracked as `stale`, `fresh(F)` (computed, not painted) or `painted(F)`. Each event in a batch is routed through the frame of the state it applies to, but only the last frame is painted.
+A frame is `frame(Commands, EventAssoc, Extent, Cursor, Images)`, computed from a state; `Cursor` is the resolved cursor or `none`; `Images` are the `image/3` terms with a cell on screen. It is tracked as `stale`, `fresh(F)` (computed, not painted) or `painted(F)`. Each event in a batch is routed through the frame of the state it applies to, but only the last frame is painted.
 
-The loop's display is `display(Substrate, Tracked, Size, Runs)`. Size is `unknown` until the first `terminal_size(Cols, Rows)` event, which (like any size change) clears the substrate. Runs are what is on the substrate; painting draws only the runs that changed.
+The loop's display is `display(Substrate, Tracked, Size, Runs, Images)`. Size is `unknown` until the first `terminal_size(Cols, Rows)` event, which (like any size change) clears the substrate. Runs are what is on the substrate; painting draws only the runs that changed. Images are those sent to the substrate; painting first sends the uploads and placements the frame's images need (`images_sent_actions/4`). A clear forgets both.
 
 ### Substrates (substrate.pl)
 
@@ -73,13 +74,13 @@ Keys: plain keys are atoms (`a`, `'A'`, `up`, `return`, `f5`); modified keys are
 
 Bracketed paste is always on: a paste arrives as one `paste(Text)` event (a string, line breaks normalised to `"\n"`), never as keystrokes. An open paste is exempt from the escape grace period and waits for its end marker.
 
-Kitty keyboard protocol: at session start the substrate queries for it, then requests device attributes. A Kitty reply before the device-attributes reply means support, and the substrate enables flag 1 (disambiguate); otherwise `Keyboard` becomes `legacy`. The device-attributes reply ends detection and is passed on as `terminal_properties([program(P), extended_keys(B)])` (P from `TERM_PROGRAM`, or `unknown`; list order not guaranteed), so apps can work around a terminal's limits. The decoder accepts both encodings at all times. Replies are consumed by the substrate. Clearing uses erase-display, not a full reset, so the keyboard mode survives resizes.
+Kitty keyboard protocol: at session start the substrate queries for it, then requests device attributes. A Kitty reply before the device-attributes reply means support, and the substrate enables flag 1 (disambiguate); otherwise `Keyboard` becomes `legacy`. A Kitty graphics query is sent too; an `OK` reply (`kitty_graphics(Reply)`, decoded from an APC) means images can be shown. The device-attributes reply ends detection and is passed on as `terminal_properties([program(P), extended_keys(B), graphics(G)])` (P from `TERM_PROGRAM`, or `unknown`; list order not guaranteed), so apps can work around a terminal's limits. The substrate's detection state is `Keyboard-Graphics`. The decoder accepts both encodings at all times. Replies are consumed by the substrate. Clearing uses erase-display, not a full reset, so the keyboard mode survives resizes.
 
 **Wake** (`wake.pl`): a `wake(Queue, In, Out)` term. Posting queues an event, then writes a byte to a pipe the loop waits on alongside `user_input`. Bytes are consumed before the queue is drained, so no event is stranded. `post/1` in `loop.pl` (not yet exported) delivers to the running app.
 
 ### Headless Testing (vcr.pl)
 
-`app(vcr(Script), State, View, Update, Result)` (from `library(tui/loop)`) runs an app against a script of `send(Events)`, `expect(clear)` and `expect(runs(Runs))`, consumed in order. Any divergence throws `vcr_mismatch(Expected, Actual)`. An exhausted script answers every request for events with `[eos]`; the app decides what that means (test apps typically return `result(...)`). A script starts with `send([terminal_size(Cols, Rows)])` followed by `expect(clear)`. See the `vcr` unit in `test/test_tui.pl`.
+`app(vcr(Script), State, View, Update, Result)` (from `library(tui/loop)`) runs an app against a script of `send(Events)`, `expect(clear)`, `expect(graphics(Actions))` and `expect(runs(Runs))`, consumed in order. Any divergence throws `vcr_mismatch(Expected, Actual)`. An exhausted script answers every request for events with `[eos]`; the app decides what that means (test apps typically return `result(...)`). A script starts with `send([terminal_size(Cols, Rows)])` followed by `expect(clear)`. See the `vcr` unit in `test/test_tui.pl`.
 
 The terminal substrate needs a real TTY, so it can only be checked by running an app by hand; use the VCR for headless tests.
 
@@ -135,7 +136,7 @@ Ready-made, styled components, opt-in via `library(tui/components)`: `check_box/
 
 ### TODO.md and CONSIDERATIONS.md
 
-`TODO.md` lists open work. `CONSIDERATIONS.md` holds design notes and analysis for future features (Kitty graphics protocol, caching experiments, etc.).
+`TODO.md` lists open work. `CONSIDERATIONS.md` holds design notes and analysis (the Kitty graphics design, caching experiments, etc.).
 
 Design notes and analysis for future features (Kitty graphics protocol, caching experiments, etc.).
 

@@ -2,40 +2,36 @@
 
 Design notes and architectural analysis for future features.
 
-## Kitty Terminal Graphics Protocol
+## Kitty Terminal Graphics Protocol (implemented)
 
 Reference: https://sw.kovidgoyal.net/kitty/graphics-protocol/
 
-Nothing fundamental prevents supporting the Kitty graphics protocol. The architecture is compatible.
+Implemented as `image(Id, Source, W-H)` (`prolog/tui/image.pl`). The design, and why:
 
-The key question is whether the drawable system's `(X-Y)-(Stack-Attrs-Char)` command model can accommodate graphics.
+### Placement: Unicode placeholders, not direct placement
 
-### What works already
+Kitty can place an image at the cursor (`a=p`), or show it through placeholder characters (`U=1`, Kitty 0.28+, also Ghostty). Directly placed images live on their own layer: text drawn over them does not remove them, so every move or removal needs an explicit delete, and a second diff of placements beside the runs.
 
-- Images are placed at cursor positions (character cell coordinates) — the drawable system already tracks X-Y positions
-- Images are sent via escape sequences to the TTY — the event loop is the single writer to the terminal
-- Placement is a write-and-forget operation, just like writing a character
+With placeholders, each cell of an image is an ordinary command: U+10EEEE plus two diacritics (row, column, indices into Kitty's table of 297), with the image id as the 24-bit foreground colour, `fg(R,G,B)`. Diffing, erasing, clipping by ports, zones and layering all work unchanged; drawing over a cell replaces that piece of the image. The command format did not change; a `Char` may now be several codepoints (still one cell), which `ansi_run/1` writes by concatenating. Every cell carries both diacritics (Kitty can infer them from the previous cell), because a repainted run may start partway through an image.
 
-### What doesn't conflict but needs extension
+### Uploads: declared by the view, diffed like runs
 
-- A drawable like `image(Id, W-H)` would need to emit something other than single-character commands. The rendering pipeline assumes `(X-Y)-(Stack-Attrs-Char)` where Char is a single-character atom. An image placement is an escape sequence, not a character. Options:
-  - Reserve the cell space (emit placeholder chars) and send the graphics escape separately
-  - Extend the command format to allow a graphics variant alongside character commands
-- The `location_style_char` cache avoids redundant writes by remembering what's at each cell. An analogous cache for image placements would be needed — don't re-transmit an image that's already displayed at that position
-- Image data needs to be transmitted once (uploaded to terminal memory with an ID), then placed many times. That's a two-phase operation: upload in `tui_init` or lazily on first use, place during render. The paint step (`tty_render/2`) is the natural place for both
+The image alias is on its cells' stacks, as `cursor(_)` is. The loop collects the frame's images from the on-screen placeholder cells (distinct ids only: `findall/3` would copy the Source once per cell) and `images_sent_actions/4` compares them with what the display records as sent: a new image is `transmit` then `place`; a new size of one already sent is `place` only (placement id 1 is reused, so it replaces). The substrate sends actions before the frame's runs. Nothing is sent twice, the core stays pure, and the VCR checks them as `expect(graphics(Actions))`. Images no longer drawn are kept by the terminal (drawing them again sends nothing); a clear (resize) forgets what was sent, in case clearing deletes them, and they are re-sent. The full reset at session end removes them.
 
-### What's irrelevant to the architecture
+Sources: `png(Bytes)`, `rgba(PW-PH, Bytes)`, `rgb(PW-PH, Bytes)` (raw pixels need their pixel size), `file(Path)` (the terminal reads it; local terminals only). Bytes are octets; base64 and 4096-byte chunking are done by `terminal.pl`. All commands carry `q=2`, so the terminal does not reply.
 
-- Base64 encoding — SWI-Prolog has `library(base64)`
-- Chunked transmission — just a loop in the output thread
-- Z-index layering — the Kitty protocol handles this, just pass the parameter
-- Bidirectional responses — nice-to-have for error checking but not required for basic display
+### Detection
 
-### The one real design question
+At session start the substrate sends a graphics query (`a=q`) before the device-attributes request. An `OK` reply, decoded from the APC `ESC _ G … ESC \` as `kitty_graphics(Reply)`, sets `graphics(true)` in `terminal_properties/1`. The substrate sends what the view draws regardless; apps draw images only once they see `graphics(true)`, since elsewhere placeholders show as unknown characters.
 
-Images span multiple cells (e.g., 20x10), but the drawable system works cell-by-cell. An `image` drawable would need to claim a rectangular region. The `port(W-H, ...)` and `clear(W-H)` components already deal with rectangular regions, so there's precedent. The image drawable would emit its escape sequence at the top-left cell and emit space placeholders for the remaining cells.
+### Open
 
-Architecturally clear, no blockers. It's an extension to the command format and a new component type, not a rethink.
+- Untested on a real terminal so far (only through the VCR and escape tests).
+- The cursor on an image cell adds `negative`; how Kitty renders a reversed placeholder is unverified.
+- Legacy `alt+_` (`ESC _`) now starts an APC; alone it is resolved by the escape grace period, but followed within 10 ms by more keys it becomes `unknown_input`.
+- `base64/2` is written in Prolog; large images take noticeable time to encode, once per upload.
+- One placement per image id: the same image at two sizes at once needs two ids.
+- Collecting images costs every app a pass over the frame's commands (~0.3 ms for 5000 cells). Placeholder atoms start with U+10EEEE, so one `@>` comparison per cell rules out ordinary characters; searching every stack with `memberchk/2` instead cost 1.5–1.8 ms in scenes with deep stacks.
 
 
 ## alias_drawable Caching (Attempted, Reverted)
