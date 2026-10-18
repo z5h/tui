@@ -429,6 +429,18 @@ test(delete) :-
     value_point_event_bubbled("abc", 4-1, delete, Es),
     Es == [name-"ac"].
 
+% With nothing to delete, the field still takes the key: the value is
+% unchanged, and nothing bubbles on.
+test(nothing_to_delete) :-
+    value_point_event_bubbled(_, 3-1, backspace, Es1),
+    Es1 == [name-""],
+    value_point_event_bubbled(_, 3-1, delete, Es2),
+    Es2 == [name-""],
+    value_point_event_bubbled("ab", 3-1, backspace, Es3),
+    Es3 == [name-"ab"],
+    value_point_event_bubbled("ab", 5-1, delete, Es4),
+    Es4 == [name-"ab"].
+
 test(paste) :-
     value_point_event_bubbled("", 3-1, paste("a\nb"), Es),
     Es == [name-"a b", cursor_by(3-0)].

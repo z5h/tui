@@ -124,18 +124,27 @@ event_index_value_edited(paste(Text), I, Value, Edited, I1) :- !,
     string_index_inserted_edited(Inserted, I, Value, Edited),
     atom_length(Inserted, N),
     I1 is I + N.
+% Backspace at the start and delete at the end change nothing, but are
+% still the field's: they do not bubble on.
 event_index_value_edited(backspace, I, Value, Edited, I1) :- !,
-    I > 0,
-    sub_string(Value, 0, I, _, Before0),
-    sub_string(Before0, 0, _, 1, Before),
-    sub_string(Value, I, _, 0, After),
-    string_concat(Before, After, Edited),
-    I1 is I - 1.
+    (   I > 0
+    ->  sub_string(Value, 0, I, _, Before0),
+        sub_string(Before0, 0, _, 1, Before),
+        sub_string(Value, I, _, 0, After),
+        string_concat(Before, After, Edited),
+        I1 is I - 1
+    ;   Edited = Value,
+        I1 = I
+    ).
 event_index_value_edited(delete, I, Value, Edited, I) :- !,
-    sub_string(Value, 0, I, _, Before),
-    sub_string(Value, I, _, 0, After0),
-    sub_string(After0, 1, _, 0, After),
-    string_concat(Before, After, Edited).
+    (   string_length(Value, L),
+        I < L
+    ->  sub_string(Value, 0, I, _, Before),
+        sub_string(Value, I, _, 0, After0),
+        sub_string(After0, 1, _, 0, After),
+        string_concat(Before, After, Edited)
+    ;   Edited = Value
+    ).
 event_index_value_edited(C, I, Value, Edited, I1) :-
     atom(C),
     atom_length(C, 1),
