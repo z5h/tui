@@ -90,9 +90,10 @@ Since then, `ansi_run/1` writes the SGR sequence itself, without `ansi_format/3`
 
 | terminal | scenario | runs | stream ms | synced ms | worst ms |
 |---|---|---|---|---|---|
-| kitty | full_styled | 1920 | 3.374 | 3.973 | 4.484 |
+| kitty | full_styled (`ansi_sgr/2`) | 1920 | 3.374 | 3.973 | 4.484 |
+| kitty | full_styled (`attributes_sgr/2`) | 1920 | 1.957 | 2.648 | 3.251 |
 
-The other scenarios are unchanged. What remains, ~1.75 µs a run, is still ours (a style encoded and a `format/2` call per run); caching sequences per distinct style, or writing a frame as one string, would cut it further.
+The other scenarios are unchanged. What remains, ~1 µs a run, is still ours (a style encoded and a `format/2` call per run); caching sequences per distinct style, or writing a frame as one string, would cut it further.
 
 ### Pipeline: replacing predsort (120x40, ms, median of 5, back to back)
 

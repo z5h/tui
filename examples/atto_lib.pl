@@ -412,8 +412,8 @@ direction_scroll_by(D, M0, M) :-
     ;   M = M0
     ).
 
-direction_step(up, -3).
-direction_step(down, 3).
+direction_step(up, -1).
+direction_step(down, 1).
 
 
 '#files'.
