@@ -66,12 +66,19 @@ ansi_restore_cursor :-
 ansi_set_cursor(X, Y) :-
     format('\e[~w;~wH', [Y, X]).
 
-% Write Chars at X-Y in Style (a list of ansi_format/3 attributes). A
-% char is one cell, but may be several codepoints (an image placeholder).
-ansi_run((X-Y)-(Style-Chars)) :-
+% Write Chars at X-Y in Style (a list of ansi_format/3 attributes), then
+% reset the style. A char is one cell, but may be several codepoints (an
+% image placeholder). Requires the flag color_term to be true; otherwise
+% ansi_sgr/2 gives no style.
+ansi_run((X-Y)-([]-Chars)) :- !,
     ansi_set_cursor(X, Y),
     atomic_list_concat(Chars, Text),
-    ansi_format(Style, '~a', [Text]).
+    format("~a", [Text]).
+ansi_run((X-Y)-(Style-Chars)) :-
+    ansi_set_cursor(X, Y),
+    ansi_sgr(Style, SGR),
+    atomic_list_concat(Chars, Text),
+    format("~s~a\e[0m", [SGR, Text]).
 
 
 '#queries'.

@@ -12,7 +12,7 @@ This is a SWI-Prolog pack. Library modules live in `prolog/`, internal modules i
 
 - `prolog/tui.pl` — public module `tui`: a facade of operators, re-exports, and the hook declarations (auto-loads components)
 - `prolog/tui/utils.pl` — `tui_utils`: debug helpers (`log/1`, `?`, `@`), list/DCG helpers, direction and limits geometry. Depends on nothing.
-- `prolog/tui/terminal.pl` — `tui_terminal`: generic ANSI output (`ansi_*`, `ansi_run/1`), device-attributes and Kitty keyboard queries
+- `prolog/tui/terminal.pl` — `tui_terminal`: generic ANSI output (`ansi_*`, `ansi_run/1`, styled via `ansi_sgr/2`, which needs the flag `color_term`; a terminal session sets it), device-attributes and Kitty keyboard and graphics queries. The `terminal` test unit checks the bytes
 - `prolog/tui/input.pl` — `tui_input`: decodes terminal input codes into events (legacy xterm and Kitty keyboard protocol), with no side effects
 - `prolog/tui/drawable.pl` — `tui_drawable`: the drawable DSL (`drawable//5`), attributes, commands, cell resolution (conceal/reveal), and the core drawables that make no styling choices: `row/1`, `column/1`, `table/2`, `wrapped/2`, `clear/1`, `line/3`, `box/2`, `Key:Drawable` tagging, `cursor/1`
 - `prolog/tui/hover.pl` — `tui_hover`: the `hover/2` component and cursor-dependent hover styling

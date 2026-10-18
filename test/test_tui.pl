@@ -652,6 +652,61 @@ test(graphics_error) :-
 :- end_tests(substrate).
 
 
+:- begin_tests(terminal, [ setup(( current_prolog_flag(color_term, C),
+                                    nb_setval(test_color_term, C),
+                                    set_prolog_flag(color_term, true) )),
+                           cleanup(( nb_getval(test_color_term, C),
+                                     set_prolog_flag(color_term, C) )) ]).
+
+% The bytes terminal.pl writes, to any stream: the VCR checks runs, these
+% check what the runs become.
+
+:- use_module(library(tui/terminal)).
+
+goal_written(Goal, S) :-
+    with_output_to(string(S), Goal).
+
+test(run_plain) :-
+    goal_written(ansi_run((3-2)-([]-[a, b])), S),
+    S == "\e[2;3Hab".
+
+test(run_styled) :-
+    goal_written(ansi_run((1-1)-([bold, fg(red)]-[x])), S),
+    S == "\e[1;1H\e[1;31mx\e[0m".
+
+test(run_true_color) :-
+    goal_written(ansi_run((1-1)-([fg(1, 2, 3), bg(4, 5, 6)]-[x])), S),
+    S == "\e[1;1H\e[38;2;1;2;3;48;2;4;5;6mx\e[0m".
+
+test(run_multi_codepoint_char) :-
+    atom_codes(P, [0x10EEEE, 0x0305, 0x0305]),
+    goal_written(ansi_run((1-1)-([]-[P, P])), S),
+    atom_codes(P2, [0x10EEEE, 0x0305, 0x0305, 0x10EEEE, 0x0305, 0x0305]),
+    atom_concat('\e[1;1H', P2, A),
+    atom_string(A, S).
+
+test(modes) :-
+    goal_written(( ansi_hide_cursor, ansi_show_cursor, ansi_clear, ansi_reset,
+                   ansi_set_cursor(10, 20) ), S),
+    S == "\e[?25l\e[?25h\e[2J\ec\e[20;10H".
+
+test(session_modes) :-
+    goal_written(( ansi_bracketed_paste_on, ansi_mouse_on,
+                   ansi_mouse_off, ansi_bracketed_paste_off ), S),
+    S == "\e[?2004h\e[?1000h\e[?1002h\e[?1006h\e[?1006l\e[?1002l\e[?1000l\e[?2004l".
+
+test(queries) :-
+    goal_written(( ansi_kitty_keyboard_query, ansi_kitty_keyboard_push(1),
+                   ansi_kitty_keyboard_pop, ansi_primary_device_attributes ), S),
+    S == "\e[?u\e[>1u\e[<u\e[c".
+
+test(graphics_query) :-
+    goal_written(ansi_kitty_graphics_query, S),
+    S == "\e_Gi=31,s=1,v=1,a=q,t=d,f=24;AAAA\e\\".
+
+:- end_tests(terminal).
+
+
 :- begin_tests(image).
 
 :- use_module(library(tui/image)).

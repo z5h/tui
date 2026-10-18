@@ -17,10 +17,6 @@ remaining:
 - a key-inspector example app (show codes and decoded events) would
   help diagnose terminals.
 
-# escape sequence test
-test the bytes terminal.pl produces (ansi_run/1 and the ansi_* helpers),
-so the VCR can stay at the level of runs.
-
 # async API
 how apps receive events from other threads: export post/1 (loop.pl), or
 have update/3 return TEA-style commands. timers fit either way: the
