@@ -1,6 +1,6 @@
 :- module(tui_substrate,
           [
-            terminal_substrate/1,
+            terminal_substrate/2,
             substrate_session/3,
             substrate_events/4,
             substrate_cleared/2,
@@ -11,8 +11,8 @@
 /** <module> Substrates
 
 What the event loop draws onto and receives events from. A substrate is
-a term: terminal(Keyboard, Pending) for a real ANSI terminal (start from
-terminal_substrate/1), or vcr(Script) to replay a script (see
+a term: terminal(Detected, Pending, Mouse) for a real ANSI terminal
+(start from terminal_substrate/2), or vcr(Script) to replay a script (see
 tui/vcr.pl). Operations take a substrate and give back the substrate as
 it is afterwards.
 
@@ -28,6 +28,7 @@ extended_keys(Bool) and graphics(Bool), in no guaranteed order.
 :- use_module(library(tui/input)).
 :- use_module(library(tui/wake)).
 :- use_module(library(tui/vcr)).
+:- use_module(library(option)).
 
 % How long a pending escape sequence may wait for the rest of its codes.
 escape_grace(0.01).
@@ -39,15 +40,18 @@ escape_grace(0.01).
 % is detecting until the terminal reveals whether it supports the Kitty
 % keyboard protocol (then kitty) or not (then legacy); Graphics becomes
 % true if it answers the Kitty graphics query. Pending holds codes of an
-% incomplete escape sequence.
-terminal_substrate(terminal(detecting-false, [])).
+% incomplete escape sequence. Mouse is whether the terminal reports the
+% mouse (option mouse(Bool), default false).
+terminal_substrate(Options, terminal(detecting-false, [], Mouse)) :-
+    option(mouse(Mouse), Options, false),
+    must_be(boolean, Mouse).
 
 %  substrate_session(+Substrate, +Wake, :Goal)
 %
 %  Run Goal with Substrate set up for an app, restoring it afterwards.
 %  Posted events reach the app through Wake.
 :- meta_predicate(substrate_session(+, +, 0)).
-substrate_session(terminal(_, _), Wake, Goal) :-
+substrate_session(terminal(_, _, Mouse), Wake, Goal) :-
     with_tty_raw(
         setup_call_cleanup(
             (   asserta(winch_wake_(Wake)),
@@ -55,6 +59,10 @@ substrate_session(terminal(_, _), Wake, Goal) :-
                 ansi_reset,
                 ansi_hide_cursor,
                 ansi_bracketed_paste_on,
+                (   Mouse == true
+                ->  ansi_mouse_on
+                ;   true
+                ),
                 ansi_kitty_keyboard_query,
                 ansi_kitty_graphics_query,
                 ansi_primary_device_attributes,
@@ -65,6 +73,10 @@ substrate_session(terminal(_, _), Wake, Goal) :-
             (   @ on_signal(winch, _, Old),
                 @ retract(winch_wake_(Wake)),
                 @ ansi_kitty_keyboard_pop,
+                @ (   Mouse == true
+                  ->  ansi_mouse_off
+                  ;   true
+                  ),
                 @ ansi_bracketed_paste_off,
                 @ ansi_reset,
                 @ ansi_show_cursor
@@ -97,7 +109,7 @@ size_posted(Wake) :-
 % period; if nothing arrives, the pending codes are decoded as they are.
 % An open paste waits for its end however long that takes. End of input
 % is the event eos.
-substrate_events(terminal(K0, Pending0), Wake, Events, terminal(K, Pending)) :-
+substrate_events(terminal(K0, Pending0, M), Wake, Events, terminal(K, Pending, M)) :-
     wake_stream(Wake, WakeIn),
     (   (   Pending0 == []
         ;   pending_paste_open(Pending0)
@@ -191,13 +203,13 @@ detected_properties(Kb-G, [program(P), extended_keys(B), graphics(G)]) :-
 '#painting'.
 
 % IMPURE: nothing is on the substrate afterwards.
-substrate_cleared(terminal(K, P), terminal(K, P)) :-
+substrate_cleared(terminal(K, P, M), terminal(K, P, M)) :-
     ansi_clear.
 substrate_cleared(vcr(Script0), vcr(Script)) :-
     vcr_cleared(Script0, Script).
 
 % IMPURE: draws Runs, (X-Y)-(Attrs-Chars), over what is there.
-substrate_runs_painted(terminal(K, P), Runs, terminal(K, P)) :-
+substrate_runs_painted(terminal(K, P, M), Runs, terminal(K, P, M)) :-
     ansi_hide_cursor,
     maplist(ansi_run, Runs),
     flush_output.
@@ -206,7 +218,7 @@ substrate_runs_painted(vcr(Script0), Runs, vcr(Script)) :-
 
 % IMPURE: sends image Actions, transmit(Id, Source) and place(Id, W-H)
 % (see tui/image.pl).
-substrate_graphics_sent(terminal(K, P), Actions, terminal(K, P)) :-
+substrate_graphics_sent(terminal(K, P, M), Actions, terminal(K, P, M)) :-
     maplist(graphics_action_sent, Actions),
     flush_output.
 substrate_graphics_sent(vcr(Script0), Actions, vcr(Script)) :-

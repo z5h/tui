@@ -27,6 +27,8 @@ update(_, S, S).
 
 Run with `swipl hello.pl`. The state is `(CursorX-CursorY)-Model`; update returns a new state, or `result(R)` to quit.
 
+`app/5` takes options as a last argument: `mouse(true)` turns on mouse reporting (see below), and `substrate(vcr(Script))` runs the app headless against a script, for tests.
+
 ## Examples
 
 In `examples/`, each runnable as `swipl -p library=prolog examples/NAME.pl` from a clone:
@@ -36,8 +38,8 @@ In `examples/`, each runnable as `swipl -p library=prolog examples/NAME.pl` from
 - `align.pl` — zones, aligns and tables
 - `events.pl` — a custom component, and tagging instances with `Key : Drawable`
 - `cursor.pl` — the default cursor, and placing it from the view with `cursor/1`
-- `gallery.pl` — the ready-made components
-- `move.pl` — dragging with Shift+arrows, and `moved(Direction)`
+- `gallery.pl` — the ready-made components, with the mouse
+- `move.pl` — dragging with Shift+arrows or the mouse, and `moved(Direction)`
 - `image.pl` — an image, through the Kitty graphics protocol
 - `atto.pl` — a small text editor: `swipl -p library=prolog examples/atto.pl -- FILE`
 
@@ -67,6 +69,10 @@ Views are built from a term-based DSL:
 - **Core drawables**: `row/1`, `column/1`, `table(Style, Rows)` (`empty`, `space`, `thin`, `thick`, `double`; each cell is a zone), `wrapped(Width, Chars)`, `clear(W-H)`, `line(Char, From, To)`, `box(W-H, Chars)` (`thin`, `thick`, `double`, or your own characters), `hover(Style, D)`, `cursor(D)`
 - **Components** (opt-in, `:- use_module(library(tui/components))`): `check_box/2`, `button/1`, `input/3`, `frame/2`, `titled_frame/3`, `scroll/3`
 - **Tagging**: `Key : Drawable` — attaches an identity for event routing
+
+### Mouse
+
+With `app(State, View, Update, Result, [mouse(true)])`, the terminal reports the mouse. Events are `(X-Y)-mouse(Action, Button)` (Action `press`, `release`, `drag` or `move`; Button `left`, `middle`, `right`, ...) and `(X-Y)-mouse(scroll, Dir)`, with modifiers as for keys (`ctrl+mouse(press, left)`). A mouse event bubbles at its own position, so components see it relative to themselves; a press also moves the cursor there. The ready-made components take clicks, the wheel, and drags on a scrollbar. While reporting is on, select text with shift held (option on macOS). Off by default.
 
 ### Images
 

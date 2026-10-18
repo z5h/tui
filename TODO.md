@@ -10,7 +10,10 @@ style_hovergroup (commented there).
 done: tui/input.pl decodes legacy xterm and the Kitty keyboard protocol,
 which is detected and enabled at startup.
 remaining:
-- not yet decoded: mouse (SGR 1006), focus in/out.
+- not yet decoded: focus in/out.
+- mouse: dragging a scroll's content (not just its thumb) needs to know
+  where the drag came from; components are stateless, so it would need
+  the loop's help (e.g. drags bubbling at the press point).
 - a key-inspector example app (show codes and decoded events) would
   help diagnose terminals.
 
@@ -19,9 +22,9 @@ test the bytes terminal.pl produces (ansi_run/1 and the ansi_* helpers),
 so the VCR can stay at the level of runs.
 
 # public API for headless testing
-decide whether library(tui) should export app/5 and document the VCR, so
-users can test their own apps. tests currently import app/5 from
-library(tui/loop).
+app/5 is exported, and substrate(vcr(Script)) runs an app headless.
+remaining: document the VCR in the README, so users can test their own
+apps.
 
 # async API
 how apps receive events from other threads: export post/1 (loop.pl), or

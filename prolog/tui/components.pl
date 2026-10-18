@@ -27,7 +27,7 @@ tagging, cursor) are core, in library(tui/drawable).
 %  when unchecked, bold with the cursor on it.
 %
 %  Events produced:
-%    * check_box-NewBool on space or return (toggles Bool)
+%    * check_box-NewBool on space, return or a left click (toggles Bool)
 tui:alias_drawable(check_box(Title, Bool), hover([bold], Check)) :-
     (  Bool = true
     -> Check = style([     ], ('[x]' .> ': ' .> Title))
@@ -39,17 +39,19 @@ not(false, true).
 
 tui:at_event_is(check_box(_Title, Bool), _-' ', check_box-T) :- not(Bool, T).
 tui:at_event_is(check_box(_Title, Bool), _-return, check_box-T) :- not(Bool, T).
+tui:at_event_is(check_box(_Title, Bool), _-mouse(press, left), check_box-T) :- not(Bool, T).
 
 %!  button(+Label)
 %
 %  A button, shown as [ Label ], bold with the cursor on it.
 %
 %  Events produced:
-%    * button-pressed on space or return
+%    * button-pressed on space, return or a left click
 tui:alias_drawable(button(Label), hover([bold], '[ ' .> Label .> ' ]')).
 
 tui:at_event_is(button(_), _-' ', button-pressed).
 tui:at_event_is(button(_), _-return, button-pressed).
+tui:at_event_is(button(_), _-mouse(press, left), button-pressed).
 
 %!  input(+Width, +Placeholder, ?Value)
 %
@@ -176,7 +178,10 @@ title_r('╶').
 %    * anywhere in the frame, the content, one row or column per press
 %    * on a scrollbar, along its axis, the thumb, one half-cell per press
 %
-%  Page up and page down move by a page, anywhere in the frame.
+%  Page up and page down move by a page, anywhere in the frame. With the
+%  mouse (see app/5), the wheel scrolls the content a row or column at a
+%  time, and pressing or dragging the left button on a scrollbar moves
+%  the thumb to the mouse.
 %
 %  Events produced:
 %    * scroll-(NewX-NewY), the new offset
@@ -200,13 +205,13 @@ tui:alias_drawable(scroll(W-H, X-Y, Content), scroll_view(X-Y, MaxH-MaxV, PH, [F
     (   CW > PW
     ->  port_content_offset_axis_scrollbar(PW, CW, X, h, HScroll),
         port_content_step(PW, CW, StepH),
-        HBars = [hscroll(1-HM1-HScroll, StepH)]
+        HBars = [1-HM1-hscroll(HScroll, StepH, PW-CW)]
     ;   HBars = []
     ),
     (   CH > PH
     ->  port_content_offset_axis_scrollbar(PH, CH, Y, v, VScroll),
         port_content_step(PH, CH, StepV),
-        VBars = [vscroll(WM1-1-VScroll, StepV)]
+        VBars = [WM1-1-vscroll(VScroll, StepV, PH-CH)]
     ;   VBars = []
     ),
     append(HBars, VBars, Bars).
@@ -215,15 +220,27 @@ tui:alias_drawable(scroll(W-H, X-Y, Content), scroll_view(X-Y, MaxH-MaxV, PH, [F
 % bars, carrying what its events need.
 tui:alias_drawable(scroll_view(_, _, _, D), D).
 
-tui:alias_drawable(vscroll(D, _), D).
-tui:alias_drawable(hscroll(D, _), D).
+% vscroll(D, Step, PD-CD), hscroll(D, Step, PD-CD): a scrollbar, PD cells
+% long from its origin, whose thumb moves the content Step per half-cell,
+% for a port PD long showing content CD long.
+tui:alias_drawable(vscroll(D, _, _), D).
+tui:alias_drawable(hscroll(D, _, _), D).
 
-% On a scrollbar, Shift+arrows along its axis drag the thumb by Step.
-tui:at_event_is(vscroll(_, Step), _-(shift+D), thumb_dragged(D, Step)) :-
+% On a scrollbar, Shift+arrows along its axis drag the thumb by Step; the
+% left button, pressed or dragged, moves the thumb to the mouse.
+tui:at_event_is(vscroll(_, Step, _), _-(shift+D), thumb_dragged(D, Step)) :-
     memberchk(D, [up, down]).
-tui:at_event_is(hscroll(_, Step), _-(shift+D), thumb_dragged(D, Step)) :-
+tui:at_event_is(hscroll(_, Step, _), _-(shift+D), thumb_dragged(D, Step)) :-
     memberchk(D, [left, right]).
+tui:at_event_is(vscroll(_, _, PD-CD), (_-N)-mouse(A, left), thumb_at(v, O)) :-
+    memberchk(A, [press, drag]),
+    port_content_cell_offset(PD, CD, N, O).
+tui:at_event_is(hscroll(_, _, PD-CD), (N-_)-mouse(A, left), thumb_at(h, O)) :-
+    memberchk(A, [press, drag]),
+    port_content_cell_offset(PD, CD, N, O).
 
+tui:at_event_is(scroll_view(X-_, _, _, _), _-thumb_at(v, O), scroll-(X-O)).
+tui:at_event_is(scroll_view(_-Y, _, _, _), _-thumb_at(h, O), scroll-(O-Y)).
 tui:at_event_is(scroll_view(X-Y, MaxH-MaxV, PH, _), _-E, scroll-(X1-Y1)) :-
     page_event_shift(PH, E, DX-DY),
     X1 is max(-MaxH, min(0, X + DX)),
@@ -242,6 +259,10 @@ page_event_shift(_, thumb_dragged(down, S), 0-DY) :-
 page_event_shift(_, thumb_dragged(left, S), S-0).
 page_event_shift(_, thumb_dragged(right, S), DX-0) :-
     DX is -S.
+page_event_shift(_, mouse(scroll, up), 0-1).
+page_event_shift(_, mouse(scroll, down), 0-(-1)).
+page_event_shift(_, mouse(scroll, left), 1-0).
+page_event_shift(_, mouse(scroll, right), (-1)-0).
 page_event_shift(PH, page_up, 0-Page) :-
     Page is max(1, PH - 1).
 page_event_shift(PH, page_down, 0-DY) :-
@@ -311,6 +332,16 @@ port_content_step(PD, CD, Step) :-
     (   Travel > 0
     ->  Step is max(1, round(Max / Travel))
     ;   Step = Max
+    ).
+
+% The offset (0 or negative) for the mouse on cell N of the track: the
+% first cell is the start of the content, the last its end, in
+% proportion between.
+port_content_cell_offset(PD, CD, N, O) :-
+    (   PD > 1
+    ->  N1 is max(0, min(PD - 1, N)),
+        O is -round(N1 * (CD - PD) / (PD - 1))
+    ;   O = 0
     ).
 
 % Cells N up to M of the track, with the thumb covering halves Start up

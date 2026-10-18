@@ -13,6 +13,8 @@
             ansi_primary_device_attributes/0,
             ansi_bracketed_paste_on/0,
             ansi_bracketed_paste_off/0,
+            ansi_mouse_on/0,
+            ansi_mouse_off/0,
             ansi_kitty_keyboard_query/0,
             ansi_kitty_keyboard_push/1,
             ansi_kitty_keyboard_pop/0,
@@ -88,6 +90,22 @@ ansi_bracketed_paste_on :-
 
 ansi_bracketed_paste_off :-
     ansi_csi("?2004l").
+
+
+'#mouse'.
+
+% While on, the terminal reports presses and releases (1000), motion with
+% a button held (1002), as SGR reports (1006): see tui/input.pl. The
+% terminal's own text selection then needs a modifier (usually shift).
+ansi_mouse_on :-
+    ansi_csi("?1000h"),
+    ansi_csi("?1002h"),
+    ansi_csi("?1006h").
+
+ansi_mouse_off :-
+    ansi_csi("?1006l"),
+    ansi_csi("?1002l"),
+    ansi_csi("?1000l").
 
 
 '#kitty_keyboard'.

@@ -22,6 +22,13 @@ Events:
     alone on a printable key gives the shifted character ('A').
   * paste(Text): text pasted while bracketed paste is on, as a string.
     Line breaks are normalised to "\n".
+  * A mouse event, while reporting is on: (X-Y)-Mouse, X-Y the cell
+    (1-based), Mouse being mouse(Action, Button) or mouse(scroll, Dir),
+    possibly with modifiers as for keys (ctrl+mouse(press, left)).
+    Action is press, release, drag (motion with a button held) or move;
+    Button is left, middle, right, button(N) (8..11) or none; Dir is up,
+    down, left or right. X10 reports do not say which button was
+    released (none).
   * Terminal replies: kitty_keyboard(Flags), device_attributes(Params),
     kitty_graphics(Reply) (Reply a string, e.g. "i=31;OK").
   * unknown_input(Codes) for a well-formed sequence with no meaning here.
@@ -69,6 +76,11 @@ tokens([]) --> [].
 % Bracketed paste: everything up to the end marker, taken literally.
 % Without the end marker the paste is incomplete.
 token(paste(Codes)) --> paste_start, !, paste_codes(Codes).
+% X10 mouse report, from terminals without SGR reports: CSI M and three
+% bytes, each 32 more than the value (no release button, no large
+% coordinates).
+token(x10(B, X, Y)) --> [27, 0'[, 0'M], !, [B0, X0, Y0],
+    { B is B0 - 32, X is X0 - 32, Y is Y0 - 32 }.
 % CSI: ESC [ parameter-bytes intermediate-bytes final-byte (ECMA-48).
 token(T) --> [27, 0'[], !,
     csi_bytes(0x30, 0x3F, Ps),
@@ -128,6 +140,8 @@ token_event(csi(Ps, Is, F), E) :-
         E = unknown_input(Codes)
     ).
 token_event(unknown(Codes), unknown_input(Codes)).
+token_event(x10(B, X, Y), E) :-
+    report_released_point_event(B, false, X-Y, E).
 token_event(apc(Codes), E) :-
     (   Codes = [0'G | Reply]
     ->  string_codes(Text, Reply),
@@ -194,6 +208,42 @@ private_event(0'?, Params, 0'u, kitty_keyboard(Flags)) :-
     ).
 private_event(0'?, Params, 0'c, device_attributes(Values)) :-
     append(Params, Values).
+% SGR mouse report: CSI < b ; x ; y M (or m for a release).
+private_event(0'<, [[B], [X], [Y]], F, E) :-
+    (   F == 0'm
+    ->  Released = true
+    ;   F == 0'M,
+        Released = false
+    ),
+    report_released_point_event(B, Released, X-Y, E).
+
+% A mouse report: the low bits of B are the button, then shift (4), alt
+% (8), ctrl (16), motion (32), wheel (64), extra buttons (128).
+report_released_point_event(B, Released, XY, XY-E) :-
+    Low is B /\ 3,
+    findall(M, ( member(M-Bit, [shift-4, alt-8, ctrl-16]), B /\ Bit =\= 0 ), Mods),
+    (   B /\ 64 =\= 0
+    ->  nth0(Low, [up, down, left, right], Dir),
+        Mouse = mouse(scroll, Dir)
+    ;   (   B /\ 128 =\= 0
+        ->  N is 8 + Low,
+            Button = button(N)
+        ;   nth0(Low, [left, middle, right, none], Button)
+        ),
+        (   Released == true
+        ->  Action = release
+        ;   B /\ 32 =\= 0
+        ->  (   Button == none
+            ->  Action = move
+            ;   Action = drag
+            )
+        ;   Button == none
+        ->  Action = release
+        ;   Action = press
+        ),
+        Mouse = mouse(Action, Button)
+    ),
+    mods_key_event(Mods, Mouse, E).
 
 % xterm modifyOtherKeys: CSI 27 ; mods ; code ~
 params_final_event([[27], [M | _], [Code | _]], 0'~, E) :- !,

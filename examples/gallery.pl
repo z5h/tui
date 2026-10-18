@@ -10,6 +10,11 @@ return toggles a check box or presses a button. Type into the input.
 Shift+arrows drag the scroll's content, or on a scrollbar its thumb;
 page up and down page it. OK prints the model, Cancel and q quit.
 
+The mouse is on (app/5 option mouse(true)): a click moves the cursor
+and presses or toggles what it is on, the wheel scrolls, and pressing or
+dragging on a scrollbar moves its thumb. Hold shift (option on macOS)
+to select text with the mouse instead.
+
     swipl -p library=prolog examples/gallery.pl
 */
 
@@ -23,7 +28,7 @@ page up and down page it. OK prints the model, Cancel and q quit.
 
 main :-
     state0(S),
-    app(S, view, update, Result),
+    app(S, view, update, Result, [mouse(true)]),
     format("~p~n", [Result]).
 
 state0((2-3)-[ wrap-true,

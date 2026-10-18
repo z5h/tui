@@ -66,7 +66,7 @@ The loop's display is `display(Substrate, Tracked, Size, Runs, Images)`. Size is
 
 A substrate is a term passed through the loop, never global: `terminal`, or `vcr(Script)`. `substrate.pl` branches on it for session setup, events, clearing, and painting runs.
 
-The terminal substrate (`terminal(Keyboard, Pending)`, from `terminal_substrate/1`) owns raw mode and SIGWINCH. The size comes from the OS (`tty_size/2`): at session start and from the SIGWINCH handler it is posted to the wake as `terminal_size(Cols, Rows)`.
+The terminal substrate (`terminal(Detected, Pending, Mouse)`, from `terminal_substrate(Options, S)`, built by `app/5` from its options unless `substrate(S)` is given) owns raw mode and SIGWINCH. The size comes from the OS (`tty_size/2`): at session start and from the SIGWINCH handler it is posted to the wake as `terminal_size(Cols, Rows)`.
 
 Input: the substrate reads available codes and decodes them with `input.pl`. Codes of an incomplete escape sequence stay in `Pending`; while any are pending it waits at most 10 ms (the escape grace period) before decoding them as they are, so a lone ESC becomes `escape`. End of input is the event `eos`.
 
@@ -74,13 +74,15 @@ Keys: plain keys are atoms (`a`, `'A'`, `up`, `return`, `f5`); modified keys are
 
 Bracketed paste is always on: a paste arrives as one `paste(Text)` event (a string, line breaks normalised to `"\n"`), never as keystrokes. An open paste is exempt from the escape grace period and waits for its end marker.
 
+Mouse reporting is opt-in (`app/5` option `mouse(true)`): modes 1000, 1002 and 1006 on at session start, off at cleanup. SGR reports, and X10 reports from terminals without SGR, decode to `(X-Y)-mouse(Action, Button)` or `(X-Y)-mouse(scroll, Dir)`, possibly under modifiers. The loop bubbles a mouse event at X-Y instead of the cursor; a press first moves the cursor there (if there is one), like `moved(Dir)` the cursor moves regardless of what the press becomes; a mouse event no component rewrote reaches update with its position.
+
 Kitty keyboard protocol: at session start the substrate queries for it, then requests device attributes. A Kitty reply before the device-attributes reply means support, and the substrate enables flag 1 (disambiguate); otherwise `Keyboard` becomes `legacy`. A Kitty graphics query is sent too; an `OK` reply (`kitty_graphics(Reply)`, decoded from an APC) means images can be shown. The device-attributes reply ends detection and is passed on as `terminal_properties([program(P), extended_keys(B), graphics(G)])` (P from `TERM_PROGRAM`, or `unknown`; list order not guaranteed), so apps can work around a terminal's limits. The substrate's detection state is `Keyboard-Graphics`. The decoder accepts both encodings at all times. Replies are consumed by the substrate. Clearing uses erase-display, not a full reset, so the keyboard mode survives resizes.
 
 **Wake** (`wake.pl`): a `wake(Queue, In, Out)` term. Posting queues an event, then writes a byte to a pipe the loop waits on alongside `user_input`. Bytes are consumed before the queue is drained, so no event is stranded. `post/1` in `loop.pl` (not yet exported) delivers to the running app.
 
 ### Headless Testing (vcr.pl)
 
-`app(vcr(Script), State, View, Update, Result)` (from `library(tui/loop)`) runs an app against a script of `send(Events)`, `expect(clear)`, `expect(graphics(Actions))` and `expect(runs(Runs))`, consumed in order. Any divergence throws `vcr_mismatch(Expected, Actual)`. An exhausted script answers every request for events with `[eos]`; the app decides what that means (test apps typically return `result(...)`). A script starts with `send([terminal_size(Cols, Rows)])` followed by `expect(clear)`. See the `vcr` unit in `test/test_tui.pl`.
+`app(State, View, Update, Result, [substrate(vcr(Script))])` runs an app against a script of `send(Events)`, `expect(clear)`, `expect(graphics(Actions))` and `expect(runs(Runs))`, consumed in order. Any divergence throws `vcr_mismatch(Expected, Actual)`. An exhausted script answers every request for events with `[eos]`; the app decides what that means (test apps typically return `result(...)`). A script starts with `send([terminal_size(Cols, Rows)])` followed by `expect(clear)`. See the `vcr` unit in `test/test_tui.pl`.
 
 The terminal substrate needs a real TTY, so it can only be checked by running an app by hand; use the VCR for headless tests.
 
@@ -132,7 +134,7 @@ Lightweight association list library using plain `Key-Value` pair lists (not `li
 
 ### components.pl
 
-Ready-made, styled components, opt-in via `library(tui/components)`: `check_box/2`, `input/3`, `frame/2-3`, `titled_frame/3-4`, `scroll/3`. Components here make styling choices; building blocks without them belong in `drawable.pl`. Agreed conventions for this module: focus (the cursor on a component, via `hover/2`) is shown bold; Space and Return activate; faint means inactive or unset; components emit `Name-Value` events; buttons look like `[ OK ]`; Shift+arrows drag what is under the cursor in the arrow's direction, as with a mouse (in a scroll area the content, on a scrollbar the thumb), leaving plain arrows to the cursor.
+Ready-made, styled components, opt-in via `library(tui/components)`: `check_box/2`, `button/1`, `input/3`, `frame/2-3`, `titled_frame/3-4`, `scroll/3`. Components here make styling choices; building blocks without them belong in `drawable.pl`. Agreed conventions for this module: focus (the cursor on a component, via `hover/2`) is shown bold; Space and Return activate; faint means inactive or unset; components emit `Name-Value` events; buttons look like `[ OK ]`; Shift+arrows drag what is under the cursor in the arrow's direction, as with a mouse (in a scroll area the content, on a scrollbar the thumb), leaving plain arrows to the cursor. With the mouse: a left press activates as Space does, the wheel scrolls, and a left press or drag on a scrollbar moves the thumb to the mouse.
 
 ### TODO.md and CONSIDERATIONS.md
 

@@ -4,7 +4,6 @@
 :- use_module(library(tui)).
 :- use_module(library(tui/assocs)).
 :- use_module(library(tui/utils)).
-:- use_module(library(tui/loop), [app/5]).
 :- use_module(library(tui/input)).
 
 :- op(601, xfy, '.>').
@@ -234,7 +233,7 @@ test(replay) :-
                send([right]),
                expect(runs([(1-1)-([]-[h]), (2-1)-([negative]-[i])]))
              ],
-    app(vcr(Script), (1-1)-[], vcr_view, vcr_update, Result),
+    app((1-1)-[], vcr_view, vcr_update, Result, [substrate(vcr(Script))]),
     Result == (2-1)-[a, terminal_size(10, 3)].
 
 % The view places the cursor, over whatever update supplied.
@@ -245,7 +244,7 @@ test(view_places_cursor) :-
                expect(clear),
                expect(runs([(1-1)-([]-[a, b]), (3-1)-([negative]-[c])]))
              ],
-    app(vcr(Script), (1-1)-[], cursor_view, vcr_update, _).
+    app((1-1)-[], cursor_view, vcr_update, _, [substrate(vcr(Script))]).
 
 % No cursor: nothing highlighted, and arrows reach update unmoved.
 test(no_cursor) :-
@@ -254,7 +253,7 @@ test(no_cursor) :-
                expect(runs([(1-1)-([]-[h, i])])),
                send([right])
              ],
-    app(vcr(Script), _-[], vcr_view, vcr_update, Result),
+    app(_-[], vcr_view, vcr_update, Result, [substrate(vcr(Script))]),
     Result = Cursor-Events,
     \+ ground(Cursor),
     Events == [right, terminal_size(10, 3)].
@@ -267,7 +266,7 @@ test(cursor_on_nothing) :-
                expect(clear),
                expect(runs([(1-1)-([]-[a]), (2-1)-([negative]-[' ']), (3-1)-([]-[c])]))
              ],
-    app(vcr(Script), (2-1)-[], gap_view, vcr_update, _).
+    app((2-1)-[], gap_view, vcr_update, _, [substrate(vcr(Script))]).
 
 % What is no longer drawn is erased; what is drawn over is not.
 shrinking_view(_-Es, "AB") :-
@@ -281,7 +280,7 @@ test(erased) :-
                send([x]),
                expect(runs([(1-1)-([]-['A', 'B']), (3-1)-([]-[' ', ' '])]))
              ],
-    app(vcr(Script), _-[], shrinking_view, vcr_update, _).
+    app(_-[], shrinking_view, vcr_update, _, [substrate(vcr(Script))]).
 
 % The view is drawn in a zone the size of the terminal.
 corner_view(_, align(down_right, "x")).
@@ -291,13 +290,13 @@ test(aligned_to_terminal) :-
                expect(clear),
                expect(runs([(10-3)-([]-[x])]))
              ],
-    app(vcr(Script), _-[], corner_view, vcr_update, _).
+    app(_-[], corner_view, vcr_update, _, [substrate(vcr(Script))]).
 
 test(mismatch, [throws(error(vcr_mismatch(expect(runs(_)), expect(clear)), _))]) :-
     Script = [ send([terminal_size(10, 3)]),
                expect(runs([]))
              ],
-    app(vcr(Script), (1-1)-[], vcr_view, vcr_update, _).
+    app((1-1)-[], vcr_view, vcr_update, _, [substrate(vcr(Script))]).
 
 :- end_tests(vcr).
 
@@ -314,6 +313,7 @@ tui:alias_drawable(probe(D), D).
 tui:at_event_is(probe(_), (X-Y)-k, hit(X-Y)).
 tui:at_event_is(probe(_), _-k, right).
 tui:at_event_is(probe(_), (X-Y)-moved(D), moved_from(D, X-Y)).
+tui:at_event_is(probe(_), (X-Y)-mouse(press, left), clicked(X-Y)).
 
 probe_update(eos, S, result(S)) :- !.
 probe_update(E, (X-Y)-Es, (X-Y)-[E | Es]).
@@ -331,8 +331,23 @@ test(relative, [forall(member(View, [probe_view, raw_probe_view]))]) :-
                send([k]),
                expect(runs([(1-1)-([]-[a, b, x, y]), (5-1)-([negative]-[z])]))
              ],
-    app(vcr(Script), (4-1)-[], View, probe_update, Result),
+    app((4-1)-[], View, probe_update, Result, [substrate(vcr(Script))]),
     Result == (5-1)-[moved_from(right, 1-0), hit(1-0), terminal_size(10, 3)].
+
+% A mouse event bubbles where it happened, not at the cursor, and a press
+% moves the cursor there. Unclaimed, it reaches update with its position.
+test(mouse) :-
+    Script = [ send([terminal_size(10, 3)]),
+               expect(clear),
+               expect(runs([(1-1)-([negative]-[a]), (2-1)-([]-[b, x, y, z])])),
+               send([(5-1)-mouse(press, left)]),
+               expect(runs([(1-1)-([]-[a, b, x, y]), (5-1)-([negative]-[z])])),
+               send([(8-2)-mouse(press, left), (1-1)-mouse(scroll, up)]),
+               expect(runs([(1-1)-([]-[a, b, x, y, z]), (8-2)-([negative]-[' '])]))
+             ],
+    app((1-1)-[], probe_view, probe_update, Result, [substrate(vcr(Script))]),
+    Result == (8-2)-[(1-1)-mouse(scroll, up), (8-2)-mouse(press, left),
+                     clicked(2-0), terminal_size(10, 3)].
 
 :- end_tests(events).
 
@@ -359,6 +374,32 @@ test(in_table) :-
         table(thin, [[a, align(right, probe("xyz"))], [bbbbb, wwwww]]),
         11-2, k, Es),
     Es == [hit(1-0), right].
+
+test(click_activates) :-
+    drawable_point_event_bubbled(ok : button("OK"), 2-1, mouse(press, left), Es1),
+    Es1 == [ok-pressed],
+    drawable_point_event_bubbled(c : check_box("C", false), 1-1, mouse(press, left), Es2),
+    Es2 == [c-true].
+
+% A 10×5 scroll of 20 lines: the port is 3 rows high, the vertical
+% scrollbar is at x=10, rows 2 to 4.
+lines_scroll(Offset, scroll(10-5, Offset, column(Lines))) :-
+    numlist(1, 20, Ns),
+    maplist([N, L]>>format(string(L), "line ~w", [N]), Ns, Lines).
+
+test(wheel) :-
+    lines_scroll(0-(-5), S),
+    drawable_point_event_bubbled(S, 3-3, mouse(scroll, down), Es1),
+    Es1 == [scroll-(0-(-6))],
+    drawable_point_event_bubbled(S, 3-3, mouse(scroll, up), Es2),
+    Es2 == [scroll-(0-(-4))].
+
+test(thumb_to_mouse) :-
+    lines_scroll(0-(-5), S),
+    drawable_point_event_bubbled(S, 10-2, mouse(press, left), Es1),
+    Es1 == [scroll-(0-0)],
+    drawable_point_event_bubbled(S, 10-4, mouse(drag, left), Es2),
+    Es2 == [scroll-(0-(-17))].
 
 % What E at point X-Y becomes, on an input showing Value.
 value_point_event_bubbled(Value, XY, E, Es) :-
@@ -450,6 +491,16 @@ decoded(`\e[1;5X`,          [unknown_input(`\e[1;5X`)]).
 decoded(`\e[200~hi\e[201~`, [paste("hi")]).
 decoded(`\e[200~a\rb\r\nc\e[201~`, [paste("a\nb\nc")]).
 decoded(`\e[200~\e[Aq\e[201~x`, [paste("\e[Aq"), x]).
+decoded(`\e[<0;5;3M`,       [(5-3)-mouse(press, left)]).
+decoded(`\e[<0;5;3m`,       [(5-3)-mouse(release, left)]).
+decoded(`\e[<2;10;200M`,    [(10-200)-mouse(press, right)]).
+decoded(`\e[<32;6;3M`,      [(6-3)-mouse(drag, left)]).
+decoded(`\e[<35;7;4M`,      [(7-4)-mouse(move, none)]).
+decoded(`\e[<64;1;1M`,      [(1-1)-mouse(scroll, up)]).
+decoded(`\e[<67;1;1M`,      [(1-1)-mouse(scroll, right)]).
+decoded(`\e[<20;2;2M`,      [(2-2)-(ctrl+shift+mouse(press, left))]).
+decoded([27, 0'[, 0'M, 32, 37, 35], [(5-3)-mouse(press, left)]).
+decoded([27, 0'[, 0'M, 35, 37, 35], [(5-3)-mouse(release, none)]).
 
 test(decoded, [forall(decoded(Codes, Expected))]) :-
     codes_events_pending(Codes, Events, Pending),
@@ -584,6 +635,6 @@ test(vcr) :-
                             (2-1)-([]-[' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '])])),
                send([x])
              ],
-    app(vcr(Script), _-false, image_view, image_update, _).
+    app(_-false, image_view, image_update, _, [substrate(vcr(Script))]).
 
 :- end_tests(image).

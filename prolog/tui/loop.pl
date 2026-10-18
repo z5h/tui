@@ -18,6 +18,7 @@ bubbling and the app's update, and repeats until a result.
 :- use_module(library(tui/wake)).
 :- use_module(library(tui/substrate)).
 :- use_module(library(tui/image)).
+:- use_module(library(option)).
 
 
 '#app'.
@@ -34,20 +35,38 @@ bubbling and the app's update, and repeats until a result.
 %  and after every resize, and terminal_properties(Properties) once,
 %  shortly after the start: program(Program) (TERM_PROGRAM, or unknown),
 %  extended_keys(Bool) and graphics(Bool) (whether image/3 can be shown),
-%  in no guaranteed order.
+%  in no guaranteed order. With mouse(true) (see app/5), it receives
+%  mouse events too.
 %
 %  Everything runs in the calling thread, which must own the TTY. Other
 %  threads deliver events through a wake (see tui/wake.pl).
 :- meta_predicate(app(?, 2, 3, ?)).
 app(State, View, Update, Result) :-
-    terminal_substrate(Substrate),
-    app(Substrate, State, View, Update, Result).
+    app(State, View, Update, Result, []).
 
-%  app(+Substrate, +State, :View, :Update, -Result)
+%!  app(+State, :View, :Update, -Result, +Options) is det.
 %
-%  As app/4, on Substrate (see tui/substrate.pl).
-:- meta_predicate(app(+, ?, 2, 3, ?)).
-app(Substrate, State, View, Update, Result) :-
+%  As app/4, with Options:
+%
+%    * mouse(Bool)
+%      Whether the terminal reports the mouse (default false). Mouse
+%      events, (X-Y)-mouse(Action, Button) (see tui/input.pl), bubble at
+%      their own position rather than the cursor's, and a press moves
+%      the cursor there. While on, the terminal's own text selection
+%      needs a modifier, usually shift.
+%    * substrate(Substrate)
+%      Run on Substrate instead of the terminal; vcr(Script) replays a
+%      script, for headless tests (see tui/vcr.pl). Terminal options,
+%      such as mouse(Bool), then have no effect.
+:- meta_predicate(app(?, 2, 3, ?, +)).
+app(State, View, Update, Result, Options) :-
+    (   option(substrate(Substrate), Options)
+    ->  true
+    ;   terminal_substrate(Options, Substrate)
+    ),
+    app_substrate(Substrate, State, View, Update, Result).
+
+app_substrate(Substrate, State, View, Update, Result) :-
     setup_call_cleanup(
         (   wake_open(Wake),
             asserta(app_wake_(Wake))
@@ -164,11 +183,37 @@ frame_state_shown(frame(_, _, _, Cursor, _), Cursor0-Model, Shown) :-
 % the component stack under the cursor; each event it becomes, in order,
 % is either a cursor movement, handled here, or passed to Update. All
 % are routed through Frame, the frame the event arrived at.
+%
+% A mouse event, (X-Y)-Mouse, bubbles at X-Y instead, as Mouse. A press
+% first moves the cursor there, if there is one. What it becomes goes to
+% Update; if it is still the mouse event, with its position.
 :- meta_predicate frame_update_event_state0_state(+, 3, +, +, -).
 frame_update_event_state0_state(Frame, Update, E0, S0, S) :-
     Frame = frame(_, EventAssoc, _, Cursor, _),
-    findall(E1, point_event_assoc_bubbled(Cursor, E0, EventAssoc, E1), Es),
-    frame_update_bubbled_state0_state(Frame, Update, Es, S0, S).
+    (   E0 = XY-Mouse,
+        mouse_event(Mouse, Action)
+    ->  findall(E1, point_event_assoc_bubbled(XY, Mouse, EventAssoc, E1), Es0),
+        maplist(mouse_bubbled_positioned(XY, Mouse), Es0, Es),
+        action_point_state0_state(Action, XY, S0, S1),
+        frame_update_bubbled_state0_state(Frame, Update, Es, S1, S)
+    ;   findall(E1, point_event_assoc_bubbled(Cursor, E0, EventAssoc, E1), Es),
+        frame_update_bubbled_state0_state(Frame, Update, Es, S0, S)
+    ).
+
+mouse_event(mouse(Action, _), Action).
+mouse_event(_+M, Action) :-
+    mouse_event(M, Action).
+
+mouse_bubbled_positioned(XY, Mouse, E, Positioned) :-
+    (   E == Mouse
+    ->  Positioned = XY-Mouse
+    ;   Positioned = E
+    ).
+
+action_point_state0_state(press, XY, C-Model, S) :-
+    ground(C), !,
+    S = XY-Model.
+action_point_state0_state(_, _, S, S).
 
 :- meta_predicate frame_update_bubbled_state0_state(+, 3, +, +, -).
 frame_update_bubbled_state0_state(_, _, [], S, S).

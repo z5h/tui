@@ -10,6 +10,13 @@ A piece also sees moved(Direction) when the arrows move the cursor,
 from where the cursor was, relative to the piece. So it can tell when
 the cursor leaves it.
 
+With the mouse (app/5 option mouse(true)), a piece can be dragged with
+the left button. A press moves the cursor to the mouse, and the piece
+reports it was grabbed; update notes where on the piece (the cursor
+minus the piece's position). Drags the piece does not claim reach update
+with their position, and move the grabbed piece to keep that point
+under the mouse, until the release.
+
 macOS Terminal.app sends Shift+up and Shift+down as plain up and down
 unless configured otherwise (see the README). The app learns which
 terminal it runs in from terminal_properties/1, and says so.
@@ -28,8 +35,8 @@ main :-
     app((7-7)-model([ piece(a, 5-3, red),
                       piece(b, 20-6, green),
                       piece(c, 35-9, blue) ],
-                    "Shift+arrows drag a piece", ""),
-        view, update, _).
+                    "Shift+arrows or the mouse drag a piece", "", none),
+        view, update, _, [mouse(true)]).
 
 
 '#piece'.
@@ -45,6 +52,7 @@ tui:alias_drawable(piece(Id, Color),
 
 tui:at_event_is(piece(_, _), _-(shift+D), piece-D) :-
     direction(D).
+tui:at_event_is(piece(_, _), _-mouse(press, left), piece-grabbed).
 tui:at_event_is(piece(_, _), (X-Y)-moved(D), piece-exited) :-
     piece_size(W-H),
     direction_delta(D, DX-DY),
@@ -63,9 +71,9 @@ direction_delta(right, 1-0).
 
 arena_size(60-18).
 
-view(_-model(Pieces, Status, Note),
+view(_-model(Pieces, Status, Note, _),
      column([style([bold], "Move"),
-             style([faint], "Arrows move the cursor, Shift+arrows drag, q quits"),
+             style([faint], "Arrows move the cursor, Shift+arrows or the mouse drag, q quits"),
              [box(AW-AH, thin) | Drawn],
              Status,
              style([faint], Note)])) :-
@@ -77,30 +85,49 @@ view(_-model(Pieces, Status, Note),
             Drawn).
 
 update(q, S, result(S)) :- !.
-update(terminal_properties(Ps), C-model(Pieces, Status, _), C-model(Pieces, Status, Note)) :- !,
+update(terminal_properties(Ps), C-model(Pieces, Status, _, G), C-model(Pieces, Status, Note, G)) :- !,
     (   memberchk(program('Apple_Terminal'), Ps)
     ->  Note = "Terminal.app: Shift+up/down need a profile setting (see the README)"
     ;   Note = ""
     ).
-update(Id-exited, C-model(Pieces, _, Note), C-model(Pieces, Status, Note)) :- !,
+update(Id-exited, C-model(Pieces, _, Note, G), C-model(Pieces, Status, Note, G)) :- !,
     format(string(Status), "The cursor left ~w", [Id]).
-update(Id-D, C0-model(Pieces0, _, Note), C-model(Pieces, Status, Note)) :-
+update(Id-grabbed, (CX-CY)-model(Pieces0, _, Note, _), (CX-CY)-model(Pieces, Status, Note, grab(Id, GX-GY))) :-
+    selectchk(piece(Id, X-Y, Color), Pieces0, Others), !,
+    append(Others, [piece(Id, X-Y, Color)], Pieces),
+    GX is CX - X,
+    GY is CY - Y,
+    format(string(Status), "Grabbed ~w", [Id]).
+update((MX-MY)-mouse(drag, left), _-model(Pieces0, _, Note, grab(Id, GX-GY)), (CX-CY)-model(Pieces, Status, Note, grab(Id, GX-GY))) :-
+    selectchk(piece(Id, _, Color), Pieces0, Others), !,
+    X0 is MX - GX,
+    Y0 is MY - GY,
+    arena_point_clamped(X0-Y0, X-Y),
+    append(Others, [piece(Id, X-Y, Color)], Pieces),
+    CX is X + GX,
+    CY is Y + GY,
+    format(string(Status), "Dragging ~w with the mouse", [Id]).
+update(_-mouse(release, _), C-model(Pieces, Status, Note, _), C-model(Pieces, Status, Note, none)) :- !.
+update(Id-D, C0-model(Pieces0, _, Note, G), C-model(Pieces, Status, Note, G)) :-
     direction(D),
     selectchk(piece(Id, XY0, Color), Pieces0, Others), !,
-    arena_direction_from_to(D, XY0, XY),
+    direction_delta(D, DX-DY),
+    XY0 = X0-Y0,
+    X1 is X0 + DX,
+    Y1 is Y0 + DY,
+    arena_point_clamped(X1-Y1, XY),
     append(Others, [piece(Id, XY, Color)], Pieces),
     point_from_to_moved(C0, XY0, XY, C),
     format(string(Status), "Dragging ~w ~w", [Id, D]).
 update(_, S, S).
 
-% A piece at X0-Y0 (0-0 is the arena's top-left inside corner), moved one
-% step in direction D, staying in the arena.
-arena_direction_from_to(D, X0-Y0, X-Y) :-
+% A piece's position (0-0 is the arena's top-left inside corner), moved
+% back into the arena if it would leave it.
+arena_point_clamped(X0-Y0, X-Y) :-
     arena_size(AW-AH),
     piece_size(PW-PH),
-    direction_delta(D, DX-DY),
-    X is max(0, min(AW - 2 - PW, X0 + DX)),
-    Y is max(0, min(AH - 2 - PH, Y0 + DY)).
+    X is max(0, min(AW - 2 - PW, X0)),
+    Y is max(0, min(AH - 2 - PH, Y0)).
 
 % The cursor follows the piece.
 point_from_to_moved(X-Y, X0-Y0, X1-Y1, X2-Y2) :-
