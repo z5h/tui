@@ -96,6 +96,7 @@ scenario_size_frame_runs(cell, Cols-Rows, K, [(X-Y)-(Attrs-[x])]) :-
 
 '#measuring'.
 
+:- det(scenario_size_frames_result/4).
 scenario_size_frames_result(Name, Size, Frames,
                             result(Name, RunCount, CellCount, StreamMs, SyncedMs, WorstMs)) :-
     scenario_size_frame_runs(Name, Size, 0, Runs0),
@@ -132,7 +133,8 @@ frame_painted(I, Runs0, Runs1) :-
     ->  Runs = Runs0
     ;   Runs = Runs1
     ),
-    substrate_runs_painted(terminal(legacy, []), Runs, _).
+    terminal_substrate([], S),
+    substrate_runs_painted(S, Runs, _).
 
 % IMPURE: returns once the terminal has processed all output so far.
 synced :-
