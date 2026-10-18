@@ -292,6 +292,25 @@ test(aligned_to_terminal) :-
              ],
     app(_-[], corner_view, vcr_update, _, [substrate(vcr(Script))]).
 
+% A view and update that leave choicepoints: the loop takes only their
+% first solutions, so the choicepoint stack stays the same from event to
+% event (it grew by two a batch, until the stack ran out).
+leaky_view(_, "x").
+leaky_view(_, "y").
+
+leaky_update(eos, S, result(S)) :- !.
+leaky_update(_, C-Chs, C-[Ch | Chs]) :-
+    prolog_current_choice(Ch).
+leaky_update(_, S, S).
+
+test(no_choicepoints_kept) :-
+    length(Sends, 50),
+    maplist(=(send([a])), Sends),
+    Script = [send([terminal_size(10, 3)]), expect(clear), expect(runs([(1-1)-([]-[x])])) | Sends],
+    app(_-[], leaky_view, leaky_update, _-Chs, [substrate(vcr(Script))]),
+    sort(Chs, Distinct),
+    length(Distinct, 1).
+
 test(mismatch, [throws(error(vcr_mismatch(expect(runs(_)), expect(clear)), _))]) :-
     Script = [ send([terminal_size(10, 3)]),
                expect(runs([]))

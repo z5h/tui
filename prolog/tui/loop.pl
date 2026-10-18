@@ -29,7 +29,8 @@ bubbling and the app's update, and repeats until a result.
 %  View is called as call(View, State, Drawable) to produce the current
 %  view. Update is called as call(Update, Event, State0, State1) to
 %  handle events. The app exits with Result when an event bubbles to
-%  result(Result), or when Update produces result(Result).
+%  result(Result), or when Update produces result(Result). Only the
+%  first solution of each call is used.
 %
 %  Besides keys, Update receives terminal_size(Cols, Rows) at the start
 %  and after every resize, and terminal_properties(Properties) once,
@@ -262,7 +263,7 @@ frame_update_one_state0_state(frame(_, EventAssoc, Extent, _, _), Update, Unclai
             append(Moved, Arrived, Claimed),
             update_events_state0_state(Extent, Update, Claimed, (NX-NY)-Model0, S)
         )
-    ;   call(Update, E, S0, S)
+    ;   once(call(Update, E, S0, S))
     ).
 
 :- meta_predicate update_events_state0_state(+, 3, +, +, -).
@@ -274,7 +275,7 @@ update_events_state0_state(Extent, Update, [E | Es], S0, S) :-
         ->  extent_offset_state0_state(Extent, Offset, S0, S1)
         ;   E == noop
         ->  S1 = S0
-        ;   call(Update, E, S0, S1)
+        ;   once(call(Update, E, S0, S1))
         ),
         (   S1 = result(_)
         ->  S = S1
@@ -319,7 +320,7 @@ view_state_display_painted(View, State,
     substrate_runs_painted(Sub1, Changed, Sub).
 
 view_size_state_frame(View, Size, State, frame(Commands, EventAssoc, Extent, Cursor, Images)) :-
-    call(View, State, Drawable0),
+    once(call(View, State, Drawable0)),
     size_drawable_zoned(Size, Drawable0, Drawable),
     drawable__normalized_commands__end(Drawable, Commands, Extent),
     size_limits(Size, Limits),
