@@ -33,6 +33,7 @@ In `examples/`, each runnable as `swipl -p library=prolog examples/NAME.pl` from
 
 - `hello.pl` — the above
 - `layout.pl` — the core drawables
+- `align.pl` — zones, aligns and tables
 - `events.pl` — a custom component, and tagging instances with `Key : Drawable`
 - `cursor.pl` — the default cursor, and placing it from the view with `cursor/1`
 - `gallery.pl` — the ready-made components
@@ -60,8 +61,9 @@ Views are built from a term-based DSL:
 
 - **Primitives**: atoms, strings, numbers render as text; `literal(Term)` for any term
 - **Layout**: `.>` (horizontal), `.<` (horizontal, right-aligned first), `.\/` (vertical), `./\` (vertical, bottom-aligned first)
-- **Combinators**: `translate(DX-DY, D)`, `X-Y-D`, `port(W-H, D)`, `style(Attrs, D)`
-- **Core drawables**: `row/1`, `column/1`, `wrapped(Width, Chars)`, `clear(W-H)`, `line(Char, From, To)`, `box(W-H, Chars)` (`thin`, `thick`, `double`, or your own characters), `hover(Style, D)`, `cursor(D)`
+- **Combinators**: `translate(DX-DY, D)`, `X-Y-D`, `port(W-H, D)`, `zone(W-H, D)`, `align(Direction, D)`, `style(Attrs, D)`
+- **Alignment**: a zone has extent W×H whatever it draws, and an `align` directly in it (or in its list) is placed against its edges: `up_left`, `up`, `up_right`, `left`, `center`, `right`, `down_left`, `down`, `down_right`. The view is drawn in a zone the size of the terminal.
+- **Core drawables**: `row/1`, `column/1`, `table(Style, Rows)` (`empty`, `space`, `thin`, `thick`, `double`; each cell is a zone), `wrapped(Width, Chars)`, `clear(W-H)`, `line(Char, From, To)`, `box(W-H, Chars)` (`thin`, `thick`, `double`, or your own characters), `hover(Style, D)`, `cursor(D)`
 - **Components** (opt-in, `:- use_module(library(tui/components))`): `check_box/2`, `button/1`, `input/3`, `frame/2`, `titled_frame/3`, `scroll/3`
 - **Tagging**: `Key : Drawable` — attaches an identity for event routing
 

@@ -228,7 +228,8 @@ view_state_display_painted(View, State, display(Sub0, T0, Size, Previous), displ
     substrate_runs_painted(Sub0, Changed, Sub).
 
 view_size_state_frame(View, Size, State, frame(Commands, EventAssoc, Extent, Cursor)) :-
-    call(View, State, Drawable),
+    call(View, State, Drawable0),
+    size_drawable_zoned(Size, Drawable0, Drawable),
     drawable__normalized_commands__end(Drawable, Commands, Extent),
     size_limits(Size, Limits),
     limits_commands_eventmap(Limits, Commands, EventMap),
@@ -238,6 +239,12 @@ view_size_state_frame(View, Size, State, frame(Commands, EventAssoc, Extent, Cur
     ;   true
     ),
     list_to_assoc(EventMap, EventAssoc).
+
+% The view is drawn in a zone the size of the substrate, so that aligns
+% at its top level align to the substrate's edges, and the cursor can
+% move anywhere on it. Until the size is known, the view is drawn as is.
+size_drawable_zoned(unknown, D, D).
+size_drawable_zoned(Cols-Rows, D, zone(Cols-Rows, D)).
 
 % The top-left cell drawn by cursor(_), if any; otherwise the state's
 % cursor if update bound it; otherwise none.

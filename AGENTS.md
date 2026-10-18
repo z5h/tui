@@ -14,7 +14,7 @@ This is a SWI-Prolog pack. Library modules live in `prolog/`, internal modules i
 - `prolog/tui/utils.pl` — `tui_utils`: debug helpers (`log/1`, `?`, `@`), list/DCG helpers, direction and limits geometry. Depends on nothing.
 - `prolog/tui/terminal.pl` — `tui_terminal`: generic ANSI output (`ansi_*`, `ansi_run/1`), device-attributes and Kitty keyboard queries
 - `prolog/tui/input.pl` — `tui_input`: decodes terminal input codes into events (legacy xterm and Kitty keyboard protocol), with no side effects
-- `prolog/tui/drawable.pl` — `tui_drawable`: the drawable DSL (`drawable//5`), attributes, commands, cell resolution (conceal/reveal), and the core drawables that make no styling choices: `row/1`, `column/1`, `wrapped/2`, `clear/1`, `line/3`, `box/2`, `Key:Drawable` tagging, `cursor/1`
+- `prolog/tui/drawable.pl` — `tui_drawable`: the drawable DSL (`drawable//5`), attributes, commands, cell resolution (conceal/reveal), and the core drawables that make no styling choices: `row/1`, `column/1`, `table/2`, `wrapped/2`, `clear/1`, `line/3`, `box/2`, `Key:Drawable` tagging, `cursor/1`
 - `prolog/tui/hover.pl` — `tui_hover`: the `hover/2` component and cursor-dependent hover styling
 - `prolog/tui/events.pl` — `tui_events`: event bubbling through component stacks, the event map
 - `prolog/tui/render.pl` — `tui_render`: commands → runs, and which runs changed (no side effects)
@@ -24,7 +24,7 @@ This is a SWI-Prolog pack. Library modules live in `prolog/`, internal modules i
 - `prolog/tui/loop.pl` — `tui_loop`: `app/4`, `app/5` and the event loop
 - `prolog/tui/components.pl` — `tui_components`: ready-made, styled components (opt-in, not loaded by `library(tui)`)
 - `prolog/tui/assocs.pl` — `tui_assocs`
-- `examples/` — one topic each: `hello.pl`, `layout.pl`, `events.pl`, `cursor.pl`, `gallery.pl` (the components), `move.pl`
+- `examples/` — one topic each: `hello.pl`, `layout.pl`, `align.pl`, `events.pl`, `cursor.pl`, `gallery.pl` (the components), `move.pl`
 - `examples/atto.pl` — atto, a tiny text editor: key bindings and view; `examples/atto_lib.pl` is its editing model (document, cursor, scrolling, files), driven by commands
 - `test/test_tui.pl` — plunit tests
 - `pack.pl` — pack metadata
@@ -93,7 +93,7 @@ Drawables are a term-based DSL rendered via the DCG `drawable//5`. Key drawable 
   - `.<` — horizontal concat, right-aligned first
   - `.\/` — vertical concat (top then bottom)
   - `./\` — vertical concat, bottom-aligned first
-- **Combinators**: `translate(DX-DY, D)`, `port(W-H, D)`, `style(Attrs, D)`, `X-Y-D` (shorthand for translate)
+- **Combinators**: `translate(DX-DY, D)`, `port(W-H, D)`, `style(Attrs, D)`, `X-Y-D` (shorthand for translate), `zone(W-H, D)` (extent W×H regardless of D; no clipping), `align(Dir, D)` (placed against the edges of the zone it is directly in, or in that zone's list; elsewhere just D). The loop draws the view as `zone(Cols-Rows, View)`, so the frame's extent, and the cursor's range, is the terminal. Aligns are measured once with `drawable_raw`; `table/2` measures each cell once and places it as an already-aligned zone, merging the borders of per-cell boxes with `corners_unified/2`.
 - **Core drawables**: `row/1`, `column/1`, `wrapped(Width, Chars)`, `clear(W-H)`, `line(Char, From, To)`, `box(W-H, Chars)` (Chars is `box_chars(H, V, TL, TR, BL, BR)` or `thin`/`thick`/`double`), `hover(Style, D)`, `cursor(D)`
 - **Tagging**: `Key : Drawable` — annotates a drawable with a tag for event routing (see below)
 

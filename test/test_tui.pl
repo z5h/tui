@@ -125,6 +125,68 @@ test(clear_fills) :-
     drawable_raw(clear(3-2), raw(Cmds)),
     length(Cmds, 6).
 
+% The text D draws, a string per row from 0-0 to the furthest cell.
+drawable_lines(D, Lines) :-
+    drawable_raw(D, raw(Cmds)),
+    aggregate_all(max(X), member((X-_)-_, Cmds), MX),
+    aggregate_all(max(Y), member((_-Y)-_, Cmds), MY),
+    findall(Line,
+            ( between(0, MY, Y),
+              findall(C, ( between(0, MX, X),
+                           (   memberchk((X-Y)-(_-_-C), Cmds)
+                           ->  true
+                           ;   C = ' '
+                           ) ),
+                      Cs),
+              string_chars(Line, Cs) ),
+            Lines).
+
+test(zone_extent) :-
+    drawable_lines(zone(3-2, "a") .> "b", Lines),
+    Lines == ["a  b"].
+
+test(zone_aligns) :-
+    drawable_lines(zone(5-3, [align(up_left, a), [align(center, b)], align(down_right, c)]), Lines),
+    Lines == ["a    ",
+              "  b  ",
+              "    c"].
+
+test(zone_overflow) :-
+    drawable_raw(zone(2-1, align(right, "abc")), raw(Cmds)),
+    Cmds = [(X-0)-_ | _],
+    X == -1.
+
+test(align_outside_zone) :-
+    drawable_lines(align(right, "x") .> "y", Lines),
+    Lines == ["xy"].
+
+test(table_thin) :-
+    drawable_lines(table(thin, [["Name", align(right, "Qty")],
+                                ["apples", align(right, 12)],
+                                ["kiwi"]]), Lines),
+    Lines == ["┌──────┬───┐",
+              "│Name  │Qty│",
+              "├──────┼───┤",
+              "│apples│ 12│",
+              "├──────┼───┤",
+              "│kiwi  │   │",
+              "└──────┴───┘"].
+
+test(table_space) :-
+    drawable_lines(table(space, [[a, bb], [ccc]]), Lines),
+    Lines == ["a   bb",
+              "      ",
+              "ccc   "].
+
+test(table_empty) :-
+    drawable_lines(table(empty, [[a, bb], [ccc, d]]), Lines),
+    Lines == ["a  bb",
+              "cccd "].
+
+test(table_no_cells) :-
+    drawable_raw(table(thin, []), raw(Cmds)),
+    Cmds == [].
+
 :- end_tests(drawables).
 
 
@@ -215,6 +277,16 @@ test(erased) :-
              ],
     app(vcr(Script), _-[], shrinking_view, vcr_update, _).
 
+% The view is drawn in a zone the size of the terminal.
+corner_view(_, align(down_right, "x")).
+
+test(aligned_to_terminal) :-
+    Script = [ send([terminal_size(10, 3)]),
+               expect(clear),
+               expect(runs([(10-3)-([]-[x])]))
+             ],
+    app(vcr(Script), _-[], corner_view, vcr_update, _).
+
 test(mismatch, [throws(error(vcr_mismatch(expect(runs(_)), expect(clear)), _))]) :-
     Script = [ send([terminal_size(10, 3)]),
                expect(runs([]))
@@ -272,6 +344,15 @@ drawable_point_event_bubbled(D, X-Y, E, Es) :-
     findall(P-S, member(P-(S-_-_), Commands), Pairs),
     list_to_assoc(Pairs, Assoc),
     findall(E1, point_event_assoc_bubbled(X-Y, E, Assoc, E1), Es).
+
+% In a table cell, measured then placed, positions stay relative to the
+% component (probe/1 is in the events unit). The probe is right-aligned
+% in a 5-wide column starting at x=8, so it starts at x=10.
+test(in_table) :-
+    drawable_point_event_bubbled(
+        table(thin, [[a, align(right, probe("xyz"))], [bbbbb, wwwww]]),
+        11-2, k, Es),
+    Es == [hit(1-0), right].
 
 % What E at point X-Y becomes, on an input showing Value.
 value_point_event_bubbled(Value, XY, E, Es) :-

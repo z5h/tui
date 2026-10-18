@@ -20,7 +20,7 @@ drawn at.
 
 Besides the primitives in drawable//5, this module defines the core
 drawables that make no styling choices: layout (row/1, column/1,
-wrapped/2), shapes (clear/1, line/3, box/2), tagging (Key:Drawable) and
+wrapped/2, table/2), shapes (clear/1, line/3, box/2), tagging (Key:Drawable) and
 cursor/1. Ready-made, styled components are in library(tui/components).
 */
 
@@ -136,6 +136,10 @@ my_color(_).
 %    * translate(DX-DY, D) — offset D by DX-DY
 %    * X-Y-D            — shorthand for translate(X-Y, D)
 %    * port(W-H, D)     — clip D to a W×H viewport
+%    * zone(W-H, D)     — D, with extent W×H whatever D draws; aligns
+%                         directly in D (or in its list) align to it
+%    * align(Dir, D)    — D, aligned to the enclosing zone's edges
+%                         (see zone above); elsewhere just D
 %    * style(Attrs, D)  — push style attributes for D
 %    * A .> B           — horizontal concat (A left, B right)
 %    * B .< A           — horizontal concat (A rendered first for width)
@@ -225,6 +229,16 @@ drawable(port(W-H, Drawables, MPX-MPY), Stack, Attr, DX-DY, MX-MY) --> !,
     excluding(zone_out(DX-DY, W-H), drawable(Drawables, Stack, Attr, DX-DY, MPX-MPY)),
     { MX is DX + W - 1, MY is DY + H - 1 }.
 
+drawable(zone(W-H, D), Stack, Attr, DX-DY, MX-MY) --> !,
+    { drawable_items(D, Items),
+      maplist(zone_item_placed(W-H), Items, Placed)
+    },
+    drawable(Placed, Stack, Attr, DX-DY, _),
+    { MX is DX + W - 1, MY is DY + H - 1 }.
+
+drawable(align(_, D), Stack, Attr, DX-DY, MX-MY) --> !,
+    drawable(D, Stack, Attr, DX-DY, MX-MY).
+
 drawable(style(Style, Drawables), Stack, Attr, DX-DY, MX-MY) --> !,
     drawable(Drawables, Stack, [Style | Attr ], DX-DY, MX-MY).
 
@@ -274,6 +288,57 @@ stack_offset_outer_placed([(OX-OY)-A | T], DX-DY, Outer, [(OX1-OY1)-A | T1]) :-
     stack_offset_outer_placed(T, DX-DY, Outer, T1).
 
 
+'#zones'.
+
+% The items of a drawable: its elements if it is a list (nested lists
+% flattened), otherwise itself.
+drawable_items(D, Items) :-
+    phrase(items(D), Items).
+
+items([]) --> !, [].
+items([H | T]) --> !, items(H), items(T).
+items(D) --> [D].
+
+% An item of a W×H zone, placed: an align is measured and moved to the
+% zone's edges, anything else is drawn as it is.
+zone_item_placed(WH, align(Dir, D), Placed) :- !,
+    drawable_raw_extent(D, Raw, E),
+    zone_direction_extent_placed(WH, Dir, E, Raw, Placed).
+zone_item_placed(_, D, D).
+
+% Raw drawn at an offset from a W×H zone's top-left, so that its extent
+% E lies against the zone's edges in direction Dir.
+zone_direction_extent_placed(W-H, Dir, EW-EH, Raw, OX-OY-Raw) :-
+    (   direction_horizontal_vertical(Dir, HA, VA)
+    ->  true
+    ;   domain_error(align_direction, Dir)
+    ),
+    size_alignment_extent_offset(W, HA, EW, OX),
+    size_alignment_extent_offset(H, VA, EH, OY).
+
+direction_horizontal_vertical(up_left,    start,  start).
+direction_horizontal_vertical(up,         middle, start).
+direction_horizontal_vertical(up_right,   end,    start).
+direction_horizontal_vertical(left,       start,  middle).
+direction_horizontal_vertical(center,     middle, middle).
+direction_horizontal_vertical(right,      end,    middle).
+direction_horizontal_vertical(down_left,  start,  end).
+direction_horizontal_vertical(down,       middle, end).
+direction_horizontal_vertical(down_right, end,    end).
+
+% Uneven centring leans up and left.
+size_alignment_extent_offset(_, start, _, 0).
+size_alignment_extent_offset(S, middle, E, O) :- O is (S - E) div 2.
+size_alignment_extent_offset(S, end, E, O) :- O is S - E.
+
+% D rendered at 0-0, and its extent: from 0-0 to the furthest cell drawn.
+% A drawable that draws nothing measures 1×1.
+drawable_raw_extent(D, raw(Raw), W-H) :-
+    phrase(drawable(D, [], [], 0-0, MX-MY), Raw),
+    W is MX + 1,
+    H is MY + 1.
+
+
 '#layout'.
 
 %!  column(+Drawables)
@@ -304,6 +369,120 @@ width_chars_rows(W, Chars, [chars(Row) | Rows]) :-
     ->  width_chars_rows(W, Rest, Rows)
     ;   Row = Chars,
         Rows = []
+    ).
+
+%!  table(+Style, +Rows)
+%
+%  Rows, lists of drawables, laid out as a grid: each column as wide as
+%  its widest cell, each row as tall as its tallest. Shorter rows have
+%  trailing empty cells. Each cell is drawn as a zone of its column's
+%  width and its row's height, so an align in a cell aligns within it.
+%  Style is empty (cells abut), space (a blank between cells), or a box
+%  style, thin, thick or double (a border around and between cells).
+tui:alias_drawable(table(Style, Rows0), Table) :-
+    style_border_gap(Style, B, G),
+    rows_padded(Rows0, Rows),
+    (   Rows = [[_ | _] | _]
+    ->  maplist(maplist(cell_measured), Rows, Measured),
+        rows_widths(Measured, Ws),
+        maplist(row_height, Measured, Hs),
+        sizes_start_gap_positions(Ws, B, G, Xs),
+        sizes_start_gap_positions(Hs, B, G, Ys),
+        maplist(row_cells(Xs, Ws), Measured, Ys, Hs, Cells),
+        style_table_border(Style, Xs, Ws, Ys, Hs, Border),
+        Table = [Border | Cells]
+    ;   Table = []
+    ).
+
+style_border_gap(empty, 0, 0) :- !.
+style_border_gap(space, 0, 1) :- !.
+style_border_gap(Style, 1, 1) :-
+    (   style_box_chars(Style, _)
+    ->  true
+    ;   domain_error(table_style, Style)
+    ).
+
+rows_padded(Rows0, Rows) :-
+    foldl(row_length_max, Rows0, 0, N),
+    maplist(length_row_padded(N), Rows0, Rows).
+
+row_length_max(Row, N0, N) :-
+    length(Row, L),
+    N is max(N0, L).
+
+length_row_padded(N, Row0, Row) :-
+    length(Row, N),
+    append(Row0, Pad, Row),
+    maplist(=([]), Pad).
+
+% A cell rendered once: its items, each with its raw commands and extent,
+% and the cell's extent.
+cell_measured(Cell, cell(Items, E)) :-
+    drawable_items(Cell, Items0),
+    maplist(item_measured, Items0, Items),
+    foldl(item_extent_max, Items, 1-1, E).
+
+item_measured(align(Dir, D), aligned(Dir, Raw, E)) :- !,
+    drawable_raw_extent(D, Raw, E).
+item_measured(D, plain(Raw, E)) :-
+    drawable_raw_extent(D, Raw, E).
+
+item_extent_max(Item, W0-H0, W-H) :-
+    (   Item = aligned(_, _, IW-IH)
+    ;   Item = plain(_, IW-IH)
+    ), !,
+    W is max(W0, IW),
+    H is max(H0, IH).
+
+rows_widths([Row | Rows], Ws) :-
+    maplist(cell_width, Row, Ws0),
+    foldl(row_widths_max, Rows, Ws0, Ws).
+
+row_widths_max(Row, Ws0, Ws) :-
+    maplist(cell_width, Row, RWs),
+    maplist(max_of, RWs, Ws0, Ws).
+
+cell_width(cell(_, W-_), W).
+
+row_height(Row, H) :-
+    foldl(cell_height_max, Row, 0, H).
+
+cell_height_max(cell(_, _-CH), H0, H) :-
+    H is max(H0, CH).
+
+max_of(A, B, M) :-
+    M is max(A, B).
+
+% Where each of a sequence of sizes starts, from Start, Gap apart.
+sizes_start_gap_positions([], _, _, []).
+sizes_start_gap_positions([S | Ss], P, G, [P | Ps]) :-
+    P1 is P + S + G,
+    sizes_start_gap_positions(Ss, P1, G, Ps).
+
+row_cells(Xs, Ws, Row, Y, H, Cells) :-
+    maplist(cell_x_width_placed(Y, H), Row, Xs, Ws, Cells).
+
+% A measured cell as a zone, its items already placed.
+cell_x_width_placed(Y, H, cell(Items, _), X, W, X-Y-zone(W-H, Placed)) :-
+    maplist(measured_placed(W-H), Items, Placed).
+
+measured_placed(WH, aligned(Dir, Raw, E), Placed) :-
+    zone_direction_extent_placed(WH, Dir, E, Raw, Placed).
+measured_placed(_, plain(Raw, _), Raw).
+
+% A box around each cell, adjacent boxes sharing edges, drawn row by row
+% and merged where they meet.
+style_table_border(Style, Xs, Ws, Ys, Hs, raw(Merged)) :-
+    (   style_box_chars(Style, _)
+    ->  findall(BX-BY-box(BW-BH, Style),
+                ( nth0(I, Ys, Y), nth0(I, Hs, H),
+                  nth0(J, Xs, X), nth0(J, Ws, W),
+                  BX is X - 1, BY is Y - 1,
+                  BW is W + 2, BH is H + 2 ),
+                Boxes),
+        drawable_raw(Boxes, raw(Commands)),
+        commands_merged(Commands, Merged)
+    ;   Merged = []
     ).
 
 
@@ -368,6 +547,44 @@ tui:alias_drawable(box(W0-H0, box_chars(Hz, Vt, TL, TR, BL, BR)),
 style_box_chars(thin,   box_chars('─', '│', '┌', '┐', '└', '┘')).
 style_box_chars(thick,  box_chars('━', '┃', '┏', '┓', '┗', '┛')).
 style_box_chars(double, box_chars('═', '║', '╔', '╗', '╚', '╝')).
+
+corners_unified(['╝', '╚', '╗', '╔'], '╬').
+corners_unified(['╗', '╔'], '╦').
+corners_unified(['╝', '╚'], '╩').
+corners_unified(['╚', '╔'], '╠').
+corners_unified(['╝', '╗'], '╣').
+
+corners_unified(['┛', '┗', '┓', '┏'], '╋').
+corners_unified(['┓', '┏'], '┳').
+corners_unified(['┛', '┗'], '┻').
+corners_unified(['┗', '┏'], '┣').
+corners_unified(['┛', '┓'], '┫').
+
+corners_unified(['┘', '└', '┐', '┌'], '┼').
+corners_unified(['┐', '┌'], '┬').
+corners_unified(['┘', '└'], '┴').
+corners_unified(['└', '┌'], '├').
+corners_unified(['┘', '┐'], '┤').
+
+% Commands drawn at the same cell, merged into one: identical characters
+% into that character, corners that meet into their junction. Otherwise
+% the last drawn wins. keysort is stable, so each cell's characters stay
+% in the order drawn.
+commands_merged(Commands, Merged) :-
+    keysort(Commands, Sorted),
+    group_pairs_by_key(Sorted, Groups),
+    maplist(group_merged, Groups, Merged).
+
+group_merged(XY-Drawn, XY-(Stack-Attrs-C)) :-
+    Drawn = [Stack-Attrs-_ | _],
+    findall(C0, member(_-_-C0, Drawn), Cs0),
+    list_to_set(Cs0, Cs),
+    (   Cs = [C]
+    ->  true
+    ;   corners_unified(Cs, C)
+    ->  true
+    ;   last(Cs, C)
+    ).
 
 
 '#tagging'.
