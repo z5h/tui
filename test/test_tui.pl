@@ -25,12 +25,15 @@ test(pair_second, [nondet]) :-
 test(pair_not_found, [fail]) :-
     assocs_pair([a-1, b-2], c-_).
 
-test(pairs_all, [nondet]) :-
+test(pairs_all) :-
     assocs_pairs([a-1, b-2, c-3], [c-3, a-1]).
 
-test(pairs_partial_match, [nondet]) :-
+test(pairs_partial_match) :-
     assocs_pairs([a-1, b-2], [a-V]),
     V == 1.
+
+test(pairs_missing, [fail]) :-
+    assocs_pairs([a-1, b-2], [a-1, c-_]).
 
 test(pairs_empty) :-
     assocs_pairs([a-1], []).
@@ -39,13 +42,20 @@ test(pair_assocs_add, [nondet]) :-
     assocs_pair_assocs([a-1], b-2, R),
     R == [b-2, a-1].
 
-test(pair_pair_update, [nondet]) :-
+test(pair_pair_update) :-
     pair_pair_assocs_assocs(a-_, a-99, [a-1, b-2], R),
-    assocs_pairs(R, [a-99, b-2]).
+    R == [a-99, b-2].
 
-test(pair_pair_change_key, [nondet]) :-
+test(pair_pair_in_place) :-
+    pair_pair_assocs_assocs(b-_, b-99, [a-1, b-2, c-3], R),
+    R == [a-1, b-99, c-3].
+
+test(pair_pair_change_key) :-
     pair_pair_assocs_assocs(a-_, x-99, [a-1, b-2], R),
-    assocs_pairs(R, [x-99, b-2]).
+    R == [x-99, b-2].
+
+test(pair_pair_missing, [fail]) :-
+    pair_pair_assocs_assocs(c-_, c-99, [a-1, b-2], _).
 
 :- end_tests(assocs).
 

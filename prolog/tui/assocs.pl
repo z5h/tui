@@ -45,11 +45,19 @@ assocs_pair([ _  |T ], K-V) :-
 %!  assocs_pairs(+Assocs, +Pairs) is semidet.
 %
 %  True when every pair in Pairs can be found in Assocs.
-%  Pairs is a list of Key-Value terms; each is looked up independently.
+%  Pairs is a list of Key-Value terms with ground keys; each is looked
+%  up independently, by the first pair in Assocs with its key.
 assocs_pairs(_, []).
-assocs_pairs(A, [P|T]) :-
-    assocs_pair(A, P),
+assocs_pairs(A, [K-V|T]) :-
+    assocs_key_value(A, K, V),
     assocs_pairs(A, T).
+
+% The value of the first pair with key K (ground).
+assocs_key_value([K0-V0|T], K, V) :-
+    (   K0 == K
+    ->  V = V0
+    ;   assocs_key_value(T, K, V)
+    ).
 
 
 '#update'.
@@ -63,14 +71,19 @@ assocs_pair_assocs(T, K-V, [K-V|T]).
 assocs_pair_assocs([H  |T], K-V, [H|T2]) :-
     assocs_pair_assocs(T, K-V, T2).
 
-%!  pair_pair_assocs_assocs(+Old, +New, +Assocs0, -Assocs1) is det.
+%!  pair_pair_assocs_assocs(+Old, +New, +Assocs0, -Assocs1) is semidet.
 %
-%  Replace the pair matching Old with New in Assocs0, producing
-%  Assocs1. Old is Key0-Value0, New is Key1-Value1. The pair
-%  matching Old is removed and New is inserted.
-pair_pair_assocs_assocs(K0-V0, K1-V1, A0, A1) :-
-    assocs_pair_assocs(A, K0-V0, A0),
-    assocs_pair_assocs(A, K1-V1, A1).
+%  Assocs1 is Assocs0 with the pair matching Old replaced, in place, by
+%  New. Old is Key0-Value0 with Key0 ground; the first pair with Key0 is
+%  the one replaced, and its value must unify with Value0. Fails if
+%  there is none.
+pair_pair_assocs_assocs(K0-V0, New, [K-V|T0], A) :-
+    (   K == K0
+    ->  V = V0,
+        A = [New|T0]
+    ;   A = [K-V|T],
+        pair_pair_assocs_assocs(K0-V0, New, T0, T)
+    ).
 
 %!  assocs_pair_removed(+Assocs, +Key-?Value, -Rest) is nondet.
 %

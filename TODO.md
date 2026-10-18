@@ -35,5 +35,3 @@ substrate's wait timeout becomes the time to the next deadline.
 the old TUI_PROFILE render-time overlay was removed. revisit as a broader
 mode: highlight regions being repainted, profile specific drawables or
 the loop.
-
-# merge single-threaded-loop into main
