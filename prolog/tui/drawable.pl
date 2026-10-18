@@ -230,10 +230,7 @@ drawable(port(W-H, Drawables, MPX-MPY), Stack, Attr, DX-DY, MX-MY) --> !,
     { MX is DX + W - 1, MY is DY + H - 1 }.
 
 drawable(zone(W-H, D), Stack, Attr, DX-DY, MX-MY) --> !,
-    { drawable_items(D, Items),
-      maplist(zone_item_placed(W-H), Items, Placed)
-    },
-    drawable(Placed, Stack, Attr, DX-DY, _),
+    zone_drawn(W-H, D, Stack, Attr, DX-DY),
     { MX is DX + W - 1, MY is DY + H - 1 }.
 
 drawable(align(_, D), Stack, Attr, DX-DY, MX-MY) --> !,
@@ -299,12 +296,20 @@ items([]) --> !, [].
 items([H | T]) --> !, items(H), items(T).
 items(D) --> [D].
 
-% An item of a W×H zone, placed: an align is measured and moved to the
-% zone's edges, anything else is drawn as it is.
-zone_item_placed(WH, align(Dir, D), Placed) :- !,
-    drawable_raw_extent(D, Raw, E),
-    zone_direction_extent_placed(WH, Dir, E, Raw, Placed).
-zone_item_placed(_, D, D).
+% The items of a W×H zone, drawn: an align is measured and moved to the
+% zone's edges, anything else is drawn as it is. Walks lists in place,
+% since a view may be a long one.
+zone_drawn(_, [], _, _, _) --> !, [].
+zone_drawn(WH, [H | T], Stack, Attr, XY) --> !,
+    zone_drawn(WH, H, Stack, Attr, XY),
+    zone_drawn(WH, T, Stack, Attr, XY).
+zone_drawn(WH, align(Dir, D), Stack, Attr, XY) --> !,
+    { drawable_raw_extent(D, Raw, E),
+      zone_direction_extent_placed(WH, Dir, E, Raw, Placed)
+    },
+    drawable(Placed, Stack, Attr, XY, _).
+zone_drawn(_, D, Stack, Attr, XY) -->
+    drawable(D, Stack, Attr, XY, _).
 
 % Raw drawn at an offset from a W×H zone's top-left, so that its extent
 % E lies against the zone's edges in direction Dir.

@@ -99,7 +99,8 @@ atto_model(N, Size, atto('bench.txt', Lines, 0-0, 0, false, none, Size)) :-
 
 scene_reported(Name, Size, State, View, Repeats) :-
     stage_ms(Repeats, call(View, State, D), TView),
-    stage_ms(Repeats, phrase(drawable(D, [], [], 1-1, _), Cmds0), TExpand),
+    % As the loop draws it: in a zone the size of the substrate.
+    stage_ms(Repeats, phrase(drawable(zone(Size, D), [], [], 1-1, _), Cmds0), TExpand),
     stage_ms(Repeats, keylist_deduped_prioritize_last(Cmds0, Cmds), TDedupe),
     stage_ms(Repeats, limits_commands_eventmap(Size, Cmds, EventMap), TMap),
     stage_ms(Repeats, list_to_assoc(EventMap, _), TAssoc),
