@@ -19,6 +19,12 @@ commands, and the view.
 The text cursor is the framework's cursor. The view places it by drawing
 the character under it as cursor(Char), and the editor area claims the
 arrow keys, so they move the text cursor rather than the framework's.
+
+The mouse is on (app/5 option mouse(true)): a click (or drag) in the
+text puts the text cursor there, and the wheel scrolls. The editor area
+sees the click relative to itself, which is what atto_lib's point
+command takes. To select text with the mouse, hold shift (option on
+macOS).
 */
 
 :- use_module(library(tui)).
@@ -40,7 +46,7 @@ main :-
 
 atto(Path) :-
     path_model(Path, Model),
-    app((1-1)-Model, state_view, event_update_with, _).
+    app((1-1)-Model, state_view, event_update_with, _, [mouse(true)]).
 
 
 '#update'.
@@ -66,6 +72,9 @@ event_command(ctrl+s, save) :- !.
 event_command(ctrl+r, revert) :- !.
 event_command(ctrl+q, quit) :- !.
 event_command(move(D), move(D)) :- !.
+event_command(point(XY), point(XY)) :- !.
+event_command(_-mouse(scroll, D), scroll(D)) :-
+    memberchk(D, [up, down]), !.
 event_command(E, move(E)) :-
     memberchk(E, [home, end, page_up, page_down]), !.
 event_command(return, split_line) :- !.
@@ -185,11 +194,14 @@ status_text(confirm_quit, "Unsaved changes: ^Q again to quit, ^S to save").
 '#components'.
 
 % The text area. Claims the arrow keys, so they move the text cursor
-% rather than the framework's cursor.
+% rather than the framework's cursor, and the left button, pressed or
+% dragged, which points at a place in the text.
 tui:alias_drawable(editor_area(D), D).
 
 tui:at_event_is(editor_area(_), _-D, move(D)) :-
     direction(D).
+tui:at_event_is(editor_area(_), XY-mouse(A, left), point(XY)) :-
+    memberchk(A, [press, drag]).
 
 % Line N: its number in a gutter G wide, then its text wrapped to W.
 % Characters that would move the terminal's cursor are shown as spaces.

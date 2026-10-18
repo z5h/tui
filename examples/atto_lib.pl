@@ -27,6 +27,11 @@ Commands (see command_update_with/3):
   * move(Dir)            Dir: up, down, left, right, home, end, page_up,
                          page_down. Up and down move by screen row,
                          through wrapped lines.
+  * point(X-Y)           the text cursor to the character at X-Y of the
+                         text area (0-based, the gutter included), or as
+                         near as it can go
+  * scroll(Dir)          Dir: up, down. The text moves 3 rows; the text
+                         cursor moves only if it would leave the area.
   * insert(Char), insert_text(Text), split_line, delete_backward,
     delete_forward, indent
   * save, revert         write the file, or reload it from disk
@@ -184,6 +189,10 @@ command_edit_with(revert, M0, M) :- !,
     model_reverted(M0, M).
 command_edit_with(move(D), M0, M) :- !,
     direction_move_by(D, M0, M).
+command_edit_with(point(XY), M0, M) :- !,
+    point_move_by(XY, M0, M).
+command_edit_with(scroll(D), M0, M) :- !,
+    direction_scroll_by(D, M0, M).
 command_edit_with(insert(Ch), M0, M) :- !,
     char_insert_with(Ch, M0, M).
 command_edit_with(insert_text(Text), M0, M) :- !,
@@ -344,6 +353,67 @@ geometry_direction_page(geometry(_, _, H), D, Page) :-
     Steps is max(1, H - 1),
     length(Page, Steps),
     maplist(=(D), Page).
+
+% The text cursor to the character at X-Y of the text area: screen row
+% Top + Y, column X less the gutter. In the gutter it goes to the start
+% of the row; past the end of a line, to its end; below the last line,
+% to the last line.
+point_move_by(X-Y, M0, M) :-
+    M0 = atto(P, Ls, _, Top, Mod, St, Sz),
+    model_gutter_width_height(M0, G, W, _),
+    Row is Top + Y,
+    Col is max(0, min(W - 1, X - G)),
+    width_row_lines_position(W, Row, Ls, 0, L-R),
+    nth0(L, Ls, Line),
+    length(Line, Len),
+    C is min(Len, R * W + Col),
+    M = atto(P, Ls, L-C, Top, Mod, St, Sz).
+
+% Screen row Row, counting from line L0 of Lines, is row R of line L
+% (the last row of the last line if Row is below it).
+width_row_lines_position(W, Row, [Line | Lines], L0, Pos) :-
+    width_line_rows(W, Line, Rows),
+    (   (   Row < Rows
+        ;   Lines == []
+        )
+    ->  R is min(Row, Rows - 1),
+        Pos = L0-R
+    ;   Row1 is Row - Rows,
+        L1 is L0 + 1,
+        width_row_lines_position(W, Row1, Lines, L1, Pos)
+    ).
+
+% The text moved 3 rows (Top less or more, within the text), then the
+% text cursor moved by rows until it is in view again.
+direction_scroll_by(D, M0, M) :-
+    (   model_fits(M0)
+    ->  M0 = atto(P, Ls, Cur0, Top0, Mod, St, Sz),
+        model_gutter_width_height(M0, _, W, H),
+        maplist(width_line_rows(W), Ls, LineRows),
+        sum_list(LineRows, Total),
+        MaxTop is max(0, Total - H),
+        direction_step(D, Step),
+        Top is max(0, min(MaxTop, Top0 + Step)),
+        M1 = atto(P, Ls, Cur0, Top, Mod, St, Sz),
+        model__cursor_row(M1, Row),
+        (   Row < Top
+        ->  N is Top - Row,
+            Dir = down
+        ;   Row >= Top + H
+        ->  N is Row - Top - H + 1,
+            Dir = up
+        ;   N = 0,
+            Dir = down
+        ),
+        length(Steps, N),
+        maplist(=(Dir), Steps),
+        foldl(geometry_direction_move_by(geometry(Ls, W, H)), Steps, Cur0, Cur),
+        M = atto(P, Ls, Cur, Top, Mod, St, Sz)
+    ;   M = M0
+    ).
+
+direction_step(up, -3).
+direction_step(down, 3).
 
 
 '#files'.
