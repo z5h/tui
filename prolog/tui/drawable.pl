@@ -147,12 +147,16 @@ my_color(_).
 %    * B ./\ A          — vertical concat (A rendered first for height)
 %    * [H|T]            — render all drawables overlaid at same origin
 %    * Any term matched by alias_drawable/2
+%
+%  @error domain_error(drawable, T) if T, drawn anywhere within Term, is
+%         none of these.
+%  @error instantiation_error if a drawable within Term is unbound.
 
 :- discontiguous(drawable//5).
 :- det(drawable//5).
 drawable(Var, _, _, _, _) -->
     { var(Var), !,
-      domain_error(drawable, Var)
+      instantiation_error(Var)
     }.
 
 drawable(literal(T), Stack, Attr, X-Y, MX-MY) -->

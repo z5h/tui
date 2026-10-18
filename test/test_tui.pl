@@ -141,6 +141,12 @@ drawable_lines(D, Lines) :-
               string_chars(Line, Cs) ),
             Lines).
 
+test(unknown, [throws(error(domain_error(drawable, nonsense(1)), _))]) :-
+    drawable_raw("a" .> nonsense(1), _).
+
+test(unbound, [throws(error(instantiation_error, _))]) :-
+    drawable_raw(["a", _], _).
+
 test(zone_extent) :-
     drawable_lines(zone(3-2, "a") .> "b", Lines),
     Lines == ["a  b"].
