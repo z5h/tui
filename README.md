@@ -27,7 +27,7 @@ update(_, S, S).
 
 Run with `swipl hello.pl`. The state is `(CursorX-CursorY)-Model`; update returns a new state, or `result(R)` to quit.
 
-`app/5` takes options as a last argument: `mouse(true)` turns on mouse reporting (see below), and `substrate(vcr(Script))` runs the app headless against a script, for tests.
+`app/5` takes options as a last argument: `mouse(true)` turns on mouse reporting (see below), and `substrate(vcr(Script))` runs the app headless against a script (see Testing).
 
 ## Examples
 
@@ -92,6 +92,44 @@ A component sees each event with where it happened, relative to the component. I
 ### Event Bubbling
 
 Each screen coordinate tracks which components produced it (the alias stack). When an event occurs, it bubbles through the stack — each component can rewrite it via `tui:at_event_is/3`. The `:` tag operator namespaces events by component instance.
+
+## Testing
+
+`app(State, View, Update, Result, [substrate(vcr(Script))])` runs an app without a terminal, against a script of what it receives and what it should paint:
+
+- `send(Events)`: the next batch of events the app receives
+- `expect(clear)`: the app clears the screen (it does on start and on every resize)
+- `expect(runs(Runs))`: the app paints exactly Runs
+- `expect(graphics(Actions))`: the app sends exactly these image uploads and placements, before the runs of the same paint
+
+Entries are consumed in order. A run is `(X-Y)-(Attrs-Chars)`: 1-based screen coordinates, the style attributes, and the characters as a list of one-character atoms. Painting is incremental, so after the first paint `Runs` holds only the runs that changed (each whole), and erased cells appear as spaces. The cursor's cell is painted `negative`. Once the script is used up, every request for events gets `[eos]`, which a test app typically answers with `result(...)`. The terminal's properties are not reported unless the script sends them.
+
+```prolog
+:- use_module(library(tui)).
+:- use_module(library(plunit)).
+
+view(_-N, row(["Count: ", literal(N)])).
+
+update(up, C-N0, C-N) :- !, N is N0 + 1.
+update(eos, S, result(S)) :- !.
+update(_, S, S).
+
+:- begin_tests(counter).
+
+test(counts) :-
+    Script = [ send([terminal_size(20, 5)]),
+               expect(clear),
+               expect(runs([(1-1)-([]-['C', o, u, n, t, :, ' ', '0'])])),
+               send([up, up]),
+               expect(runs([(1-1)-([]-['C', o, u, n, t, :, ' ', '2'])]))
+             ],
+    app(_-0, view, update, Result, [substrate(vcr(Script))]),
+    Result = _-2.
+
+:- end_tests(counter).
+```
+
+Anything the app does that differs from the next entry throws `error(vcr_mismatch(Expected, Actual), _)`, with Actual written as the entry that would have matched. So you can also write an expectation as a placeholder, read the actual one from the failure, and check it before pasting it in.
 
 ## Documentation
 

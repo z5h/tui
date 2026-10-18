@@ -21,11 +21,6 @@ remaining:
 test the bytes terminal.pl produces (ansi_run/1 and the ansi_* helpers),
 so the VCR can stay at the level of runs.
 
-# public API for headless testing
-app/5 is exported, and substrate(vcr(Script)) runs an app headless.
-remaining: document the VCR in the README, so users can test their own
-apps.
-
 # async API
 how apps receive events from other threads: export post/1 (loop.pl), or
 have update/3 return TEA-style commands. timers fit either way: the

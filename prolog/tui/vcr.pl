@@ -60,3 +60,13 @@ script_mismatch([], Actual) :-
     throw(error(vcr_mismatch(end_of_script, Actual), _)).
 script_mismatch([Expected | _], Actual) :-
     throw(error(vcr_mismatch(Expected, Actual), _)).
+
+
+'#messages'.
+
+:- multifile prolog:error_message//1.
+
+prolog:error_message(vcr_mismatch(Expected, Actual)) -->
+    [ 'VCR script mismatch:', nl,
+      '  expected: ~q'-[Expected], nl,
+      '  actual:   ~q'-[Actual] ].
