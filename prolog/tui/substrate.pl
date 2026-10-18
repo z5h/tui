@@ -49,17 +49,13 @@ terminal_substrate(Options, terminal(detecting-false, [], Mouse)) :-
 %  substrate_session(+Substrate, +Wake, :Goal)
 %
 %  Run Goal with Substrate set up for an app, restoring it afterwards.
-%  Posted events reach the app through Wake. A terminal session sets the
-%  flag color_term, which ansi_run/1 requires, whether or not the
-%  standard streams are all ttys (e.g. with stderr redirected).
+%  Posted events reach the app through Wake.
 :- meta_predicate(substrate_session(+, +, 0)).
 substrate_session(terminal(_, _, Mouse), Wake, Goal) :-
     with_tty_raw(
         setup_call_cleanup(
             (   asserta(winch_wake_(Wake)),
                 on_signal(winch, Old, sig_winch),
-                current_prolog_flag(color_term, Color),
-                set_prolog_flag(color_term, true),
                 ansi_reset,
                 ansi_hide_cursor,
                 ansi_bracketed_paste_on,
@@ -75,7 +71,6 @@ substrate_session(terminal(_, _, Mouse), Wake, Goal) :-
             ),
             Goal,
             (   @ on_signal(winch, _, Old),
-                @ set_prolog_flag(color_term, Color),
                 @ retract(winch_wake_(Wake)),
                 @ ansi_kitty_keyboard_pop,
                 @ (   Mouse == true

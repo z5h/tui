@@ -32,8 +32,7 @@ main :-
     tty_size(Rows, Cols),
     with_tty_raw(
         setup_call_cleanup(
-            (   set_prolog_flag(color_term, true),
-                ansi_reset,
+            (   ansi_reset,
                 ansi_hide_cursor,
                 flush_output
             ),

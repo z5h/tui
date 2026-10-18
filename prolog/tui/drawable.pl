@@ -117,7 +117,13 @@ is_attribute(style_hovergroup(Style, _G)) :-
 is_attribute(A) :-
     ansi_attribute(A).
 
-my_color(_).
+% The colours tui/terminal.pl encodes: a name, or an index 0..255.
+my_color(C) :-
+    (   atom(C)
+    ->  memberchk(C, [black, red, green, yellow, blue, magenta, cyan, white, default])
+    ;   integer(C),
+        between(0, 255, C)
+    ).
 
 
 '#drawables'.

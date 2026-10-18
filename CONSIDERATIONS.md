@@ -86,7 +86,7 @@ tmux added almost no overhead (not tabulated).
 - iTerm2 has a latency floor of 22-35 ms regardless of content: a single cell costs the same as a full screen. That is its response cadence, not drawing cost, and nothing on our side affects it.
 - full_styled streams at ~8 ms in both terminals, against 0.05 ms for full_plain: the cost is ours, `ansi_format/3` called once per run (~4 µs each). It matters only on screens with many style changes. Fix if needed: encode a frame's escape sequences ourselves and write once.
 
-Since then, `ansi_run/1` writes the SGR sequence itself (from `ansi_sgr/2`), without `ansi_format/3`'s per-run checks and flush:
+Since then, `ansi_run/1` writes the SGR sequence itself, without `ansi_format/3`'s per-run checks and flush. (Measured with `ansi_sgr/2` building the sequence; `attributes_sgr/2` replaced it, as `ansi_sgr/2` is only in SWI-Prolog 10.1.14 and later, and `color_term` is false whenever a standard stream is redirected.)
 
 | terminal | scenario | runs | stream ms | synced ms | worst ms |
 |---|---|---|---|---|---|

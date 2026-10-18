@@ -10,6 +10,7 @@
             ansi_restore_cursor/0,
             ansi_set_cursor/2,
             ansi_run/1,
+            attributes_sgr/2,
             ansi_primary_device_attributes/0,
             ansi_bracketed_paste_on/0,
             ansi_bracketed_paste_off/0,
@@ -29,8 +30,9 @@ Escape sequences for ANSI terminals. Replies to queries arrive as input;
 see tui/input.pl for decoding.
 */
 
-:- use_module(library(ansi_term)).
+:- use_module(library(apply)).
 :- use_module(library(base64)).
+:- use_module(library(error)).
 
 
 '#output'.
@@ -66,19 +68,81 @@ ansi_restore_cursor :-
 ansi_set_cursor(X, Y) :-
     format('\e[~w;~wH', [Y, X]).
 
-% Write Chars at X-Y in Style (a list of ansi_format/3 attributes), then
-% reset the style. A char is one cell, but may be several codepoints (an
-% image placeholder). Requires the flag color_term to be true; otherwise
-% ansi_sgr/2 gives no style.
+% Write Chars at X-Y in Style (see attributes_sgr/2), then reset the
+% style. A char is one cell, but may be several codepoints (an image
+% placeholder).
 ansi_run((X-Y)-([]-Chars)) :- !,
     ansi_set_cursor(X, Y),
     atomic_list_concat(Chars, Text),
     format("~a", [Text]).
 ansi_run((X-Y)-(Style-Chars)) :-
     ansi_set_cursor(X, Y),
-    ansi_sgr(Style, SGR),
+    attributes_sgr(Style, SGR),
     atomic_list_concat(Chars, Text),
-    format("~s~a\e[0m", [SGR, Text]).
+    format("\e[~am~a\e[0m", [SGR, Text]).
+
+
+'#styles'.
+
+%!  attributes_sgr(+Attrs, -SGR) is det.
+%
+%  SGR is the parameters of the Select Graphic Rendition sequence that
+%  sets Attrs, e.g. '1;31' for [bold, fg(red)]. Attributes are reset,
+%  bold, faint, italic, underline, negative and crossed_out; colours are
+%  fg(C), bg(C), and the bright hfg(C) and hbg(C), C being black, red,
+%  green, yellow, blue, magenta, cyan, white or default (fg and bg only),
+%  or an index 0..255; and fg(R, G, B) and bg(R, G, B), each 0..255.
+%
+%  @error domain_error(sgr_attribute, A) for any other attribute A.
+attributes_sgr(Attrs, SGR) :-
+    foldl(attribute_parameters, Attrs, Ps, []),
+    atomic_list_concat(Ps, ';', SGR).
+
+attribute_parameters(A, Ps0, Ps) :-
+    (   attribute_parameters_(A, Ps0, Ps)
+    ->  true
+    ;   domain_error(sgr_attribute, A)
+    ).
+
+attribute_parameters_(reset)          --> [0].
+attribute_parameters_(bold)           --> [1].
+attribute_parameters_(faint)          --> [2].
+attribute_parameters_(italic)         --> [3].
+attribute_parameters_(underline)      --> [4].
+attribute_parameters_(negative)       --> [7].
+attribute_parameters_(crossed_out)    --> [9].
+attribute_parameters_(fg(C))          --> color_parameters(C, 30, 38).
+attribute_parameters_(bg(C))          --> color_parameters(C, 40, 48).
+attribute_parameters_(hfg(C))         --> { C \== default }, color_parameters(C, 90, 38).
+attribute_parameters_(hbg(C))         --> { C \== default }, color_parameters(C, 100, 48).
+attribute_parameters_(fg(R, G, B))    --> rgb_parameters(38, R, G, B).
+attribute_parameters_(bg(R, G, B))    --> rgb_parameters(48, R, G, B).
+
+% A named colour is Base plus its number; an index is Extended;5;N.
+color_parameters(C, Base, _) -->
+    { atom(C),
+      color_number(C, N),
+      P is Base + N },
+    [P].
+color_parameters(C, _, Extended) -->
+    { integer(C),
+      between(0, 255, C) },
+    [Extended, 5, C].
+
+rgb_parameters(Extended, R, G, B) -->
+    { maplist(integer, [R, G, B]),
+      maplist(between(0, 255), [R, G, B]) },
+    [Extended, 2, R, G, B].
+
+color_number(black,   0).
+color_number(red,     1).
+color_number(green,   2).
+color_number(yellow,  3).
+color_number(blue,    4).
+color_number(magenta, 5).
+color_number(cyan,    6).
+color_number(white,   7).
+color_number(default, 9).
 
 
 '#queries'.

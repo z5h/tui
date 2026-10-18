@@ -65,6 +65,7 @@ Views are built from a term-based DSL:
 - **Primitives**: atoms, strings, numbers render as text; `literal(Term)` for any term
 - **Layout**: `.>` (horizontal), `.<` (horizontal, right-aligned first), `.\/` (vertical), `./\` (vertical, bottom-aligned first)
 - **Combinators**: `translate(DX-DY, D)`, `X-Y-D`, `port(W-H, D)`, `zone(W-H, D)`, `align(Direction, D)`, `style(Attrs, D)`
+- **Styles**: `bold`, `faint`, `italic`, `underline`, `negative`, `crossed_out`; colours `fg(C)`, `bg(C)` and the bright `hfg(C)`, `hbg(C)`, C being `black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `white`, `default` or an index 0..255; and `fg(R, G, B)`, `bg(R, G, B)`
 - **Alignment**: a zone has extent W×H whatever it draws, and an `align` directly in it (or in its list) is placed against its edges: `up_left`, `up`, `up_right`, `left`, `center`, `right`, `down_left`, `down`, `down_right`. The view is drawn in a zone the size of the terminal.
 - **Core drawables**: `row/1`, `column/1`, `table(Style, Rows)` (`empty`, `space`, `thin`, `thick`, `double`; each cell is a zone), `wrapped(Width, Chars)`, `clear(W-H)`, `line(Char, From, To)`, `box(W-H, Chars)` (`thin`, `thick`, `double`, or your own characters), `hover(Style, D)`, `cursor(D)`
 - **Components** (opt-in, `:- use_module(library(tui/components))`): `check_box/2`, `button/1`, `input/3`, `frame/2`, `titled_frame/3`, `scroll/3`

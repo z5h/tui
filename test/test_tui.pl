@@ -652,11 +652,7 @@ test(graphics_error) :-
 :- end_tests(substrate).
 
 
-:- begin_tests(terminal, [ setup(( current_prolog_flag(color_term, C),
-                                    nb_setval(test_color_term, C),
-                                    set_prolog_flag(color_term, true) )),
-                           cleanup(( nb_getval(test_color_term, C),
-                                     set_prolog_flag(color_term, C) )) ]).
+:- begin_tests(terminal).
 
 % The bytes terminal.pl writes, to any stream: the VCR checks runs, these
 % check what the runs become.
@@ -677,6 +673,23 @@ test(run_styled) :-
 test(run_true_color) :-
     goal_written(ansi_run((1-1)-([fg(1, 2, 3), bg(4, 5, 6)]-[x])), S),
     S == "\e[1;1H\e[38;2;1;2;3;48;2;4;5;6mx\e[0m".
+
+test(sgr) :-
+    forall(member(Attrs-Expected,
+                  [ []-'',
+                    [faint, italic, underline, negative, crossed_out, reset]-'2;3;4;7;9;0',
+                    [fg(default), bg(white)]-'39;47',
+                    [hfg(green), hbg(yellow)]-'92;103',
+                    [fg(208), bg(0)]-'38;5;208;48;5;0',
+                    [bg(200, 100, 0)]-'48;2;200;100;0' ]),
+           ( attributes_sgr(Attrs, SGR),
+             SGR == Expected )).
+
+test(sgr_unknown, [error(domain_error(sgr_attribute, fg(pink)))]) :-
+    attributes_sgr([bold, fg(pink)], _).
+
+test(sgr_out_of_range, [error(domain_error(sgr_attribute, fg(256)))]) :-
+    attributes_sgr([fg(256)], _).
 
 test(run_multi_codepoint_char) :-
     atom_codes(P, [0x10EEEE, 0x0305, 0x0305]),
