@@ -86,6 +86,14 @@ tmux added almost no overhead (not tabulated).
 - iTerm2 has a latency floor of 22-35 ms regardless of content: a single cell costs the same as a full screen. That is its response cadence, not drawing cost, and nothing on our side affects it.
 - full_styled streams at ~8 ms in both terminals, against 0.05 ms for full_plain: the cost is ours, `ansi_format/3` called once per run (~4 µs each). It matters only on screens with many style changes. Fix if needed: encode a frame's escape sequences ourselves and write once.
 
+Since then, `ansi_run/1` writes the SGR sequence itself (from `ansi_sgr/2`), without `ansi_format/3`'s per-run checks and flush:
+
+| terminal | scenario | runs | stream ms | synced ms | worst ms |
+|---|---|---|---|---|---|
+| kitty | full_styled | 1920 | 3.374 | 3.973 | 4.484 |
+
+The other scenarios are unchanged. What remains, ~1.75 µs a run, is still ours (a style encoded and a `format/2` call per run); caching sequences per distinct style, or writing a frame as one string, would cut it further.
+
 ### Pipeline: replacing predsort (120x40, ms, median of 5, back to back)
 
 `keylist_deduped_prioritize_last/2` and run grouping used `predsort/3`, which calls a Prolog comparator per comparison. Dedupe now reverses and uses `sort(1, @<, ...)` (keeps the first of equal keys, i.e. the last drawn); render keys cells `Y-X` and uses `keysort/2`. Output identical.
