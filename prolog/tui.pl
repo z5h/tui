@@ -49,8 +49,15 @@ styled components are opt-in: load library(tui/components).
 %  raw event becomes reaches update, in order.
 %
 %  A cursor movement bubbles as moved(Direction) from where the cursor
-%  was. The cursor moves regardless; what moved(Direction) is rewritten
-%  to reaches update with the cursor moved.
+%  was, and, for an arrow key no component claimed, as arrived(Direction)
+%  where it lands. The cursor moves regardless; what they are rewritten
+%  to is handled with the cursor moved. A mouse event bubbles where it
+%  happened (see app/5).
+%
+%  Besides events for update, a component may produce a direction, which
+%  moves the cursor one cell, or cursor_by(DX-DY), which moves it by an
+%  offset; e.g. to keep the cursor after an edit, or, answering
+%  arrived(Direction), on a cell where it belongs.
 %
 %  @see stack_event_is/3
 :- multifile at_event_is/3.

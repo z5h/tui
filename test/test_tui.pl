@@ -407,19 +407,23 @@ value_point_event_bubbled(Value, XY, E, Es) :-
 
 test(typed) :-
     value_point_event_bubbled(_, 3-1, a, Es),
-    Es == [name-"a", right].
+    Es == [name-"a", cursor_by(1-0)].
 
 test(inserted_at_cursor) :-
     value_point_event_bubbled("ac", 4-1, b, Es),
-    Es == [name-"abc", right].
+    Es == [name-"abc", cursor_by(1-0)].
 
+% Past the end, text goes at the end, and the cursor moves to just
+% after it (here it is already there).
 test(past_the_end) :-
     value_point_event_bubbled("a", 5-1, b, Es),
-    Es == [name-"ab", right].
+    Es == [name-"ab"],
+    value_point_event_bubbled("a", 6-1, b, Es2),
+    Es2 == [name-"ab", cursor_by((-1)-0)].
 
 test(backspace) :-
     value_point_event_bubbled("abc", 5-1, backspace, Es),
-    Es == [name-"ac", left].
+    Es == [name-"ac", cursor_by((-1)-0)].
 
 test(delete) :-
     value_point_event_bubbled("abc", 4-1, delete, Es),
@@ -427,7 +431,38 @@ test(delete) :-
 
 test(paste) :-
     value_point_event_bubbled("", 3-1, paste("a\nb"), Es),
-    Es == [name-"a b", right, right, right].
+    Es == [name-"a b", cursor_by(3-0)].
+
+% Arriving past the end of the text (trailing spaces included), or on
+% the prompt, the cursor moves to the nearest editable cell.
+test(arrival) :-
+    value_point_event_bubbled("a ", 6-1, arrived(down), Es1),
+    Es1 == [cursor_by((-1)-0)],
+    value_point_event_bubbled("a ", 5-1, arrived(down), Es2),
+    Es2 == [arrived(down)],
+    value_point_event_bubbled(_, 5-1, mouse(press, left), Es3),
+    Es3 == [cursor_by((-2)-0)],
+    value_point_event_bubbled("ab", 1-1, arrived(right), Es4),
+    Es4 == [cursor_by(2-0)].
+
+% Through the loop: an input under a row of digits, its field at x 3..8.
+field_view(_-Value, column(["0123456789", name : input(6, "", Value)])).
+
+field_update(name-V, C-_, C-V) :- !.
+field_update(_, S, S).
+
+% The cursor after each of Events in turn, from S0.
+state_events_cursors(_, [], []).
+state_events_cursors(S0, [E | Es], [C | Cs]) :-
+    context_module(M),
+    tui_loop:view_size_state_frame(M:field_view, 20-5, S0, F),
+    tui_loop:frame_update_event_state0_state(F, M:field_update, E, S0, S),
+    S = C-_,
+    state_events_cursors(S, Es, Cs).
+
+test(cursor_kept_in_text) :-
+    state_events_cursors((8-1)-"ab", [down, up, (8-2)-mouse(press, left), c, right], Cs),
+    Cs == [5-2, 5-1, 5-2, 6-2, 6-2].
 
 test(on_prompt) :-
     value_point_event_bubbled("a", 1-1, b, Es),

@@ -181,8 +181,9 @@ frame_state_shown(frame(_, _, _, Cursor, _), Cursor0-Model, Shown) :-
 
 % The state an event leads to, or result(R). The event bubbles through
 % the component stack under the cursor; each event it becomes, in order,
-% is either a cursor movement, handled here, or passed to Update. All
-% are routed through Frame, the frame the event arrived at.
+% is either a cursor movement (a direction, cursor_by(DX-DY)), handled
+% here, or passed to Update. All are routed through Frame, the frame the
+% event arrived at.
 %
 % A mouse event, (X-Y)-Mouse, bubbles at X-Y instead, as Mouse. A press
 % first moves the cursor there, if there is one. What it becomes goes to
@@ -195,9 +196,9 @@ frame_update_event_state0_state(Frame, Update, E0, S0, S) :-
     ->  findall(E1, point_event_assoc_bubbled(XY, Mouse, EventAssoc, E1), Es0),
         maplist(mouse_bubbled_positioned(XY, Mouse), Es0, Es),
         action_point_state0_state(Action, XY, S0, S1),
-        frame_update_bubbled_state0_state(Frame, Update, Es, S1, S)
+        frame_update_bubbled_state0_state(Frame, Update, E0, Es, S1, S)
     ;   findall(E1, point_event_assoc_bubbled(Cursor, E0, EventAssoc, E1), Es),
-        frame_update_bubbled_state0_state(Frame, Update, Es, S0, S)
+        frame_update_bubbled_state0_state(Frame, Update, E0, Es, S0, S)
     ).
 
 mouse_event(mouse(Action, _), Action).
@@ -215,22 +216,34 @@ action_point_state0_state(press, XY, C-Model, S) :-
     S = XY-Model.
 action_point_state0_state(_, _, S, S).
 
-:- meta_predicate frame_update_bubbled_state0_state(+, 3, +, +, -).
-frame_update_bubbled_state0_state(_, _, [], S, S).
-frame_update_bubbled_state0_state(Frame, Update, [E | Es], S0, S) :-
-    frame_update_one_state0_state(Frame, Update, E, S0, S1),
+% Each event the raw event E0 became; those still equal to E0 are
+% unclaimed.
+:- meta_predicate frame_update_bubbled_state0_state(+, 3, +, +, +, -).
+frame_update_bubbled_state0_state(_, _, _, [], S, S).
+frame_update_bubbled_state0_state(Frame, Update, E0, [E | Es], S0, S) :-
+    (   E == E0
+    ->  Unclaimed = true
+    ;   Unclaimed = false
+    ),
+    frame_update_one_state0_state(Frame, Update, Unclaimed, E, S0, S1),
     (   S1 = result(_)
     ->  S = S1
-    ;   frame_update_bubbled_state0_state(Frame, Update, Es, S1, S)
+    ;   frame_update_bubbled_state0_state(Frame, Update, E0, Es, S1, S)
     ).
 
 % A direction moves the cursor, if there is one, within the frame's
-% extent. moved(Dir) then bubbles at the cursor's old position; what it
-% becomes, if anything else, is passed to Update with the cursor moved.
-:- meta_predicate frame_update_one_state0_state(+, 3, +, +, -).
-frame_update_one_state0_state(frame(_, EventAssoc, Extent, _, _), Update, E, S0, S) :-
+% extent. moved(Dir) then bubbles at the cursor's old position, and, for
+% an arrow key no component claimed, arrived(Dir) at the new one. What
+% they become, other than themselves, is handled with the cursor moved.
+% A direction a component produced bubbles no arrived(Dir): its frame
+% may predate the update it follows (an edit, say). cursor_by(DX-DY)
+% moves the cursor by DX-DY, bubbling nothing.
+:- meta_predicate frame_update_one_state0_state(+, 3, +, +, +, -).
+frame_update_one_state0_state(frame(_, EventAssoc, Extent, _, _), Update, Unclaimed, E, S0, S) :-
     (   E = result(_)
     ->  S = E
+    ;   E = cursor_by(Offset)
+    ->  extent_offset_state0_state(Extent, Offset, S0, S)
     ;   direction(E),
         S0 = (X-Y)-Model0,
         ground(X-Y)
@@ -238,23 +251,41 @@ frame_update_one_state0_state(frame(_, EventAssoc, Extent, _, _), Update, E, S0,
         (   X-Y = NX-NY
         ->  S = S0
         ;   findall(E2, point_event_assoc_bubbled(X-Y, moved(E), EventAssoc, E2), E2s),
-            exclude(==(moved(E)), E2s, Claimed),
-            update_events_state0_state(Update, Claimed, (NX-NY)-Model0, S)
+            exclude(==(moved(E)), E2s, Moved),
+            (   Unclaimed == true
+            ->  findall(E3, point_event_assoc_bubbled(NX-NY, arrived(E), EventAssoc, E3), E3s),
+                exclude(==(arrived(E)), E3s, Arrived)
+            ;   Arrived = []
+            ),
+            append(Moved, Arrived, Claimed),
+            update_events_state0_state(Extent, Update, Claimed, (NX-NY)-Model0, S)
         )
     ;   call(Update, E, S0, S)
     ).
 
-:- meta_predicate update_events_state0_state(3, +, +, -).
-update_events_state0_state(_, [], S, S).
-update_events_state0_state(Update, [E | Es], S0, S) :-
+:- meta_predicate update_events_state0_state(+, 3, +, +, -).
+update_events_state0_state(_, _, [], S, S).
+update_events_state0_state(Extent, Update, [E | Es], S0, S) :-
     (   E = result(_)
     ->  S = E
-    ;   call(Update, E, S0, S1),
+    ;   (   E = cursor_by(Offset)
+        ->  extent_offset_state0_state(Extent, Offset, S0, S1)
+        ;   call(Update, E, S0, S1)
+        ),
         (   S1 = result(_)
         ->  S = S1
-        ;   update_events_state0_state(Update, Es, S1, S)
+        ;   update_events_state0_state(Extent, Update, Es, S1, S)
         )
     ).
+
+% The cursor moved by DX-DY, staying within the extent (the frame is
+% drawn from 1-1). Without a cursor, nothing moves.
+extent_offset_state0_state(EX-EY, DX-DY, (X-Y)-Model, S) :-
+    ground(X-Y), !,
+    NX is max(1, min(EX, X + DX)),
+    NY is max(1, min(EY, Y + DY)),
+    S = (NX-NY)-Model.
+extent_offset_state0_state(_, _, S, S).
 
 
 '#frames'.

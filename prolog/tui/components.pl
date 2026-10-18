@@ -59,14 +59,18 @@ tui:at_event_is(button(_), _-mouse(press, left), button-pressed).
 %  cursor on it. Shows Value underlined, or while Value is unbound, the
 %  Placeholder faint and underlined. Text beyond Width is not shown.
 %
+%  The cursor stays where text can be edited: arriving by arrow or click
+%  past the end of the text (trailing spaces are text; the padding to
+%  Width is not), or on the '> ', it moves to the nearest such cell.
+%
 %  With the cursor in the field: typing inserts at the cursor (at the end
 %  of the text, if the cursor is past it) and advances it, backspace
 %  deletes before the cursor, delete deletes at it, and a paste is
 %  inserted, its line breaks as spaces.
 %
 %  Events produced:
-%    * input-NewValue, a string, followed by the moves (right or left)
-%      that keep the cursor after the edit
+%    * input-NewValue, a string, followed by cursor_by(DX-0) if the
+%      cursor must move to stay after the edit
 tui:alias_drawable(input(W, PlaceholderA, ValueA), hover([bold], D)) :-
     atomics_to_string([PlaceholderA], Placeholder),
     (  var(ValueA)
@@ -79,46 +83,67 @@ tui:alias_drawable(input(W, PlaceholderA, ValueA), hover([bold], D)) :-
     D = [style([faint], 0-0-'> '),
          2-0-Field].
 
+% Arriving past the end of the text, or on the prompt, the cursor moves
+% to the nearest cell where text can be edited.
+tui:at_event_is(input(_, _, ValueA), (X-_)-E, cursor_by(DX-0)) :-
+    arrival_event(E),
+    value_string(ValueA, Value),
+    string_length(Value, L),
+    I is X - 2,
+    (   I > L
+    ->  DX is L - I
+    ;   I < 0,
+        DX is -I
+    ).
 tui:at_event_is(input(_, _, ValueA), (X-_)-E, Is) :-
     I0 is X - 2,
     I0 >= 0,
+    value_string(ValueA, Value),
+    string_length(Value, L),
+    I is min(I0, L),
+    event_index_value_edited(E, I, Value, Edited, I1),
+    DX is I1 - I0,
+    (   Is = input-Edited
+    ;   DX =\= 0,
+        Is = cursor_by(DX-0)
+    ).
+
+arrival_event(arrived(_)).
+arrival_event(mouse(press, left)).
+
+value_string(ValueA, Value) :-
     (   var(ValueA)
     ->  Value = ""
     ;   atomics_to_string([ValueA], Value)
-    ),
-    string_length(Value, L),
-    I is min(I0, L),
-    event_index_value_edited(E, I, Value, Edited, Moves),
-    (   Is = input-Edited
-    ;   member(Is, Moves)
     ).
 
-% Value with E applied at index I, and the cursor moves that follow.
-event_index_value_edited(paste(Text), I, Value, Edited, Moves) :- !,
+% Value with E applied at index I, and the cursor's index after.
+event_index_value_edited(paste(Text), I, Value, Edited, I1) :- !,
     split_string(Text, "\n", "", Lines),
     atomic_list_concat(Lines, ' ', Inserted),
     string_index_inserted_edited(Inserted, I, Value, Edited),
     atom_length(Inserted, N),
-    length(Moves, N),
-    maplist(=(right), Moves).
-event_index_value_edited(backspace, I, Value, Edited, [left]) :- !,
+    I1 is I + N.
+event_index_value_edited(backspace, I, Value, Edited, I1) :- !,
     I > 0,
     sub_string(Value, 0, I, _, Before0),
     sub_string(Before0, 0, _, 1, Before),
     sub_string(Value, I, _, 0, After),
-    string_concat(Before, After, Edited).
-event_index_value_edited(delete, I, Value, Edited, []) :- !,
+    string_concat(Before, After, Edited),
+    I1 is I - 1.
+event_index_value_edited(delete, I, Value, Edited, I) :- !,
     sub_string(Value, 0, I, _, Before),
     sub_string(Value, I, _, 0, After0),
     sub_string(After0, 1, _, 0, After),
     string_concat(Before, After, Edited).
-event_index_value_edited(C, I, Value, Edited, [right]) :-
+event_index_value_edited(C, I, Value, Edited, I1) :-
     atom(C),
     atom_length(C, 1),
     char_code(C, Code),
     Code >= 32,
     Code =\= 127,
-    string_index_inserted_edited(C, I, Value, Edited).
+    string_index_inserted_edited(C, I, Value, Edited),
+    I1 is I + 1.
 
 string_index_inserted_edited(S, I, Value, Edited) :-
     sub_string(Value, 0, I, _, Before),
