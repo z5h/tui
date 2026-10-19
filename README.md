@@ -8,6 +8,8 @@ A TUI framework inspired by TEA (The Elm Architecture). Define your app with a m
 ?- pack_install(tui).
 ```
 
+Requires SWI-Prolog 10.0 or later.
+
 ## Quick Start
 
 ```prolog
