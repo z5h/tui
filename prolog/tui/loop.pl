@@ -29,8 +29,14 @@ bubbling and the app's update, and repeats until a result.
 %  View is called as call(View, State, Drawable) to produce the current
 %  view. Update is called as call(Update, Event, State0, State1) to
 %  handle events. The app exits with Result when an event bubbles to
-%  result(Result), or when Update produces result(Result). Only the
-%  first solution of each call is used.
+%  result(Result), or when Update produces result(Result).
+%
+%  View and Update are called as by once/1: only their first solution
+%  is used. If either fails, the app ends with the error
+%  tui_callback_failed(Which, State), Which being update(Event) or view
+%  and State the state it failed on. The terminal is restored first, so
+%  a catch/3 around app/4 can report it, or carry on from State in
+%  another app. Exceptions they raise pass through unchanged.
 %
 %  Besides keys, Update receives terminal_size(Cols, Rows) at the start
 %  and after every resize, and terminal_properties(Properties) once,
@@ -41,6 +47,8 @@ bubbling and the app's update, and repeats until a result.
 %
 %  Everything runs in the calling thread, which must own the TTY. Other
 %  threads deliver events through a wake (see tui/wake.pl).
+%
+%  @error tui_callback_failed(Which, State) if View or Update fails.
 :- meta_predicate(app(?, 2, 3, ?)).
 app(State, View, Update, Result) :-
     app(State, View, Update, Result, []).
@@ -78,9 +86,9 @@ app_substrate(Substrate, State, View, Update, Result) :-
             app_loop(app(View, Update, Wake), State,
                      display(Substrate, stale, unknown, [], []), Result)
         ),
-        (   @ retract(app_wake_(Wake)),
-            @ wake_close(Wake)
-        )
+        goals_attempted([ retract(app_wake_(Wake)),
+                          wake_close(Wake)
+                        ])
     ).
 
 
@@ -263,7 +271,7 @@ frame_update_one_state0_state(frame(_, EventAssoc, Extent, _, _), Update, Unclai
             append(Moved, Arrived, Claimed),
             update_events_state0_state(Extent, Update, Claimed, (NX-NY)-Model0, S)
         )
-    ;   once(call(Update, E, S0, S))
+    ;   update_event_state0_state(Update, E, S0, S)
     ).
 
 :- meta_predicate update_events_state0_state(+, 3, +, +, -).
@@ -275,13 +283,37 @@ update_events_state0_state(Extent, Update, [E | Es], S0, S) :-
         ->  extent_offset_state0_state(Extent, Offset, S0, S1)
         ;   E == noop
         ->  S1 = S0
-        ;   once(call(Update, E, S0, S1))
+        ;   update_event_state0_state(Update, E, S0, S1)
         ),
         (   S1 = result(_)
         ->  S = S1
         ;   update_events_state0_state(Extent, Update, Es, S1, S)
         )
     ).
+
+% The app's update and view. Only the first solution is used; a failure
+% is a bug in the app, raised as an error carrying the state, so that a
+% caller catching it can report it or carry on in another app.
+:- meta_predicate update_event_state0_state(3, +, +, -).
+update_event_state0_state(Update, E, S0, S) :-
+    (   call(Update, E, S0, S1)
+    ->  S = S1
+    ;   throw(error(tui_callback_failed(update(E), S0), _))
+    ).
+
+:- meta_predicate view_state_drawable(2, +, -).
+view_state_drawable(View, S, D) :-
+    (   call(View, S, D0)
+    ->  D = D0
+    ;   throw(error(tui_callback_failed(view, S), _))
+    ).
+
+:- multifile prolog:error_message//1.
+
+prolog:error_message(tui_callback_failed(update(E), _)) -->
+    [ 'tui: the app''s update failed on the event ~q'-[E] ].
+prolog:error_message(tui_callback_failed(view, _)) -->
+    [ 'tui: the app''s view failed' ].
 
 % The cursor moved by DX-DY, staying within the extent (the frame is
 % drawn from 1-1). Without a cursor, nothing moves.
@@ -320,7 +352,7 @@ view_state_display_painted(View, State,
     substrate_runs_painted(Sub1, Changed, Sub).
 
 view_size_state_frame(View, Size, State, frame(Commands, EventAssoc, Extent, Cursor, Images)) :-
-    once(call(View, State, Drawable0)),
+    view_state_drawable(View, State, Drawable0),
     size_drawable_zoned(Size, Drawable0, Drawable),
     drawable__normalized_commands__end(Drawable, Commands, Extent),
     size_limits(Size, Limits),

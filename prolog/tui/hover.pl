@@ -34,10 +34,11 @@ tui:alias_drawable(hover(Style, Term, Group), HoverTerm) :-
 apply_focus(X-Y, Commands) :-
     member((X-Y)-(Stack-Attr-_), Commands),
     member([style_hovergroup(_S, G)], Attr),
-    @ stack_focused(Stack),
+    stack_focused(Stack),
     G = true.
 apply_focus(_, _).
 
+:- det(stack_focused/1).
 stack_focused([]).
 stack_focused([_-hover(_,_,true) | Tail ]) :- !,
     stack_focused(Tail).

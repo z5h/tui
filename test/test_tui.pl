@@ -70,6 +70,24 @@ test(mapindexed_empty) :-
     mapindexed([_, _, _]>>true, [], R),
     R == [].
 
+% Every goal is called, whatever the ones before it do; failures and
+% exceptions are warnings.
+test(goals_attempted) :-
+    with_output_to(string(Warnings),
+                   setup_call_cleanup(
+                       ( set_stream(user_error, alias(saved_error)),
+                         set_stream(current_output, alias(user_error)) ),
+                       goals_attempted([ nb_setval(attempted, [1]),
+                                         fail,
+                                         ( nb_getval(attempted, A1), nb_setval(attempted, [2 | A1]) ),
+                                         throw(oops),
+                                         ( nb_getval(attempted, A2), nb_setval(attempted, [3 | A2]) ) ]),
+                       set_stream(saved_error, alias(user_error)))),
+    nb_getval(attempted, A),
+    A == [3, 2, 1],
+    once(sub_string(Warnings, _, _, _, "goal failed: fail")),
+    once(sub_string(Warnings, _, _, _, "oops")).
+
 :- end_tests(utils).
 
 
@@ -320,6 +338,45 @@ test(no_choicepoints_kept) :-
     app(_-[], leaky_view, leaky_update, _-Chs, [substrate(vcr(Script))]),
     sort(Chs, Distinct),
     length(Distinct, 1).
+
+% A failing update or view is an error carrying the state, raised after
+% the substrate is restored; the caller can carry on from that state.
+picky_update(terminal_size(_, _), S, S).
+picky_update(a, C-Es, C-[a | Es]).
+picky_update(eos, S, result(S)).
+
+test(update_failed, [error(tui_callback_failed(update(b), (1-1)-[a]))]) :-
+    Script = [ send([terminal_size(10, 3)]),
+               expect(clear),
+               expect(runs([(1-1)-([negative]-[h]), (2-1)-([]-[i])])),
+               send([a, b])
+             ],
+    app((1-1)-[], vcr_view, picky_update, _, [substrate(vcr(Script))]).
+
+test(resumed_after_failure) :-
+    Script = [ send([terminal_size(10, 3)]),
+               expect(clear),
+               expect(runs([(1-1)-([negative]-[h]), (2-1)-([]-[i])])),
+               send([a, b])
+             ],
+    catch(app((1-1)-[], vcr_view, picky_update, _, [substrate(vcr(Script))]),
+          error(tui_callback_failed(update(b), S), _),
+          app(S, vcr_view, picky_update, R,
+              [substrate(vcr([send([terminal_size(10, 3)]), expect(clear),
+                              expect(runs([(1-1)-([negative]-[h]), (2-1)-([]-[i])])),
+                              send([a])]))])),
+    R == (1-1)-[a, a].
+
+failing_view(_, _) :- fail.
+
+test(view_failed, [error(tui_callback_failed(view, (1-1)-[]))]) :-
+    app((1-1)-[], failing_view, vcr_update, _, [substrate(vcr([send([terminal_size(10, 3)]), expect(clear)]))]).
+
+test(failure_message) :-
+    phrase(prolog:translate_message(error(tui_callback_failed(update(ctrl+x), big_state), _)), Lines),
+    with_output_to(string(A), print_message_lines(current_output, '', Lines)),
+    once(sub_atom(A, _, _, _, 'update failed on the event ctrl+x')),
+    \+ sub_atom(A, _, _, _, big_state).
 
 test(mismatch, [throws(error(vcr_mismatch(expect(runs(_)), expect(clear)), _))]) :-
     Script = [ send([terminal_size(10, 3)]),

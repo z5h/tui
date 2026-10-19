@@ -1,10 +1,6 @@
 :- module(tui_utils,
           [
-              op(950, fy, ?),
-              op(950, fy, @),
-              log/1,
-              '?'/1,
-              '@'/1,
+              goals_attempted/1,
               mapindexed/3,
               keylist_deduped_prioritize_last/2,
               capture//2,
@@ -15,31 +11,32 @@
           ]).
 
 
-'#debug'.
+'#cleanup'.
 
-:- meta_predicate(log(0)).
-log(Goal) :-
-    setup_call_cleanup(
-        open('tui.log', append, Out),
-        (   with_output_to(Out, Goal),
-            with_output_to(Out, nl)
-        ),
-        close(Out)
-    ).
+%!  goals_attempted(:Goals) is det.
+%
+%  Calls each goal of Goals once, in order, whatever the others do: a
+%  goal that fails or throws is reported as a warning, and the rest are
+%  still called. For cleanups, where every step should be tried.
+:- meta_predicate(goals_attempted(:)).
+goals_attempted(M:Goals) :-
+    maplist(goal_attempted(M), Goals).
 
-:- meta_predicate(debug_call(0)).
-debug_call(G) :-
-    (   G
-    *-> log(writeln(pass:G))
-    ;   log(writeln(fail:G)), fail
-    ).
+goal_attempted(M, Goal) :-
+    catch(( call(M:Goal)
+          ->  true
+          ;   print_message(warning, tui_goal_failed(Goal))
+          ),
+          E,
+          print_message(warning, tui_goal_raised(Goal, E))).
 
-:- meta_predicate('?'(0)).
-'?'(G) :- debug_call(G).
+:- multifile prolog:message//1.
 
-:- meta_predicate('@'(0)).
-:- det('@'/1).
-'@'(G) :- G.
+prolog:message(tui_goal_failed(Goal)) -->
+    [ 'tui: goal failed: ~q'-[Goal] ].
+prolog:message(tui_goal_raised(Goal, E)) -->
+    [ 'tui: goal ~q raised: '-[Goal] ],
+    prolog:translate_message(E).
 
 
 '#lists'.

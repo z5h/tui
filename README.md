@@ -34,6 +34,8 @@ update(_, S, S).
 
 Run with `swipl hello.pl`, and click a button (or move to it with the arrows and press space or return). The state is `(CursorX-CursorY)-Model`, here starting with the cursor on Yes and no model. Update returns a new state, or `result(R)` to end the app with result `R` (here `Pressed`). Each button is tagged with a key, so pressing it reaches update as `Key-pressed`.
 
+View and update are called as by `once/1`. If either fails, the app ends with the error `tui_callback_failed(Which, State)` (Which is `update(Event)` or `view`), which a `catch/3` around `app` can report, or carry on from `State` in another app. Hence the last clause of `update/3` above, which leaves the state as it is for any other event.
+
 `app/5` takes options as a last argument: `mouse(true)` turns on mouse reporting (see below), and `substrate(vcr(Script))` runs the app headless against a script (see Testing).
 
 ## Examples

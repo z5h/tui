@@ -70,17 +70,18 @@ substrate_session(terminal(_, _, Mouse), Wake, Goal) :-
                 size_posted(Wake)
             ),
             Goal,
-            (   @ on_signal(winch, _, Old),
-                @ retract(winch_wake_(Wake)),
-                @ ansi_kitty_keyboard_pop,
-                @ (   Mouse == true
-                  ->  ansi_mouse_off
-                  ;   true
-                  ),
-                @ ansi_bracketed_paste_off,
-                @ ansi_reset,
-                @ ansi_show_cursor
-            )
+            goals_attempted([ on_signal(winch, _, Old),
+                              retract(winch_wake_(Wake)),
+                              ansi_kitty_keyboard_pop,
+                              (   Mouse == true
+                              ->  ansi_mouse_off
+                              ;   true
+                              ),
+                              ansi_bracketed_paste_off,
+                              ansi_reset,
+                              ansi_show_cursor,
+                              flush_output
+                            ])
         )
     ).
 substrate_session(vcr(_), _, Goal) :-

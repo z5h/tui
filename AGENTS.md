@@ -11,7 +11,7 @@ A Text User Interface (TUI) framework for SWI-Prolog, inspired by TEA (The Elm A
 This is a SWI-Prolog pack. Library modules live in `prolog/`, internal modules in `prolog/tui/`.
 
 - `prolog/tui.pl` — public module `tui`: a facade of operators, re-exports, and the hook declarations (auto-loads components)
-- `prolog/tui/utils.pl` — `tui_utils`: debug helpers (`log/1`, `?`, `@`), list/DCG helpers, direction and limits geometry. Depends on nothing.
+- `prolog/tui/utils.pl` — `tui_utils`: `goals_attempted/1` (for cleanups: every step is tried, failures are warnings), list/DCG helpers, direction and limits geometry. Depends on nothing.
 - `prolog/tui/terminal.pl` — `tui_terminal`: generic ANSI output (`ansi_*`, `ansi_run/1`, styles encoded by `attributes_sgr/2`, independent of `library(ansi_term)` and its `color_term` flag), device-attributes and Kitty keyboard and graphics queries. The `terminal` test unit checks the bytes
 - `prolog/tui/input.pl` — `tui_input`: decodes terminal input codes into events (legacy xterm and Kitty keyboard protocol), with no side effects
 - `prolog/tui/drawable.pl` — `tui_drawable`: the drawable DSL (`drawable//5`), attributes, commands, cell resolution (conceal/reveal), and the core drawables that make no styling choices: `row/1`, `column/1`, `table/2`, `wrapped/2`, `clear/1`, `line/3`, `box/2`, `Key:Drawable` tagging, `cursor/1`
@@ -56,6 +56,8 @@ Everything runs in the main thread, which owns the TTY (`wait_for_input/3` on `u
 1. Paints the current frame if it is not already on the substrate (and the size is known)
 2. Asks the substrate for events, which blocks
 3. Folds them through bubbling and the user's `update/3`; the app exits on `result(R)` from either
+
+The app's view and update are called as by `once/1`. A failure raises `tui_callback_failed(update(Event) | view, State)` (after the substrate is restored), so an app's bug is never a silent exit.
 
 **The cursor.** Update may bind the state's cursor `X-Y`, or leave it unbound. The view may draw `cursor(Drawable)` (an alias defined in `loop.pl`), which places the cursor on the top-left cell drawn by it; because the view runs after update, this overrides any cursor update bound. If several are drawn, the top-left cell of them all wins. With neither, there is no cursor: nothing is highlighted, and events bubble through an empty stack (so only `at_event_is([], ...)` sees them) and arrows do not move anything. Arrow keys not claimed by a component move the cursor by default (the loop binds the new position). Update receives the state with the cursor as shown.
 
