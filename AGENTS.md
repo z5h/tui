@@ -159,5 +159,5 @@ See `PROLOG_STYLE.md` for full conventions. Key points:
 - **Arithmetic**: CLP(FD) by default; `is/2` only when provably ground and marked `% IMPURE:`
 - **Branching**: `if_/3` with reified tests preferred; `-> ;` only for ground dispatch
 - **Formatting**: 4-space indentation, no blank lines between clauses of same predicate, one blank line between predicates
-- **Documentation**: PLdoc with `%!` (preferred) and mode markers (`+`, `-`, `?`) plus `is det/semidet/nondet`
+- **Documentation**: PLdoc with `%!` (preferred) and mode markers (`+`, `-`, `?`) plus `is det/semidet/nondet`. Every file has a `/** <module>` comment and every exported predicate a structured comment; mode-line arguments are plain variables (`+Size`, then "Size being W-H" in the text), and different arities get separate comments. Comments on non-exported helpers are plain `%`. The `doc` test unit runs `test/doc_check.pl` (standalone: `swipl -p library=prolog test/doc_check.pl`), which fails on any of this, and on any warning while loading
 - **Modules**: one per file, explicit exports, ≤200 clauses

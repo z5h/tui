@@ -10,6 +10,13 @@
               limits_point_within/2
           ]).
 
+/** <module> Utilities
+
+Helpers shared by the library's modules: cleanups that try every step,
+list and DCG helpers, and directions and limits (rectangles) on the
+grid. Depends on no other module of the library.
+*/
+
 
 '#cleanup'.
 
@@ -56,8 +63,11 @@ function_list_from_mapped(F, [H  |T], I, [MH  |MT]) :-
     J is I + 1,
     function_list_from_mapped(F, T, J, MT).
 
-% Sorted by key, keeping only the last pair for each key. sort/4 keeps
-% the first of equal keys, which after reversing is the last.
+%!  keylist_deduped_prioritize_last(+Pairs, -Deduped) is det.
+%
+%  Deduped is Pairs sorted by key, keeping only the last pair for each
+%  key. (sort/4 keeps the first of equal keys, which after reversing is
+%  the last.)
 keylist_deduped_prioritize_last(L0, LN) :-
     reverse(L0, R),
     sort(1, @<, R, LN).
@@ -65,11 +75,17 @@ keylist_deduped_prioritize_last(L0, LN) :-
 
 '#dcg'.
 
+%!  capture(:Phrase, -Captured)// is semidet.
+%
+%  Captured is the list Phrase produces, as a DCG producing nothing.
 :- meta_predicate(capture(//, ?, ?, ?)).
 capture(Phrase, C, A, A2) :-
     phrase(Phrase, C, []), !,
     A = A2.
 
+%!  excluding(:Pred, :Phrase)// is semidet.
+%
+%  What Phrase produces, less the elements for which Pred is true.
 :- meta_predicate(excluding(1, //, ?, ?)).
 excluding(Pred, Phrase) -->
     capture(Phrase, C),

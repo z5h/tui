@@ -25,9 +25,10 @@ sent to the terminal.
 
 '#drawable'.
 
-%!  image(+Id, +Source, +W-H)
+%!  image(+Id, +Source, +Size)
 %
-%  The image Source, under Id, shown in W×H cells. Id is an integer from
+%  The image Source, under Id, shown in W×H cells, Size being W-H. Id is
+%  an integer from
 %  1 to 16777215, unique to the image; W and H are from 1 to 297. Source
 %  is one of:
 %

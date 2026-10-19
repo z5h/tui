@@ -36,20 +36,23 @@ escape_grace(0.01).
 
 '#session'.
 
-% A terminal before its session. Detected is Keyboard-Graphics: Keyboard
-% is detecting until the terminal reveals whether it supports the Kitty
-% keyboard protocol (then kitty) or not (then legacy); Graphics becomes
-% true if it answers the Kitty graphics query. Pending holds codes of an
-% incomplete escape sequence. Mouse is whether the terminal reports the
-% mouse (option mouse(Bool), default false).
+%!  terminal_substrate(+Options, -Substrate) is det.
+%
+%  Substrate is a terminal before its session, terminal(Detected,
+%  Pending, Mouse). Detected is Keyboard-Graphics: Keyboard is detecting
+%  until the terminal reveals whether it supports the Kitty keyboard
+%  protocol (then kitty) or not (then legacy); Graphics becomes true if
+%  it answers the Kitty graphics query. Pending holds codes of an
+%  incomplete escape sequence. Mouse is whether the terminal reports the
+%  mouse (option mouse(Bool), default false).
 terminal_substrate(Options, terminal(detecting-false, [], Mouse)) :-
     option(mouse(Mouse), Options, false),
     must_be(boolean, Mouse).
 
-%  substrate_session(+Substrate, +Wake, :Goal)
+%!  substrate_session(+Substrate, +Wake, :Goal)
 %
-%  Run Goal with Substrate set up for an app, restoring it afterwards.
-%  Posted events reach the app through Wake.
+%  IMPURE: run Goal with Substrate set up for an app, restoring it
+%  afterwards. Posted events reach the app through Wake.
 :- meta_predicate(substrate_session(+, +, 0)).
 substrate_session(terminal(_, _, Mouse), Wake, Goal) :-
     with_tty_raw(
@@ -105,11 +108,14 @@ size_posted(Wake) :-
 
 '#events'.
 
-% IMPURE: blocks until input or a wake, then returns everything ready.
-% While an escape sequence is pending, waits at most the escape grace
-% period; if nothing arrives, the pending codes are decoded as they are.
-% An open paste waits for its end however long that takes. End of input
-% is the event eos.
+%!  substrate_events(+Substrate0, +Wake, -Events, -Substrate) is det.
+%
+%  IMPURE: blocks until input or a wake, then Events is everything
+%  ready. While an escape sequence is pending, waits at most the escape
+%  grace period; if nothing arrives, the pending codes are decoded as
+%  they are. An open paste waits for its end however long that takes.
+%  End of input is the event eos. A vcr substrate takes the next batch
+%  from its script.
 substrate_events(terminal(K0, Pending0, M), Wake, Events, terminal(K, Pending, M)) :-
     wake_stream(Wake, WakeIn),
     (   (   Pending0 == []
@@ -210,13 +216,17 @@ detected_properties(Kb-G, [program(P), extended_keys(B), graphics(G)]) :-
 
 '#painting'.
 
-% IMPURE: nothing is on the substrate afterwards.
+%!  substrate_cleared(+Substrate0, -Substrate) is det.
+%
+%  IMPURE: nothing is on the substrate afterwards.
 substrate_cleared(terminal(K, P, M), terminal(K, P, M)) :-
     ansi_clear.
 substrate_cleared(vcr(Script0), vcr(Script)) :-
     vcr_cleared(Script0, Script).
 
-% IMPURE: draws Runs, (X-Y)-(Attrs-Chars), over what is there.
+%!  substrate_runs_painted(+Substrate0, +Runs, -Substrate) is det.
+%
+%  IMPURE: draws Runs, (X-Y)-(Attrs-Chars), over what is there.
 substrate_runs_painted(terminal(K, P, M), Runs, terminal(K, P, M)) :-
     ansi_hide_cursor,
     maplist(ansi_run, Runs),
@@ -224,8 +234,10 @@ substrate_runs_painted(terminal(K, P, M), Runs, terminal(K, P, M)) :-
 substrate_runs_painted(vcr(Script0), Runs, vcr(Script)) :-
     vcr_runs_painted(Script0, Runs, Script).
 
-% IMPURE: sends image Actions, transmit(Id, Source) and place(Id, W-H)
-% (see tui/image.pl).
+%!  substrate_graphics_sent(+Substrate0, +Actions, -Substrate) is det.
+%
+%  IMPURE: sends image Actions, transmit(Id, Source) and place(Id, W-H)
+%  (see tui/image.pl).
 substrate_graphics_sent(terminal(K, P, M), Actions, terminal(K, P, M)) :-
     maplist(graphics_action_sent, Actions),
     flush_output.

@@ -20,8 +20,22 @@ drawn at.
 
 Besides the primitives in drawable//5, this module defines the core
 drawables that make no styling choices: layout (row/1, column/1,
-wrapped/2, table/2), shapes (clear/1, line/3, box/2), tagging (Key:Drawable) and
-cursor/1. Ready-made, styled components are in library(tui/components).
+wrapped/2, table/2), shapes (clear/1, line/3, box/2), tagging (below)
+and cursor/1. Ready-made, styled components are in
+library(tui/components).
+
+## Tagging: Key:Drawable
+
+Key:Drawable draws Drawable, tagged with Key for event routing; Key does
+not affect drawing. When a component event Name-Value bubbles through
+Key:Component, and Name is the functor of Component, the event becomes
+Key-Value: the component's own name is replaced by the tag. Events from
+components nested deeper (other names) and raw events (up, ' ', ...)
+pass through unchanged. For example,
+
+    scroll(Id) : scroll(20-15, Offset, Content)
+
+turns scroll-(0-5) from the scroll into scroll(Id)-(0-5).
 */
 
 :- use_module(library(tui/utils)).
@@ -39,6 +53,11 @@ cursor/1. Ready-made, styled components are in library(tui/components).
 drawable_raw(Drawable, raw(Raw)) :-
     phrase(drawable(Drawable, [], [], 0-0, _), Raw, []).
 
+%!  drawable__normalized_commands__end(+Drawable, -Commands, -End) is det.
+%
+%  Commands are what Drawable draws from 1-1, one per cell (the last
+%  drawn at a cell wins), sorted by position. End is the maximum X-Y
+%  reached, as in drawable//5.
 drawable__normalized_commands__end(Drawables, Deduped, MXY) :-
     phrase(drawable(Drawables, [], [], 1-1, MXY), Commands, []), !,
     keylist_deduped_prioritize_last(Commands, Deduped).
@@ -62,8 +81,11 @@ command((X-Y)-(Stack-Attrs-C)) :-
 
 '#cells'.
 
-% The attributes and character a cell shows. A concealed cell shows a
-% space in its remaining style.
+%!  attributes_char_shown(+Attrs0, +Char0, -Attrs, -Char) is det.
+%
+%  Attrs and Char are what a cell drawn as Char0 in Attrs0 shows. A
+%  concealed cell (conceal, not undone by a later reveal) shows a space
+%  in its remaining style.
 attributes_char_shown(Attrs0, C, Attrs, Char) :-
     attributes_revealed(Attrs0, Attrs1),
     revealed_char_attributes_shown(Attrs1, C, Attrs, Char).
@@ -507,10 +529,10 @@ style_table_border(Style, Xs, Ws, Ys, Hs, raw(Merged)) :-
 
 '#shapes'.
 
-%!  clear(+W-+H)
+%!  clear(+Size)
 %
-%  A W×H rectangle of spaces with reset styling. Used to erase a region
-%  before drawing over it.
+%  A W×H rectangle of spaces with reset styling, Size being W-H. Used to
+%  erase a region before drawing over it.
 tui:alias_drawable(clear(W-H), style([reset, bg(default)], Spaces)) :-
     W1 is W - 1,
     H1 is H - 1,
@@ -543,9 +565,10 @@ at_towards_next(At, Towards, Next) :-
     ;   fail
     ).
 
-%!  box(+W-+H, +Chars)
+%!  box(+Size, +Chars)
 %
-%  The border of a W×H box; the inside is not drawn. Chars is either
+%  The border of a W×H box, Size being W-H; the inside is not drawn.
+%  Chars is either
 %  box_chars(Horizontal, Vertical, TopLeft, TopRight, BottomLeft,
 %  BottomRight), or one of the standard sets thin, thick, double.
 tui:alias_drawable(box(W-H, Style), box(W-H, Chars)) :-
@@ -608,22 +631,7 @@ group_merged(XY-Drawn, XY-(Stack-Attrs-C)) :-
 
 '#tagging'.
 
-%!  Key:Drawable
-%
-%  Drawable, tagged with Key for event routing; Key does not affect
-%  drawing.
-%
-%  When a component event Name-Value bubbles through Key:Component, and
-%  Name is the functor of Component, the event becomes Key-Value: the
-%  component's own name is replaced by the tag. Events from components
-%  nested deeper (other names) and raw events (up, ' ', ...) pass
-%  through unchanged.
-%
-%  Example:
-%
-%      scroll(Id) : scroll(20-15, Offset, Content)
-%
-%  turns scroll-(0-5) from the scroll into scroll(Id)-(0-5).
+% Key:Drawable, documented in the module comment.
 tui:alias_drawable(_:D, D).
 
 tui:at_event_is(Key:Inner, _-(Name-Value), Key-Value) :-

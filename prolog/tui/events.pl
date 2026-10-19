@@ -17,10 +17,11 @@ component sees where the event happened relative to its origin.
 
 '#bubbling'.
 
-%!  stack_event_is(+Stack, +X-Y-RawEvent, -BubbledEvent) is multi.
+%!  stack_event_is(+Stack, +PositionedEvent, -BubbledEvent) is multi.
 %
 %  Walk the component Stack, entries Origin-Alias, from innermost to
-%  outermost. Each component sees the event at X-Y relative to its
+%  outermost. PositionedEvent is X-Y-RawEvent. Each component sees the
+%  event at X-Y relative to its
 %  origin, RX-RY-RawEvent, and may rewrite it via at_event_is/3, once or
 %  in several ways; each rewrite bubbles on from the same component. The
 %  bottom of the stack, [], sees X-Y-RawEvent. If no component rewrites
@@ -71,7 +72,10 @@ point_event_assoc_bubbled(X-Y, E0, EventAssoc, E1) :-
 
 '#event_map'.
 
-% Point-Stack pairs for every command within Limits.
+%!  limits_commands_eventmap(+Limits, +Commands, -EventMap) is det.
+%
+%  EventMap holds Point-Stack for every command within Limits: which
+%  components were drawn at each point, for bubbling.
 limits_commands_eventmap(_, [], []).
 limits_commands_eventmap(Limits, [((X-Y)-(S-_-_))|T], EM) :-
     (  limits_point_within(Limits, X-Y)

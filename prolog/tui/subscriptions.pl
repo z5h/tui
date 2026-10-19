@@ -54,8 +54,11 @@ port_send(port(Wake), Event) :-
 
 '#subscriptions'.
 
-% The running subscriptions of an app: Sub-Thread pairs, kept in a
-% mutable term so that they can be stopped however the app ends.
+%!  subscriptions_open(+Port, -Subscriptions) is det.
+%
+%  Subscriptions holds the running subscriptions of the app Port belongs
+%  to, none yet: Sub-Thread pairs, kept in a mutable term so that they
+%  can be stopped however the app ends.
 subscriptions_open(Port, subscriptions(Port, [])).
 
 %!  subscriptions_running(+Subscriptions, +Module, +Subs) is det.

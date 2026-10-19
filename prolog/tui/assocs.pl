@@ -34,9 +34,9 @@ state(S0, S, S0, S).
 
 '#query'.
 
-%!  assocs_pair(+Assocs, ?Key-?Value) is nondet.
+%!  assocs_pair(+Assocs, ?Pair) is nondet.
 %
-%  True when Key-Value is a pair in Assocs. Enumerates all pairs
+%  True when Pair, Key-Value, is a pair in Assocs. Enumerates all pairs
 %  on backtracking.
 assocs_pair([ K-V  |_ ], K-V).
 assocs_pair([ _  |T ], K-V) :-
@@ -62,11 +62,11 @@ assocs_key_value([K0-V0|T], K, V) :-
 
 '#update'.
 
-%!  assocs_pair_assocs(?Assocs0, +Key-+Value, ?Assocs1) is nondet.
+%!  assocs_pair_assocs(?Assocs0, ?Pair, ?Assocs1) is nondet.
 %
-%  Assocs1 is Assocs0 with Key-Value added at the front. Can also
-%  be used to decompose: if Assocs1 is known, extracts Key-Value
-%  and the remaining Assocs0.
+%  Assocs1 is Assocs0 with Pair, Key-Value, added at the front. Can also
+%  be used to decompose: if Assocs1 is known, extracts a pair and the
+%  remaining Assocs0.
 assocs_pair_assocs(T, K-V, [K-V|T]).
 assocs_pair_assocs([H  |T], K-V, [H|T2]) :-
     assocs_pair_assocs(T, K-V, T2).
@@ -85,9 +85,9 @@ pair_pair_assocs_assocs(K0-V0, New, [K-V|T0], A) :-
         pair_pair_assocs_assocs(K0-V0, New, T0, T)
     ).
 
-%!  assocs_pair_removed(+Assocs, +Key-?Value, -Rest) is nondet.
+%!  assocs_pair_removed(+Assocs, +Pair, -Rest) is nondet.
 %
-%  Rest is Assocs with the first occurrence of Key-Value removed.
+%  Rest is Assocs with the first occurrence of Pair, Key-Value, removed.
 assocs_pair_removed([], _, []).
 assocs_pair_removed([HK-HV|T], K-V, [HK-HV|R]) :-
     dif(HK, K),

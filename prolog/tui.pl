@@ -39,10 +39,11 @@ styled components are opt-in: load library(tui/components).
 %  @see at_event_is/3
 :- multifile alias_drawable/2.
 
-%!  at_event_is(+AliasOrStack, +X-Y-RawEvent, -RewrittenEvent) is nondet.
+%!  at_event_is(+AliasOrStack, +PositionedEvent, -RewrittenEvent) is nondet.
 %
 %  Multifile hook. Rewrite an event as seen by a component on the alias
-%  stack. X-Y is where the event happened, relative to the component's
+%  stack. PositionedEvent is X-Y-RawEvent, X-Y being where the event
+%  happened, relative to the component's
 %  origin (absolute for [], the bottom of the stack; with no cursor, []
 %  sees RawEvent alone). Called during event bubbling: each solution
 %  replaces the event, and bubbles on from the same component; with

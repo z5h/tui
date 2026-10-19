@@ -18,10 +18,13 @@ frame needs only the runs not already on screen.
 
 '#runs'.
 
-% The frame's runs in standard order, with the cursor cell highlighted.
-% The highlight is part of the cell's style, so the cursor cell forms its
-% own run and moving the cursor changes the runs it touches. A cursor on
-% a cell nothing was drawn on shows as a highlighted space.
+%!  limits_cursor_commands_runs(+Limits, +Cursor, +Commands, -Runs) is det.
+%
+%  Runs are the frame's runs, (X-Y)-(Attrs-Chars), within Limits and in
+%  standard order, with the cell at Cursor (X-Y, or none) highlighted.
+%  The highlight is part of the cell's style, so the cursor cell forms
+%  its own run and moving the cursor changes the runs it touches. A
+%  cursor on a cell nothing was drawn on shows as a highlighted space.
 limits_cursor_commands_runs(Limits, Cursor, Commands, Runs) :-
     include(limits_command_within(Limits), Commands, Onscreen),
     maplist(cursor_command_cell(Cursor), Onscreen, Cells0),
@@ -65,10 +68,13 @@ run_chars(_, _, _, []) --> [].
 
 '#changes'.
 
-% The runs to paint: those not already on screen, and blank runs for the
-% cells drawn before but no longer. Runs within a frame never overlap, so
-% a run in Previous is exactly what is at those cells, and a removed run
-% can only be covered by a new one.
+%!  runs_previous_changed(+Runs, +Previous, -Changed) is det.
+%
+%  Changed are the runs to paint to go from Previous to Runs: those not
+%  already on screen, and blank runs for the cells drawn before but no
+%  longer. Runs within a frame never overlap, so a run in Previous is
+%  exactly what is at those cells, and a removed run can only be covered
+%  by a new one.
 runs_previous_changed(Runs, Previous, Changed) :-
     ord_subtract(Runs, Previous, New),
     ord_subtract(Previous, Runs, Removed),

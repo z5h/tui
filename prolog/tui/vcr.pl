@@ -37,19 +37,36 @@ A typical script starts with the substrate reporting its size:
 
 '#replay'.
 
-% The next batch of events, or received(N) for the next N events posted
-% to the app (by its subscriptions), which the substrate waits for.
+%!  vcr_events(+Script0, -Batch, -Script) is det.
+%
+%  Batch is the next batch of events, or received(N) for the next N
+%  events posted to the app (by its subscriptions), which the substrate
+%  waits for. Script is what remains. An empty script gives [eos].
+%
+%  @error vcr_mismatch(Expected, send(_)) if the script expects
+%  something else next.
 vcr_events([], [eos], []) :- !.
 vcr_events([send(Events) | Script], Events, Script) :- !.
 vcr_events([receive(N) | Script], received(N), Script) :- !.
 vcr_events(Script, _, _) :-
     script_mismatch(Script, send(_)).
 
+%!  vcr_cleared(+Script0, -Script) is det.
+%
+%  The app cleared the substrate, as Script0 expects next.
+%
+%  @error vcr_mismatch(Expected, expect(clear)) otherwise.
 vcr_cleared([expect(clear) | Script], Script) :- !.
 vcr_cleared(Script, _) :-
     script_mismatch(Script, expect(clear)).
 
-% Painting nothing is not something the app sends.
+%!  vcr_runs_painted(+Script0, +Runs, -Script) is det.
+%
+%  The app painted Runs, as Script0 expects next (an unbound expectation
+%  matches any runs). Painting nothing is not something the app sends,
+%  so it consumes nothing.
+%
+%  @error vcr_mismatch(Expected, expect(runs(Runs))) otherwise.
 vcr_runs_painted(Script, [], Script) :- !.
 vcr_runs_painted([expect(runs(Expected)) | Script], Runs, Script) :-
     (   var(Expected)
@@ -58,6 +75,12 @@ vcr_runs_painted([expect(runs(Expected)) | Script], Runs, Script) :-
 vcr_runs_painted(Script, Runs, _) :-
     script_mismatch(Script, expect(runs(Runs))).
 
+%!  vcr_graphics_sent(+Script0, +Actions, -Script) is det.
+%
+%  The app sent the image Actions, as Script0 expects next. Sending none
+%  consumes nothing.
+%
+%  @error vcr_mismatch(Expected, expect(graphics(Actions))) otherwise.
 vcr_graphics_sent(Script, [], Script) :- !.
 vcr_graphics_sent([expect(graphics(Expected)) | Script], Actions, Script) :-
     Expected == Actions, !.

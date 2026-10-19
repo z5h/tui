@@ -1,5 +1,14 @@
 :- module(test_tui, []).
 
+/** <module> Tests of library(tui)
+
+    swipl -p library=prolog -g "consult('test/test_tui.pl'), run_tests" -t halt
+
+Apps are tested headless, against the VCR substrate (see tui/vcr.pl).
+The doc unit runs test/doc_check.pl, which checks that the
+documentation is PLDoc.
+*/
+
 :- use_module(library(plunit)).
 :- use_module(library(tui)).
 :- use_module(library(tui/assocs)).
@@ -951,3 +960,34 @@ test(vcr) :-
     app(_-false, image_view, image_update, _, [substrate(vcr(Script))]).
 
 :- end_tests(image).
+
+
+:- begin_tests(doc).
+
+:- use_module(library(process)).
+:- use_module(library(readutil)).
+
+% test/doc_check.pl, in a process of its own (PLDoc collects comments
+% only from files loaded after it is switched on). Its report is
+% printed if there is one.
+test(pldoc) :-
+    module_property(test_tui, file(File)),
+    file_directory_name(File, TestDir),
+    file_directory_name(TestDir, Repo),
+    directory_file_path(Repo, prolog, Lib),
+    atom_concat('library=', Lib, LibPath),
+    directory_file_path(TestDir, 'doc_check.pl', Check),
+    current_prolog_flag(executable, Swipl),
+    setup_call_cleanup(
+        process_create(Swipl, ['-p', LibPath, Check],
+                       [cwd(Repo), stdout(pipe(Out)), stderr(std), process(Pid)]),
+        read_string(Out, _, Report),
+        close(Out)),
+    process_wait(Pid, Status),
+    (   Status == exit(0)
+    ->  true
+    ;   format(user_error, "~s", [Report]),
+        fail
+    ).
+
+:- end_tests(doc).

@@ -30,7 +30,10 @@ tui:alias_drawable(hover(Style, Term, Group), HoverTerm) :-
 
 '#focus'.
 
-% Binds the group of every hover on the stack under the cursor to true.
+%!  apply_focus(+Cursor, +Commands) is det.
+%
+%  Binds the group of every hover on the stack under Cursor, X-Y, to
+%  true, turning their styles on.
 apply_focus(X-Y, Commands) :-
     member((X-Y)-(Stack-Attr-_), Commands),
     member([style_hovergroup(_S, G)], Attr),
@@ -45,8 +48,10 @@ stack_focused([_-hover(_,_,true) | Tail ]) :- !,
 stack_focused([_ | Tail]) :-
     stack_focused(Tail).
 
-% Replaces each hover group with its style when on, and drops it when
-% off. Groups still unbound are off.
+%!  raw_attributes_attributes(+Raw, -Attrs) is det.
+%
+%  Attrs is Raw with each hover group replaced by its style when on, and
+%  dropped when off. Groups still unbound are off.
 raw_attributes_attributes([], []).
 raw_attributes_attributes([style_hovergroup(_, false)|T], Attr) :- !,
     raw_attributes_attributes(T, Attr).

@@ -37,40 +37,66 @@ see tui/input.pl for decoding.
 
 '#output'.
 
-% ANSI escape helpers — thin wrappers over CSI sequences.
+% The predicates of this module write to current_output and do not
+% flush; the caller flushes.
 
+%!  ansi_bell is det.
+%
+%  Write the bell character.
 ansi_bell :-
     format('\007').
 
+%!  ansi_csi(+Escaped) is det.
+%
+%  Write a Control Sequence Introducer (ESC [) followed by Escaped, a
+%  string or code list.
 ansi_csi(Escaped) :-
     format("~s~s", [[27, 91], Escaped]).
 
-% Full reset (RIS): also resets modes, such as Kitty keyboard enhancements.
+%!  ansi_reset is det.
+%
+%  Full reset (RIS): also resets modes, such as Kitty keyboard
+%  enhancements.
 ansi_reset :-
     format("\ec").
 
-% Erase the display, leaving modes as they are.
+%!  ansi_clear is det.
+%
+%  Erase the display, leaving modes as they are.
 ansi_clear :-
     ansi_csi("2J").
 
+%!  ansi_hide_cursor is det.
+%!  ansi_show_cursor is det.
+%
+%  Hide or show the terminal's cursor.
 ansi_hide_cursor :-
     ansi_csi("?25l").
 
 ansi_show_cursor :-
     ansi_csi("?25h").
 
+%!  ansi_save_cursor is det.
+%!  ansi_restore_cursor is det.
+%
+%  Save the cursor's position, and restore the saved one.
 ansi_save_cursor :-
     ansi_csi("s").
 
 ansi_restore_cursor :-
     ansi_csi("u").
 
+%!  ansi_set_cursor(+X, +Y) is det.
+%
+%  Move the cursor to column X, row Y, both counted from 1.
 ansi_set_cursor(X, Y) :-
     format('\e[~w;~wH', [Y, X]).
 
-% Write Chars at X-Y in Style (see attributes_sgr/2), then reset the
-% style. A char is one cell, but may be several codepoints (an image
-% placeholder).
+%!  ansi_run(+Run) is det.
+%
+%  Write Run, (X-Y)-(Style-Chars): Chars at X-Y in Style (see
+%  attributes_sgr/2), then reset the style. A char is one cell, but may
+%  be several codepoints (an image placeholder).
 ansi_run((X-Y)-([]-Chars)) :- !,
     ansi_set_cursor(X, Y),
     atomic_list_concat(Chars, Text),
@@ -147,15 +173,22 @@ color_number(default, 9).
 
 '#queries'.
 
-% Every terminal replies, as device_attributes(Params). Sent after
-% another query, its reply marks that the other reply is not coming.
+%!  ansi_primary_device_attributes is det.
+%
+%  Request the primary device attributes. Every terminal replies, as
+%  device_attributes(Params). Sent after another query, its reply marks
+%  that the other reply is not coming.
 ansi_primary_device_attributes :-
     ansi_csi("c").
 
 
 '#bracketed_paste'.
 
-% While on, pasted text arrives between ESC [200~ and ESC [201~.
+%!  ansi_bracketed_paste_on is det.
+%!  ansi_bracketed_paste_off is det.
+%
+%  Turn bracketed paste on or off. While on, pasted text arrives between
+%  ESC [200~ and ESC [201~.
 ansi_bracketed_paste_on :-
     ansi_csi("?2004h").
 
@@ -165,9 +198,13 @@ ansi_bracketed_paste_off :-
 
 '#mouse'.
 
-% While on, the terminal reports presses and releases (1000), motion with
-% a button held (1002), as SGR reports (1006): see tui/input.pl. The
-% terminal's own text selection then needs a modifier (usually shift).
+%!  ansi_mouse_on is det.
+%!  ansi_mouse_off is det.
+%
+%  Turn mouse reporting on or off. While on, the terminal reports
+%  presses and releases (mode 1000), motion with a button held (1002),
+%  as SGR reports (1006): see tui/input.pl. The terminal's own text
+%  selection then needs a modifier (usually shift).
 ansi_mouse_on :-
     ansi_csi("?1000h"),
     ansi_csi("?1002h"),
@@ -184,16 +221,23 @@ ansi_mouse_off :-
 % Kitty keyboard protocol:
 % https://sw.kovidgoyal.net/kitty/keyboard-protocol/
 
-% A supporting terminal replies kitty_keyboard(Flags).
+%!  ansi_kitty_keyboard_query is det.
+%
+%  Ask for the Kitty keyboard protocol's flags. A supporting terminal
+%  replies kitty_keyboard(Flags).
 ansi_kitty_keyboard_query :-
     ansi_csi("?u").
 
-% Enable the enhancements in Flags (1 disambiguates escape codes),
-% saving the current ones.
+%!  ansi_kitty_keyboard_push(+Flags) is det.
+%
+%  Enable the enhancements in Flags (1 disambiguates escape codes),
+%  saving the current ones.
 ansi_kitty_keyboard_push(Flags) :-
     format('\e[>~wu', [Flags]).
 
-% Restore the enhancements saved by the last push.
+%!  ansi_kitty_keyboard_pop is det.
+%
+%  Restore the enhancements saved by the last push.
 ansi_kitty_keyboard_pop :-
     ansi_csi("<u").
 
@@ -206,13 +250,19 @@ ansi_kitty_keyboard_pop :-
 % Commands are APC sequences, ESC _ G keys ; payload ESC \. With q=2 the
 % terminal sends no reply; only the query is answered.
 
-% A supporting terminal replies kitty_graphics(Reply), Reply ending in
-% ";OK". Uses image id 31, which is not kept.
+%!  ansi_kitty_graphics_query is det.
+%
+%  Ask whether the Kitty graphics protocol is supported. A supporting
+%  terminal replies kitty_graphics(Reply), Reply ending in ";OK". Uses
+%  image id 31, which is not kept.
 ansi_kitty_graphics_query :-
     ansi_kitty_graphics("i=31,s=1,v=1,a=q,t=d,f=24", "AAAA").
 
-% Upload Source (see tui/image.pl) as image Id. The base64 payload goes in
-% chunks of at most 4096 bytes, each but the last marked m=1.
+%!  ansi_kitty_image_transmit(+Id, +Source) is det.
+%
+%  Upload Source (see image/3 in tui/image.pl) as image Id. The base64
+%  payload goes in chunks of at most 4096 bytes, each but the last
+%  marked m=1.
 ansi_kitty_image_transmit(Id, file(Path)) :- !,
     base64_encoded(Path, Payload, [encoding(utf8)]),
     format(string(Keys), "a=t,t=f,f=100,i=~w,q=2", [Id]),
@@ -254,9 +304,11 @@ chunks_transmitted([Chunk | Chunks]) :-
     ansi_kitty_graphics("m=1,q=2", Chunk),
     chunks_transmitted(Chunks).
 
-% The virtual placement of image Id in W×H cells, shown wherever its
-% placeholders are drawn. Placement id 1 is always used, so a new
-% placement replaces the previous one.
+%!  ansi_kitty_image_place(+Id, +Size) is det.
+%
+%  The virtual placement of image Id in W×H cells, Size being W-H, shown
+%  wherever its placeholders are drawn. Placement id 1 is always used,
+%  so a new placement replaces the previous one.
 ansi_kitty_image_place(Id, W-H) :-
     format(string(Keys), "a=p,U=1,i=~w,p=1,c=~w,r=~w,q=2", [Id, W, H]),
     ansi_kitty_graphics(Keys, "").

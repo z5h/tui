@@ -167,13 +167,16 @@ string_index_inserted_edited(S, I, Value, Edited) :-
 
 '#containers'.
 
-%!  frame(+W-+H, +Contents)
-%!  frame(+W-+H, +Contents, -Extent)
+%!  frame(+Size, +Contents)
 %
-%  A thin-bordered box of size W×H containing Contents in a viewport.
-%  The interior is cleared before rendering. Extent is unified with
-%  the MaxX-MaxY of the content (useful for scrolling).
+%  A thin-bordered box of size W×H, Size being W-H, containing Contents
+%  in a viewport. The interior is cleared before rendering.
 tui:alias_drawable(frame(W-H, Contents), frame(W-H, Contents, _)).
+
+%!  frame(+Size, +Contents, -Extent)
+%
+%  As frame/2; Extent is unified with the MaxX-MaxY of the content
+%  (useful for scrolling).
 tui:alias_drawable(frame(W-H, Contents, Extent), [Clear, Box, Port]) :-
     (  W > 1, H > 1
     -> true
@@ -185,12 +188,15 @@ tui:alias_drawable(frame(W-H, Contents, Extent), [Clear, Box, Port]) :-
     Clear = 1-1-clear(PW-PH),
     Port =  1-1-port(PW-PH, Contents, Extent).
 
-%!  titled_frame(+W-+H, +Title, +Contents)
-%!  titled_frame(+W-+H, +Title, +Contents, -Extent)
+%!  titled_frame(+Size, +Title, +Contents)
 %
-%  A frame with Title in its top border, cut off at the frame's edge.
-%  Title is any drawable.
+%  A frame (see frame/2) with Title in its top border, cut off at the
+%  frame's edge. Title is any drawable.
 tui:alias_drawable(titled_frame(W-H, Title, Contents), titled_frame(W-H, Title, Contents, _)).
+
+%!  titled_frame(+Size, +Title, +Contents, -Extent)
+%
+%  As titled_frame/3, with Extent as in frame/3.
 tui:alias_drawable(titled_frame(W-H, Title, Contents, Extent), [FramePart, 1-0-TitlePart]) :-
     title_l(TL),
     title_r(TR),
@@ -204,10 +210,11 @@ title_r('╶').
 
 '#scrolling'.
 
-%!  scroll(+W-+H, +ScrollX-+ScrollY, +Content)
+%!  scroll(+Size, +Offset, +Content)
 %
 %  A scrollable frame. Content is rendered inside a W×H bordered
-%  viewport offset by ScrollX-ScrollY (0 or negative). On each axis where
+%  viewport (Size being W-H), offset by Offset, ScrollX-ScrollY (each 0
+%  or negative). On each axis where
 %  the content does not fit, a scrollbar replaces that edge of the border
 %  (bottom for horizontal, right for vertical), drawn with half-cell
 %  resolution.
