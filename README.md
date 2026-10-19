@@ -161,3 +161,7 @@ Then open http://localhost:4000.
 ## License
 
 MIT — see [./LICENSE](LICENSE).
+
+## On the use of an LLM
+
+I designed and prototyped tui's core: the drawable DSL and commands, `alias_drawable/2` components, `at_event_is/3` rewriting and event bubbling through alias stacks. Commit `30db48f`, "pre claude refactor", is that prototype. Since then, most of the code has been written by Claude Code (Anthropic) under my direction: I set the architecture and requirements, made the design decisions (often choosing among or amending designs Claude proposed), and gave specific implementation guidance. The work is interactive and incremental: one change at a time, design changes discussed before they are made, and every change reviewed before the next. Commits with an LLM contribution carry a `Co-Authored-By: Claude` trailer. The library has headless tests, run by CI on the stable and development releases of SWI-Prolog, and its terminal features have been checked by hand in real terminals.
