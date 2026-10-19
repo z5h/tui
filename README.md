@@ -15,19 +15,24 @@ Requires SWI-Prolog 10.0 or later.
 ```prolog
 :- module(hello, []).
 :- use_module(library(tui)).
+:- use_module(library(tui/components)).
 
 :- initialization(main, main).
 
 main :-
-    app((1-1)-[], view, update, _).
+    app((1-3)-none, view, update, Pressed, [mouse(true)]),
+    format("You pressed ~w.~n", [Pressed]).
 
-view(_, "Hello, TUI!" .\/ "Press q to quit").
+view(_, column(["Hello, TUI!",
+                "",
+                row([yes : button("Yes"), " ", no : button("No")])])).
 
-update(q, S, result(S)).
+update(yes-pressed, _, result('Yes')).
+update(no-pressed, _, result('No')).
 update(_, S, S).
 ```
 
-Run with `swipl hello.pl`. The state is `(CursorX-CursorY)-Model`; update returns a new state, or `result(R)` to quit.
+Run with `swipl hello.pl`, and click a button (or move to it with the arrows and press space or return). The state is `(CursorX-CursorY)-Model`, here starting with the cursor on Yes and no model. Update returns a new state, or `result(R)` to end the app with result `R` (here `Pressed`). Each button is tagged with a key, so pressing it reaches update as `Key-pressed`.
 
 `app/5` takes options as a last argument: `mouse(true)` turns on mouse reporting (see below), and `substrate(vcr(Script))` runs the app headless against a script (see Testing).
 

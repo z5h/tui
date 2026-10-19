@@ -2,19 +2,26 @@
 
 /** <module> Hello — the smallest app
 
-The smallest app: a view, an update, and a way out.
+The smallest app: a view, an update, and a result. Press a button (click
+it, or move to it and press space or return); the app ends with the
+button's name, which main prints.
 
     swipl tui run hello
 */
 
 :- use_module(library(tui)).
+:- use_module(library(tui/components)).
 
 :- initialization(main, main).
 
 main :-
-    app((1-1)-[], view, update, _).
+    app((1-3)-none, view, update, Pressed, [mouse(true)]),
+    format("You pressed ~w.~n", [Pressed]).
 
-view(_, "Hello, TUI!" .\/ "Press q to quit").
+view(_, column(["Hello, TUI!",
+                "",
+                row([yes : button("Yes"), " ", no : button("No")])])).
 
-update(q, S, result(S)).
+update(yes-pressed, _, result('Yes')).
+update(no-pressed, _, result('No')).
 update(_, S, S).
