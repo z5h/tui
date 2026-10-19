@@ -2,10 +2,7 @@
 
 /** <module> atto — a tiny text editor
 
-    swipl -p library=prolog examples/atto.pl -- FILE
-
-The -- matters: without it, swipl takes a FILE ending in .pl as another
-program to load (running its directives) instead of passing it to atto.
+    swipl tui run atto FILE
 
 Edits FILE, which need not exist yet. Lines wrap to the screen width and
 are numbered. ^S saves, ^R reverts to the file on disk, ^Q quits (twice
@@ -40,7 +37,7 @@ main :-
     current_prolog_flag(argv, Argv),
     (   Argv = [Path]
     ->  atto(Path)
-    ;   format(user_error, "usage: swipl -p library=prolog examples/atto.pl -- FILE~n", []),
+    ;   format(user_error, "usage: swipl tui run atto FILE~n", []),
         halt(1)
     ).
 

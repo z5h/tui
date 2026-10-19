@@ -1,6 +1,6 @@
 :- module(align, []).
 
-/** <module> Align
+/** <module> Align — zones, aligns and tables
 
 Zones, aligns and tables.
 
@@ -10,7 +10,7 @@ zone the size of the terminal, so its top-level aligns place the title,
 the samples and the footer. Each table cell is a zone too. Tab cycles
 the table's style; q quits.
 
-    swipl -p library=prolog examples/align.pl
+    swipl tui run align
 */
 
 :- use_module(library(tui)).

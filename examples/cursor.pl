@@ -1,6 +1,6 @@
 :- module(cursor, []).
 
-/** <module> Cursor
+/** <module> Cursor — the default cursor, and placing it from the view
 
 Two ways to have a cursor.
 
@@ -14,7 +14,7 @@ cursor, but the view puts it back: it does not move.
 
 Tab switches between the two; q quits.
 
-    swipl -p library=prolog examples/cursor.pl
+    swipl tui run cursor
 */
 
 :- use_module(library(tui)).

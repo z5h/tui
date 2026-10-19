@@ -1,6 +1,6 @@
 :- module(image, []).
 
-/** <module> Image
+/** <module> Image — an image, through the Kitty graphics protocol
 
 An image through the Kitty graphics protocol. The pixels are generated
 (a gradient), so no file is needed; png(Bytes) or file(Path) work the
@@ -11,7 +11,7 @@ terminal_properties/1; elsewhere the view says so instead. + and - resize
 the image: the terminal is sent a new placement, not the pixels again.
 q quits.
 
-    swipl -p library=prolog examples/image.pl
+    swipl tui run image
 */
 
 :- use_module(library(tui)).

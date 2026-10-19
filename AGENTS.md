@@ -27,13 +27,14 @@ This is a SWI-Prolog pack. Library modules live in `prolog/`, internal modules i
 - `prolog/tui/assocs.pl` — `tui_assocs`
 - `examples/` — one topic each: `hello.pl`, `layout.pl`, `align.pl`, `events.pl`, `cursor.pl`, `gallery.pl` (the components), `move.pl`, `image.pl`
 - `examples/atto.pl` — atto, a tiny text editor: key bindings and view; `examples/atto_lib.pl` is its editing model (document, cursor, scrolling, files), driven by commands
+- `app/tui.pl` — `swipl tui`: lists, runs and prints the examples (SWI-Prolog finds a pack's `app/` scripts). The list is `examples/*.pl` less `*_lib.pl`, titled by each module's `<module>` line
 - `test/test_tui.pl` — plunit tests
 - `pack.pl` — pack metadata
 
 ## Commands
 
-- **Run an example**: `swipl -p library=prolog examples/gallery.pl` (each example runs on load)
-- **Run the atto editor**: `swipl -p library=prolog examples/atto.pl -- FILE` (the `--` stops swipl from loading a `.pl` FILE as code)
+- **Run an example**: `swipl app/tui.pl run gallery` (`swipl tui run gallery` once installed; `examples`, `source NAME` too). It runs `swipl -p library=prolog examples/gallery.pl -- ARGS` in a child process, the `--` keeping swipl from loading a `.pl` argument as code
+- **Run the atto editor**: `swipl app/tui.pl run atto FILE`
 - **Verify an example loads**: `swipl -p library=prolog -g "list_undefined, halt" examples/gallery.pl` (`-g` goals run before the example's main)
 - **Painting benchmark** (needs a real terminal): `swipl -p library=prolog bench/paint.pl [FRAMES]` — how long the terminal takes to draw prepared runs, synced with a device-attributes round trip
 - **Pipeline benchmark** (runs anywhere): `swipl -p library=prolog bench/pipeline.pl [REPEATS]` — per-stage cost of turning a view into runs

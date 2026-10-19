@@ -1,10 +1,10 @@
 :- module(hello, []).
 
-/** <module> Hello
+/** <module> Hello — the smallest app
 
 The smallest app: a view, an update, and a way out.
 
-    swipl -p library=prolog examples/hello.pl
+    swipl tui run hello
 */
 
 :- use_module(library(tui)).

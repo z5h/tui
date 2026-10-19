@@ -1,11 +1,11 @@
 :- module(layout, []).
 
-/** <module> Layout
+/** <module> Layout — the core drawables
 
 The core drawables, each labelled. There is no cursor (the state's is
 left unbound), so every key goes to update.
 
-    swipl -p library=prolog examples/layout.pl
+    swipl tui run layout
 */
 
 :- use_module(library(tui)).

@@ -1,6 +1,6 @@
 :- module(gallery, [state0/1, view/2]).
 
-/** <module> Gallery
+/** <module> Gallery — the ready-made components, with the mouse
 
 The ready-made components of library(tui/components), each tagged with
 its key in the model, so their events arrive at update as Key-Value.
@@ -15,7 +15,7 @@ and presses or toggles what it is on, the wheel scrolls, and pressing or
 dragging on a scrollbar moves its thumb. Hold shift (option on macOS)
 to select text with the mouse instead.
 
-    swipl -p library=prolog examples/gallery.pl
+    swipl tui run gallery
 */
 
 :- use_module(library(tui)).

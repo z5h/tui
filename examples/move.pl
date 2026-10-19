@@ -1,6 +1,6 @@
 :- module(move, []).
 
-/** <module> Move
+/** <module> Move — dragging with Shift+arrows or the mouse
 
 Pieces dragged with Shift+arrows, the convention for dragging what is
 under the cursor. The piece asks to move (Id-Direction); update moves
@@ -21,7 +21,7 @@ macOS Terminal.app sends Shift+up and Shift+down as plain up and down
 unless configured otherwise (see the README). The app learns which
 terminal it runs in from terminal_properties/1, and says so.
 
-    swipl -p library=prolog examples/move.pl
+    swipl tui run move
 */
 
 :- use_module(library(tui)).

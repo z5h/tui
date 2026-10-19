@@ -31,17 +31,25 @@ Run with `swipl hello.pl`. The state is `(CursorX-CursorY)-Model`; update return
 
 ## Examples
 
-In `examples/`, each runnable as `swipl -p library=prolog examples/NAME.pl` from a clone:
+The pack installs a `swipl tui` command for its examples:
 
-- `hello.pl` — the above
-- `layout.pl` — the core drawables
-- `align.pl` — zones, aligns and tables
-- `events.pl` — a custom component, and tagging instances with `Key : Drawable`
-- `cursor.pl` — the default cursor, and placing it from the view with `cursor/1`
-- `gallery.pl` — the ready-made components, with the mouse
-- `move.pl` — dragging with Shift+arrows or the mouse, and `moved(Direction)`
-- `image.pl` — an image, through the Kitty graphics protocol
-- `atto.pl` — a small text editor: `swipl -p library=prolog examples/atto.pl -- FILE`
+```sh
+swipl tui examples        # list them
+swipl tui run gallery     # run one
+swipl tui source gallery  # print its source
+```
+
+- `hello` — the above
+- `layout` — the core drawables
+- `align` — zones, aligns and tables
+- `events` — a custom component, and tagging instances with `Key : Drawable`
+- `cursor` — the default cursor, and placing it from the view with `cursor/1`
+- `gallery` — the ready-made components, with the mouse
+- `move` — dragging with Shift+arrows or the mouse, and `moved(Direction)`
+- `image` — an image, through the Kitty graphics protocol
+- `atto` — a small text editor: `swipl tui run atto FILE`
+
+The examples are in the pack's `examples/` directory. From a clone, use `swipl app/tui.pl` in place of `swipl tui`; it runs the examples with the clone's library.
 
 ## Terminals
 

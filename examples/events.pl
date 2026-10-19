@@ -1,6 +1,6 @@
 :- module(events, []).
 
-/** <module> Events
+/** <module> Events — a custom component, and tagging instances
 
 A custom component, counter/1, defined with the two hooks:
 tui:alias_drawable/2 says what it draws, tui:at_event_is/3 what keys
@@ -13,7 +13,7 @@ the counter's event counter-N reaches update as apples-N or pears-N.
 Move the cursor with the arrows, and press space on a [-] or [+]. The
 last line shows each event as it reaches update.
 
-    swipl -p library=prolog examples/events.pl
+    swipl tui run events
 */
 
 :- use_module(library(tui)).
