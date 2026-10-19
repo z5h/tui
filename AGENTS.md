@@ -40,6 +40,7 @@ This is a SWI-Prolog pack. Library modules live in `prolog/`, internal modules i
 - **Painting benchmark** (needs a real terminal): `swipl -p library=prolog bench/paint.pl [FRAMES]` — how long the terminal takes to draw prepared runs, synced with a device-attributes round trip
 - **Pipeline benchmark** (runs anywhere): `swipl -p library=prolog bench/pipeline.pl [REPEATS]` — per-stage cost of turning a view into runs
 - **Reload code**: `make.` in a running SWI-Prolog session
+- **Tag a release**: `swipl tag_release.pl [--sign]` — `version/1` in `pack.pl` is the single source of truth. Shows the published version (pack server), the newest `V*` tag and the local version, asks, then tags HEAD `V<version>` and pushes the tag to the remote matching `download/1`. Refuses unless the local version is newer than both, and the tracked files are committed. Then `swipl pack publish URL`
 - **Run tests**: `swipl -p library=prolog -g "consult('test/test_tui.pl'), run_tests" -t halt`
 
 ## Architecture
