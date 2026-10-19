@@ -1,6 +1,6 @@
 # tui — Text User Interface framework for SWI-Prolog
 
-A TUI framework inspired by TEA (The Elm Architecture). Define your app with a model, a view, and an update function.
+A TUI framework for SWI-Prolog, inspired by TEA (The Elm Architecture): define your app with a model, a view, and an update. Inspired, not a port: components rewrite events as they bubble (possibly into several), and other Prolog-flavoured choices replace parts of TEA where they fit Prolog better.
 
 ## Installation
 
