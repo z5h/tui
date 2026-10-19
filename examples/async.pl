@@ -75,17 +75,17 @@ not(false, true).
 
 '#view'.
 
-view(_-model(N, T, W, J), column([ row(["Seconds: ", literal(N), "   ", Clock]),
-                                   "",
-                                   row(["Job: ", Job]),
-                                   "",
-                                   style([faint], Keys) ])) :-
+view(_-model(N, T, W, J), View) :-
     (   T == true
     ->  Clock = style([faint], "(running; t stops it)")
     ;   Clock = style([faint], "(stopped; t restarts it)")
     ),
     job_drawable(W, J, Job),
-    Keys = "s starts a job, q quits".
+    View = column([ row(["Seconds: ", literal(N), "   ", Clock]),
+                    "",
+                    row(["Job: ", Job]),
+                    "",
+                    style([faint], "s starts a job, q quits") ]).
 
 job_drawable(none, _, "waiting for the worker").
 job_drawable(W, idle, "idle") :- W \== none.
