@@ -17,10 +17,11 @@ remaining:
 - a key-inspector example app (show codes and decoded events) would
   help diagnose terminals.
 
-# async API
-how apps receive events from other threads: export post/1 (loop.pl), or
-have update/3 return TEA-style commands. timers fit either way: the
-substrate's wait timeout becomes the time to the next deadline.
+# commands
+ports and subscriptions are done. optional, if wanted: update returning
+State-Effects (TEA-style commands as data) so that an update with side
+effects (e.g. sending to a worker) stays pure and testable, without
+breaking plain State.
 
 # debug / profile mode
 the old TUI_PROFILE render-time overlay was removed. revisit as a broader

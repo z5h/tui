@@ -20,12 +20,13 @@ This is a SWI-Prolog pack. Library modules live in `prolog/`, internal modules i
 - `prolog/tui/events.pl` — `tui_events`: event bubbling through component stacks, the event map
 - `prolog/tui/render.pl` — `tui_render`: commands → runs, and which runs changed (no side effects)
 - `prolog/tui/wake.pl` — `tui_wake`: a message queue that `wait_for_input/3` can wait on
+- `prolog/tui/subscriptions.pl` — `tui_subscriptions`: the app's port (`port_send/2`) and its subscriptions (`every/2`, `thread/1`), started and stopped as the state calls for
 - `prolog/tui/substrate.pl` — `tui_substrate`: what the loop draws onto and gets events from (`terminal` or `vcr(Script)`)
 - `prolog/tui/vcr.pl` — `tui_vcr`: scripted replay for headless tests
 - `prolog/tui/loop.pl` — `tui_loop`: `app/4`, `app/5` and the event loop
 - `prolog/tui/components.pl` — `tui_components`: ready-made, styled components (opt-in, not loaded by `library(tui)`)
 - `prolog/tui/assocs.pl` — `tui_assocs`
-- `examples/` — one topic each: `hello.pl`, `layout.pl`, `align.pl`, `events.pl`, `cursor.pl`, `gallery.pl` (the components), `move.pl`, `image.pl`
+- `examples/` — one topic each: `hello.pl`, `layout.pl`, `align.pl`, `events.pl`, `cursor.pl`, `gallery.pl` (the components), `move.pl`, `image.pl`, `async.pl` (subscriptions: a timer and a worker thread). Test files must not load examples: their `initialization(main, main)` would run the app
 - `examples/atto.pl` — atto, a tiny text editor: key bindings and view; `examples/atto_lib.pl` is its editing model (document, cursor, scrolling, files), driven by commands
 - `app/tui.pl` — `swipl tui`: lists, runs and prints the examples (SWI-Prolog finds a pack's `app/` scripts). The list is `examples/*.pl` less `*_lib.pl`, titled by each module's `<module>` line
 - `test/test_tui.pl` — plunit tests
@@ -81,11 +82,13 @@ Mouse reporting is opt-in (`app/5` option `mouse(true)`): modes 1000, 1002 and 1
 
 Kitty keyboard protocol: at session start the substrate queries for it, then requests device attributes. A Kitty reply before the device-attributes reply means support, and the substrate enables flag 1 (disambiguate); otherwise `Keyboard` becomes `legacy`. A Kitty graphics query is sent too; an `OK` reply (`kitty_graphics(Reply)`, decoded from an APC) means images can be shown. The device-attributes reply ends detection and is passed on as `terminal_properties([program(P), extended_keys(B), graphics(G)])` (P from `TERM_PROGRAM`, or `unknown`; list order not guaranteed), so apps can work around a terminal's limits. The substrate's detection state is `Keyboard-Graphics`. The decoder accepts both encodings at all times. Replies are consumed by the substrate. Clearing uses erase-display, not a full reset, so the keyboard mode survives resizes.
 
-**Wake** (`wake.pl`): a `wake(Queue, In, Out)` term. Posting queues an event, then writes a byte to a pipe the loop waits on alongside `user_input`. Bytes are consumed before the queue is drained, so no event is stranded. `post/1` in `loop.pl` (not yet exported) delivers to the running app.
+**Wake** (`wake.pl`): a `wake(Queue, In, Out)` term. Posting queues an event, then writes a byte to a pipe the loop waits on alongside `user_input`. Bytes are consumed before the queue is drained, so no event is stranded.
+
+**Ports and subscriptions** (`subscriptions.pl`): the app's port is `port(Wake)`; `port_send/2` (exported by `library(tui)`) posts to it from any thread, and does nothing once the app has ended. There is no global "current app". The `app/5` option `subscriptions(Goal)` gives `call(Goal, State, Subs)`, called at the top of each loop pass. Subs are `every(Ms, Event)` and `thread(ThreadGoal)` (`call(ThreadGoal, Port)` in a detached thread; ending by itself posts `thread_ended(ThreadGoal, Status)`), identified by their term (compared as variants): the loop starts new ones and stops removed ones by signalling `throw(tui_stop)`, without joining, so a thread blocked in foreign code cannot hang the UI. The running set lives in a mutable term (`nb_setarg`) so that the app's cleanup stops them however it ends. The VCR's `receive(N)` waits for N posted events, so subscriptions are testable headless.
 
 ### Headless Testing (vcr.pl)
 
-`app(State, View, Update, Result, [substrate(vcr(Script))])` runs an app against a script of `send(Events)`, `expect(clear)`, `expect(graphics(Actions))` and `expect(runs(Runs))`, consumed in order. Any divergence throws `vcr_mismatch(Expected, Actual)`. An exhausted script answers every request for events with `[eos]`; the app decides what that means (test apps typically return `result(...)`). A script starts with `send([terminal_size(Cols, Rows)])` followed by `expect(clear)`. See the `vcr` unit in `test/test_tui.pl`.
+`app(State, View, Update, Result, [substrate(vcr(Script))])` runs an app against a script of `send(Events)`, `receive(N)` (the next N events posted by subscriptions), `expect(clear)`, `expect(graphics(Actions))` and `expect(runs(Runs))` (unbound Runs: any paint), consumed in order. Any divergence throws `vcr_mismatch(Expected, Actual)`. An exhausted script answers every request for events with `[eos]`; the app decides what that means (test apps typically return `result(...)`). A script starts with `send([terminal_size(Cols, Rows)])` followed by `expect(clear)`. See the `vcr` unit in `test/test_tui.pl`.
 
 The terminal substrate needs a real TTY, so it can only be checked by running an app by hand; use the VCR for headless tests.
 

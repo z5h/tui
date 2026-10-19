@@ -18,6 +18,7 @@ bubbling and the app's update, and repeats until a result.
 :- use_module(library(tui/wake)).
 :- use_module(library(tui/substrate)).
 :- use_module(library(tui/image)).
+:- use_module(library(tui/subscriptions)).
 :- use_module(library(option)).
 
 
@@ -46,7 +47,10 @@ bubbling and the app's update, and repeats until a result.
 %  mouse events too.
 %
 %  Everything runs in the calling thread, which must own the TTY. Other
-%  threads deliver events through a wake (see tui/wake.pl).
+%  threads send events through the app's port, given to its
+%  subscriptions (see app/5). Update may have side effects, such as
+%  sending a message to a thread, but must not block: an answer should
+%  come back as an event.
 %
 %  @error tui_callback_failed(Which, State) if View or Update fails.
 :- meta_predicate(app(?, 2, 3, ?)).
@@ -67,41 +71,58 @@ app(State, View, Update, Result) :-
 %      Run on Substrate instead of the terminal; vcr(Script) replays a
 %      script, for headless tests (see tui/vcr.pl). Terminal options,
 %      such as mouse(Bool), then have no effect.
-:- meta_predicate(app(?, 2, 3, ?, +)).
-app(State, View, Update, Result, Options) :-
+%    * subscriptions(:Goal)
+%      What should be sending events to the app, as a function of its
+%      state: Goal is called as call(Goal, State, Subs) before each wait
+%      for events, Subs being a list of every(Ms, Event) and
+%      thread(ThreadGoal) (see tui/subscriptions.pl). Each runs while it
+%      is in the list; a ThreadGoal is called as call(ThreadGoal, Port),
+%      in its own thread, and sends events with port_send(Port, Event).
+%      If Goal fails, the app ends with tui_callback_failed(subscriptions,
+%      State).
+:- meta_predicate(app(?, 2, 3, ?, :)).
+app(State, View, Update, Result, Options0) :-
+    strip_module(Options0, M, Options),
     (   option(substrate(Substrate), Options)
     ->  true
     ;   terminal_substrate(Options, Substrate)
     ),
-    app_substrate(Substrate, State, View, Update, Result).
+    (   option(subscriptions(Subs0), Options)
+    ->  strip_module(M:Subs0, SM, Subs1),
+        Subs = SM:Subs1
+    ;   Subs = none
+    ),
+    app_substrate(Substrate, State, View, Update, Subs, Result).
 
-app_substrate(Substrate, State, View, Update, Result) :-
+% The app is app(View, Update, Wake, Subs, Subscriptions): Subs is the
+% app's subscriptions goal (or none), Subscriptions those running.
+app_substrate(Substrate, State, View, Update, Subs, Result) :-
     setup_call_cleanup(
         (   wake_open(Wake),
-            asserta(app_wake_(Wake))
+            subscriptions_open(port(Wake), Subscriptions)
         ),
         substrate_session(
             Substrate,
             Wake,
-            app_loop(app(View, Update, Wake), State,
+            app_loop(app(View, Update, Wake, Subs, Subscriptions), State,
                      display(Substrate, stale, unknown, [], []), Result)
         ),
-        goals_attempted([ retract(app_wake_(Wake)),
+        goals_attempted([ subscriptions_closed(Subscriptions),
                           wake_close(Wake)
                         ])
     ).
 
 
-'#posting'.
+'#subscriptions'.
 
-% IMPURE: mutable global — the running app's wake, for senders that have
-% no other way to reach it (other threads).
-:- dynamic app_wake_/1.
-
-% IMPURE: deliver Event to the running app.
-post(Event) :-
-    app_wake_(Wake), !,
-    wake_post(Wake, Event).
+% IMPURE: runs the subscriptions the state calls for (see
+% tui/subscriptions.pl).
+app_state_subscribed(app(_, _, _, none, _), _) :- !.
+app_state_subscribed(app(_, _, _, M:Goal, Subscriptions), State) :-
+    (   call(M:Goal, State, Subs)
+    ->  subscriptions_running(Subscriptions, M, Subs)
+    ;   throw(error(tui_callback_failed(subscriptions, State), _))
+    ).
 
 
 '#loop'.
@@ -131,8 +152,9 @@ post(Event) :-
 % A clear forgets them too, in case clearing deletes them.
 
 app_loop(App, State0, Display0, Result) :-
-    App = app(View, _, Wake),
+    App = app(View, _, Wake, _, _),
     view_state_display_painted(View, State0, Display0, Display1),
+    app_state_subscribed(App, State0),
     wake_display_events(Wake, Display1, Events, Display2),
     app_events_state_display_outcome(App, Events, State0, Display2, Outcome),
     (   Outcome = result(Result)
@@ -168,7 +190,7 @@ app_event_state_display_next(App, E, S0, D, Next) :-
     app_event_state_display_updated(App, E, S0, D, Next).
 
 app_event_state_display_updated(App, E, S0, display(Sub, T0, Size, Runs, Is), Next) :-
-    App = app(View, Update, _),
+    App = app(View, Update, _, _, _),
     view_size_state_tracked_fresh(View, Size, S0, T0, T1),
     tracked_frame(T1, Frame),
     frame_state_shown(Frame, S0, Shown),
@@ -314,6 +336,8 @@ prolog:error_message(tui_callback_failed(update(E), _)) -->
     [ 'tui: the app''s update failed on the event ~q'-[E] ].
 prolog:error_message(tui_callback_failed(view, _)) -->
     [ 'tui: the app''s view failed' ].
+prolog:error_message(tui_callback_failed(subscriptions, _)) -->
+    [ 'tui: the app''s subscriptions failed' ].
 
 % The cursor moved by DX-DY, staying within the extent (the frame is
 % drawn from 1-1). Without a cursor, nothing moves.

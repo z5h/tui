@@ -139,8 +139,15 @@ substrate_events(terminal(K0, Pending0, M), Wake, Events, terminal(K, Pending, M
     ),
     keyboard_events_keys(K0, Decoded, K, Keys),
     append(Posted, Keys, Events).
-substrate_events(vcr(Script0), _, Events, vcr(Script)) :-
-    vcr_events(Script0, Events, Script).
+substrate_events(vcr(Script0), Wake, Events, vcr(Script)) :-
+    vcr_events(Script0, Batch, Script),
+    (   Batch = received(N)
+    ->  (   wake_count_timeout_events(Wake, N, 5, Events)
+        ->  true
+        ;   throw(error(vcr_mismatch(receive(N), timeout), _))
+        )
+    ;   Events = Batch
+    ).
 
 % IMPURE: the codes available on user_input; [] at end of input.
 user_input_codes(Codes) :-

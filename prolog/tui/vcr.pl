@@ -12,8 +12,11 @@ Replays a script of what an app is expected to send to its substrate
 and what the substrate sends back. A script is a list of:
 
   * send(Events)      — the next batch of events the app receives
+  * receive(N)        — the next batch is the next N events sent to the
+    app's port, by its subscriptions; waits for them (at most 5 s each)
   * expect(clear)     — the app clears the substrate
-  * expect(runs(Runs)) — the app paints exactly Runs, (X-Y)-(Attrs-Chars)
+  * expect(runs(Runs)) — the app paints exactly Runs, (X-Y)-(Attrs-Chars);
+    if Runs is unbound, any paint (it stays unbound)
   * expect(graphics(Actions)) — the app sends exactly these image actions
     (see tui/image.pl), before the runs of the same paint
 
@@ -34,8 +37,11 @@ A typical script starts with the substrate reporting its size:
 
 '#replay'.
 
+% The next batch of events, or received(N) for the next N events posted
+% to the app (by its subscriptions), which the substrate waits for.
 vcr_events([], [eos], []) :- !.
 vcr_events([send(Events) | Script], Events, Script) :- !.
+vcr_events([receive(N) | Script], received(N), Script) :- !.
 vcr_events(Script, _, _) :-
     script_mismatch(Script, send(_)).
 
@@ -46,7 +52,9 @@ vcr_cleared(Script, _) :-
 % Painting nothing is not something the app sends.
 vcr_runs_painted(Script, [], Script) :- !.
 vcr_runs_painted([expect(runs(Expected)) | Script], Runs, Script) :-
-    Expected == Runs, !.
+    (   var(Expected)
+    ;   Expected == Runs
+    ), !.
 vcr_runs_painted(Script, Runs, _) :-
     script_mismatch(Script, expect(runs(Runs))).
 

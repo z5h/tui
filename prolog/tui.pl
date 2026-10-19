@@ -25,6 +25,7 @@ styled components are opt-in: load library(tui/components).
 :- reexport(library(tui/drawable), [drawable//5, drawable_raw/2]).
 :- reexport(library(tui/events), [stack_event_is/3]).
 :- reexport(library(tui/loop), [app/4, app/5]).
+:- reexport(library(tui/subscriptions), [port_send/2]).
 
 
 '#hooks'.

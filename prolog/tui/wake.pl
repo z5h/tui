@@ -4,7 +4,8 @@
             wake_close/1,
             wake_post/2,
             wake_stream/2,
-            wake_events/2
+            wake_events/2,
+            wake_count_timeout_events/4
           ]).
 
 /** <module> Wakeable event queue
@@ -61,3 +62,15 @@ queue_events(Queue, Events) :-
         queue_events(Queue, Es)
     ;   Events = []
     ).
+
+% IMPURE: blocks until N events have been posted, waiting at most Timeout
+% seconds for each, and takes them with their bytes. Fails on a timeout.
+% For headless tests, which wait for exactly what they expect.
+wake_count_timeout_events(wake(Queue, In, _), N, Timeout, Events) :-
+    length(Events, N),
+    maplist(queue_timeout_event(Queue, Timeout), Events),
+    length(Bytes, N),
+    maplist(get_char(In), Bytes).
+
+queue_timeout_event(Queue, Timeout, E) :-
+    thread_get_message(Queue, E, [timeout(Timeout)]).

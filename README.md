@@ -56,6 +56,7 @@ swipl tui source gallery  # print its source
 - `gallery` — the ready-made components, with the mouse
 - `move` — dragging with Shift+arrows or the mouse, and `moved(Direction)`
 - `image` — an image, through the Kitty graphics protocol
+- `async` — events from other threads: a timer and a worker, as subscriptions
 - `atto` — a small text editor: `swipl tui run atto FILE`
 
 The examples are in the pack's `examples/` directory. From a clone, use `swipl app/tui.pl` in place of `swipl tui`; it runs the examples with the clone's library.
@@ -73,7 +74,7 @@ Apps can work around a terminal's limits: shortly after starting, `update/3` rec
 
 A single event loop in the main thread reads input, runs `update/3`, and paints the view. Painting is incremental: the view is grouped into runs of same-styled text, and only runs that changed since the last paint are written.
 
-The loop talks to a *substrate*: a real terminal, or a VCR that replays a scripted conversation (events in, expected clears and paints out) so apps can be tested without a terminal. Other threads can deliver events through a wake pipe that the loop waits on alongside the terminal.
+The loop talks to a *substrate*: a real terminal, or a VCR that replays a scripted conversation (events in, expected clears and paints out) so apps can be tested without a terminal. Other threads send events to the app's port, a queue with a pipe that the loop waits on alongside the terminal.
 
 ### Drawables
 
@@ -96,6 +97,28 @@ With `app(State, View, Update, Result, [mouse(true)])`, the terminal reports the
 
 In terminals with the Kitty graphics protocol (Kitty, Ghostty), `image(Id, Source, W-H)` shows an image in W×H cells. Source is `png(Bytes)`, `rgba(PW-PH, Bytes)`, `rgb(PW-PH, Bytes)` (Bytes being octets, as read from a binary stream) or `file(Path)`. The image is uploaded once, and its cells behave like text: they can be clipped, overdrawn and erased. Draw images only once `update/3` receives `terminal_properties(Ps)` with `graphics(true)` in Ps. See `examples/image.pl`.
 
+### Events from other threads
+
+An app declares what should be sending it events as *subscriptions*, a list computed from its state, like its view: `app(State, View, Update, Result, [subscriptions(Subs)])` calls `call(Subs, State, List)` before each wait for events. Each subscription runs while it is in the list; the loop starts those the list gains and stops those it loses.
+
+- `every(Ms, Event)`: Event every Ms milliseconds
+- `thread(Goal)`: `call(Goal, Port)` in a thread of its own, sending any number of events with `port_send(Port, Event)`. If it ends by itself, update receives `thread_ended(Goal, Status)`.
+
+```prolog
+subscriptions(_-model(Ticking, _), Subs) :-
+    (   Ticking == true
+    ->  Subs = [every(1000, tick), thread(worker)]
+    ;   Subs = [thread(worker)]
+    ).
+
+worker(Port) :-
+    thread_self(Me),
+    port_send(Port, worker_ready(Me)),   % update can now send it messages
+    ...
+```
+
+Update may have side effects, such as sending a message to a thread, but must not block: an answer comes back as an event. See `examples/async.pl`.
+
 ### Custom Components
 
 Define components via multifile hooks:
@@ -117,7 +140,8 @@ Each screen coordinate tracks which components produced it (the alias stack). Wh
 
 - `send(Events)`: the next batch of events the app receives
 - `expect(clear)`: the app clears the screen (it does on start and on every resize)
-- `expect(runs(Runs))`: the app paints exactly Runs
+- `receive(N)`: the next batch is the next N events sent by the app's subscriptions (waiting for them, at most 5 s each)
+- `expect(runs(Runs))`: the app paints exactly Runs, or anything if Runs is unbound
 - `expect(graphics(Actions))`: the app sends exactly these image uploads and placements, before the runs of the same paint
 
 Entries are consumed in order. A run is `(X-Y)-(Attrs-Chars)`: 1-based screen coordinates, the style attributes, and the characters as a list of one-character atoms. Painting is incremental, so after the first paint `Runs` holds only the runs that changed (each whole), and erased cells appear as spaces. The cursor's cell is painted `negative`. Once the script is used up, every request for events gets `[eos]`, which a test app typically answers with `result(...)`. The terminal's properties are not reported unless the script sends them.

@@ -709,6 +709,110 @@ test(graphics_error) :-
 :- end_tests(substrate).
 
 
+:- begin_tests(subscriptions).
+
+:- use_module(library(tui/subscriptions)).
+:- use_module(library(tui/wake)).
+
+% Records every event but terminal_size; quits on eos.
+recording_view(_, "x").
+
+recording_update(terminal_size(_, _), S, S) :- !.
+recording_update(eos, S, result(S)) :- !.
+recording_update(E, C-Es, C-Es1) :-
+    append(Es, [E], Es1).
+
+subscribed_app(Subs, Script, Events) :-
+    app(_-[], recording_view, recording_update, _-Events,
+        [ substrate(vcr([ send([terminal_size(10, 3)]),
+                          expect(clear),
+                          expect(runs([(1-1)-([]-[x])])) | Script ])),
+          subscriptions(Subs) ]).
+
+ticking(_, [every(10, tick)]).
+
+test(every) :-
+    subscribed_app(ticking, [receive(3)], Events),
+    Events == [tick, tick, tick].
+
+sender(Port) :-
+    port_send(Port, a),
+    port_send(Port, b).
+
+sending(_, [thread(sender)]).
+
+% A thread's events arrive in order; it ending by itself is an event.
+test(thread) :-
+    subscribed_app(sending, [receive(3)], Events),
+    Events == [a, b, thread_ended(sender, true)].
+
+failing_sender(_) :- fail.
+raising_sender(_) :- throw(oops).
+
+failing(_, [thread(failing_sender), thread(raising_sender)]).
+
+test(thread_ended) :-
+    subscribed_app(failing, [receive(2)], Events),
+    msort(Events, Sorted),
+    Sorted == [thread_ended(failing_sender, false), thread_ended(raising_sender, exception(oops))].
+
+% Blocks until stopped, then reports to Q that it was.
+waiter(Q, Port) :-
+    setup_call_cleanup(port_send(Port, started),
+                       thread_get_message(never_sent),
+                       thread_send_message(Q, stopped)).
+
+% Subscribed until it has started.
+waiting_until_started(Q, _-Es, Subs) :-
+    (   memberchk(started, Es)
+    ->  Subs = []
+    ;   Subs = [thread(waiter(Q))]
+    ).
+
+test(stopped_when_unsubscribed) :-
+    message_queue_create(Q),
+    subscribed_app(waiting_until_started(Q), [receive(1)], Events),
+    Events == [started],
+    thread_get_message(Q, stopped, [timeout(2)]),
+    message_queue_destroy(Q).
+
+waiting(Q, _, [thread(waiter(Q))]).
+
+test(stopped_when_the_app_ends) :-
+    message_queue_create(Q),
+    subscribed_app(waiting(Q), [receive(1)], Events),
+    Events == [started],
+    thread_get_message(Q, stopped, [timeout(2)]),
+    message_queue_destroy(Q).
+
+test(unknown_subscription, [error(domain_error(tui_subscription, sometimes))]) :-
+    subscribed_app([_, [sometimes]]>>true, [], _).
+
+test(closed_port) :-
+    wake_open(Wake),
+    wake_close(Wake),
+    port_send(port(Wake), lost).
+
+% An unbound expectation matches any paint.
+counting_view(_-Es, literal(N)) :-
+    length(Es, N).
+
+test(any_paint) :-
+    app(_-[], counting_view, recording_update, _-Events,
+        [ substrate(vcr([ send([terminal_size(10, 3)]), expect(clear), expect(runs(_)),
+                          receive(3), expect(runs(Runs)) ])),
+          subscriptions(sending) ]),
+    var(Runs),
+    Events == [a, b, thread_ended(sender, true)].
+
+test(diff) :-
+    running_subs_stopped_started([every(1, a)-t1, thread(g)-t2], [thread(g), every(2, a), every(2, a)], Stopped, Started),
+    Stopped == [every(1, a)-t1],
+    Started == [every(2, a)].
+
+:- end_tests(subscriptions).
+
+
 :- begin_tests(terminal).
 
 % The bytes terminal.pl writes, to any stream: the VCR checks runs, these
