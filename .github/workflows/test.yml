@@ -1,0 +1,25 @@
+name: test
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        # The official images: stable is the stable release, latest the
+        # development release.
+        swipl: [stable, latest]
+    container: swipl:${{ matrix.swipl }}
+    steps:
+      - uses: actions/checkout@v4
+      - run: swipl --version
+      - run: swipl -p library=prolog -g "consult('test/test_tui.pl'), run_tests" -t halt
+      - name: examples and the app load
+        run: |
+          for f in examples/*.pl app/tui.pl; do
+            swipl -p library=prolog -g "list_undefined, halt" "$f" > out.txt 2>&1
+            cat out.txt
+            if grep -qi "warning\|error" out.txt; then exit 1; fi
+          done
