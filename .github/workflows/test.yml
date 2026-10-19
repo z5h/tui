@@ -1,6 +1,16 @@
 name: test
 
-on: [push, pull_request]
+on:
+  push:
+  pull_request:
+  # The "Run workflow" button on the Actions tab, or
+  # gh workflow run test.yml [-f swipl=9.2.9]
+  workflow_dispatch:
+    inputs:
+      swipl:
+        description: "swipl image tag to test (blank: stable and latest)"
+        required: false
+        default: ""
 
 jobs:
   test:
@@ -9,8 +19,8 @@ jobs:
       fail-fast: false
       matrix:
         # The official images: stable is the stable release, latest the
-        # development release.
-        swipl: [stable, latest]
+        # development release. A manual run may name one tag instead.
+        swipl: ${{ inputs.swipl && fromJSON(format('["{0}"]', inputs.swipl)) || fromJSON('["stable", "latest"]') }}
     container: swipl:${{ matrix.swipl }}
     steps:
       - uses: actions/checkout@v4
