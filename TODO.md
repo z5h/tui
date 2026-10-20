@@ -23,6 +23,14 @@ State-Effects (TEA-style commands as data) so that an update with side
 effects (e.g. sending to a worker) stays pure and testable, without
 breaking plain State.
 
+# documenting drawables
+drawables and aliases (row/1, column/1, cursor/1, clear/1, box/2,
+image/3, the components, ...) are documented with %! as if they were
+predicates. they are terms, not predicates, so the PLDoc server shows
+them in red (no predicate found). find a way to document them as terms:
+e.g. a section of the module comment, or a documented type/predicate
+that enumerates them.
+
 # debug / profile mode
 the old TUI_PROFILE render-time overlay was removed. revisit as a broader
 mode: highlight regions being repainted, profile specific drawables or
