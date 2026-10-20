@@ -1,5 +1,5 @@
 name(tui).
-version('0.1.2').
+version('0.2.0').
 title('Text User Interface framework, inspired by The Elm Architecture').
 keywords([tui, terminal, ui, text, elm]).
 author('Mark Bolusmjak', '').

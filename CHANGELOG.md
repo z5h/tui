@@ -2,7 +2,7 @@
 
 `version/1` in `pack.pl` is the version. Releases are tagged `V<version>`.
 
-## Unreleased
+## 0.2.0
 
 ### Changed (may break apps)
 
