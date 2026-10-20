@@ -138,6 +138,23 @@ Things to know:
 
 While an app runs in the terminal, what is written to `user_error` (messages, warnings, `debug/3` output, `make/0`'s report; from any thread) would garble the screen. Instead, update receives it as `stderr(Text)` events, a line at a time; show it, log it, or ignore it. Output written directly to the terminal by C code is not captured; `redraw(Key)` repairs the screen.
 
+Messages from `print_message/2` (errors, warnings, `make/0`'s report, `debug/3`) are meant to be handled with `user:message_hook/3`, which gives the message's kind and term rather than its text. A subscription can install a hook for as long as it runs, and send the messages as events of your choosing:
+
+```prolog
+subscriptions(_, [thread(messages)]).
+
+% Until stopped, print_message/2's messages are events, not stderr.
+messages(Port) :-
+    setup_call_cleanup(
+        asserta((user:message_hook(Term, Kind, Lines) :-
+                     Kind \== silent,
+                     port_send(Port, message(Kind, Term, Lines))), Ref),
+        thread_get_message(_),          % wait until stopped
+        erase(Ref)).
+```
+
+Update then receives `message(Kind, Term, Lines)`, and can, say, show errors and warnings and drop informational messages; `print_message_lines/3` turns Lines into text.
+
 ### Custom Components
 
 Define components via multifile hooks:
