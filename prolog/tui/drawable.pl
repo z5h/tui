@@ -161,9 +161,8 @@ my_color(C) :-
 %  unified with the maximum X-Y coordinate reached.
 %
 %  Drawable terms:
-%    * Atoms, strings, numbers — rendered as character sequences; but
-%      an atom that names an alias (see tui:alias_drawable/2) draws the
-%      alias, so use strings for text that must stay text
+%    * Atoms, strings, numbers — rendered as character sequences,
+%      always (never looked up as aliases)
 %    * literal(T)       — render any term as its printed representation
 %    * chars(List)      — render a list of characters
 %    * raw(Commands)    — embed pre-rendered commands with offset
@@ -232,17 +231,9 @@ drawable(raw([H|T]), Stack, Attr, DX-DY, MX-MY) --> !,
       MY is max(Y1, MTY)
     }.
 
-% An atom that names an alias draws the alias; any other atom, a string
-% or a number draws as text.
 drawable(A, Stack, Attr, X-Y, MX-MY) -->
-    { atom(A) }, !,
-    (   { tui:alias_drawable(A, D) }
-    ->  drawable(D, [(X-Y)-A | Stack], Attr, X-Y, MX-MY)
-    ;   { atom_chars(A, Chars) },
-        drawable(chars(Chars), Stack, Attr, X-Y, MX-MY)
-    ).
-drawable(A, Stack, Attr, X-Y, MX-MY) -->
-    { string(A), string_chars(A, Chars)
+    { atom(A), atom_chars(A, Chars)
+    ; string(A), string_chars(A, Chars)
     ; number(A), number_chars(A, Chars)
     }, !,
     drawable(chars(Chars), Stack, Attr, X-Y, MX-MY).

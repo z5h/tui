@@ -36,6 +36,10 @@ styled components are opt-in: load library(tui/components).
 %  to its drawable expansion. During rendering the alias is pushed onto
 %  the component stack so that at_event_is/3 can intercept events.
 %
+%  DrawableTerm must be compound: atoms, strings and numbers always draw
+%  as text, so a clause for one is never used. Write a component without
+%  arguments with empty parentheses, e.g. logo().
+%
 %  @see at_event_is/3
 :- multifile alias_drawable/2.
 

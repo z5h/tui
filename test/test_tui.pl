@@ -106,20 +106,23 @@ test(atom_renders) :-
     drawable_raw(hi, raw(Cmds)),
     length(Cmds, 2).
 
-% An atom that names an alias draws the alias, on the stack like any
-% alias; a string with the same text stays text.
+% Atoms are always text, even one with an alias clause; an alias without
+% arguments is written name().
 :- multifile tui:alias_drawable/2.
 
-tui:alias_drawable(test_atom_alias, "xyz").
+tui:alias_drawable(test_atom_alias, "never").
+tui:alias_drawable(test_zero_alias(), "xyz").
 
-test(atom_alias) :-
+test(atom_is_text) :-
     drawable_raw(test_atom_alias, raw(Cmds)),
+    length(Cmds, 15).
+
+test(zero_arity_alias) :-
+    drawable_raw(test_zero_alias(), raw(Cmds)),
     findall(C, member(_-(_-_-C), Cmds), Cs),
     Cs == [x, y, z],
     Cmds = [_-(Stack-_-_) | _],
-    memberchk(_-test_atom_alias, Stack),
-    drawable_raw("test_atom_alias", raw(Text)),
-    length(Text, 15).
+    memberchk(_-test_zero_alias(), Stack).
 
 test(string_renders) :-
     drawable_raw("abc", raw(Cmds)),

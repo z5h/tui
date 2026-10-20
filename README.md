@@ -83,7 +83,7 @@ The loop talks to a *substrate*: a real terminal, or a VCR that replays a script
 
 Views are built from a term-based DSL:
 
-- **Primitives**: strings, numbers and atoms render as text, except that an atom you have defined as an alias draws that alias (so prefer strings for text); `literal(Term)` for any term
+- **Primitives**: atoms, strings, numbers always render as text; `literal(Term)` for any term
 - **Layout**: `.>` (horizontal), `.<` (horizontal, right-aligned first), `.\/` (vertical), `./\` (vertical, bottom-aligned first)
 - **Combinators**: `translate(DX-DY, D)`, `X-Y-D`, `port(W-H, D)`, `zone(W-H, D)`, `align(Direction, D)`, `style(Attrs, D)`
 - **Styles**: `bold`, `faint`, `italic`, `underline`, `negative`, `crossed_out`; colours `fg(C)`, `bg(C)` and the bright `hfg(C)`, `hbg(C)`, C being `black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `white`, `default` or an index 0..255; and `fg(R, G, B)`, `bg(R, G, B)`
@@ -146,6 +146,8 @@ Define components via multifile hooks:
 tui:alias_drawable(my_widget(Label), style([bold], Label)).
 tui:at_event_is(my_widget(_), _X-_Y-return, my_widget-activated).
 ```
+
+An alias is a compound term: atoms, strings and numbers are always text. A component without arguments is written with empty parentheses, e.g. `tui:alias_drawable(logo(), ...)`, drawn as `logo()`.
 
 A component sees each event with where it happened, relative to the component. It may rewrite an event in several ways (for example a new value, and `right` to advance the cursor); each reaches `update/3` in turn.
 
