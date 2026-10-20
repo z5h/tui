@@ -80,6 +80,19 @@ app(State, View, Update, Result) :-
 %      in its own thread, and sends events with port_send(Port, Event).
 %      If Goal fails, the app ends with tui_callback_failed(subscriptions,
 %      State).
+%    * reload(Key)
+%      Key (e.g. f5, or ctrl+r) reloads the app's modified source files
+%      with make/0, then paints the view as the new code draws it. Update
+%      then receives reloaded, e.g. to adapt the state to changed code.
+%      Key does not bubble, nor reach update.
+%    * redraw(Key)
+%      Key (e.g. ctrl+l) clears the screen and paints the view anew, for
+%      when something else has written to the terminal. Key does not
+%      bubble, nor reach update.
+%
+%  In a terminal session, what is written to user_error (messages,
+%  warnings, make/0's output; from any thread) reaches update as
+%  stderr(Text) events instead of the screen.
 :- meta_predicate(app(?, 2, 3, ?, :)).
 app(State, View, Update, Result, Options0) :-
     strip_module(Options0, M, Options),
@@ -92,11 +105,14 @@ app(State, View, Update, Result, Options0) :-
         Subs = SM:Subs1
     ;   Subs = none
     ),
-    app_substrate(Substrate, State, View, Update, Subs, Result).
+    option(reload(Reload), Options, none),
+    option(redraw(Redraw), Options, none),
+    app_substrate(Substrate, State, View, Update, Subs, keys(Reload, Redraw), Result).
 
-% The app is app(View, Update, Wake, Subs, Subscriptions): Subs is the
-% app's subscriptions goal (or none), Subscriptions those running.
-app_substrate(Substrate, State, View, Update, Subs, Result) :-
+% The app is app(View, Update, Wake, Subs, Subscriptions, Keys): Subs is
+% the app's subscriptions goal (or none), Subscriptions those running,
+% Keys keys(Reload, Redraw), each a key or none.
+app_substrate(Substrate, State, View, Update, Subs, Keys, Result) :-
     setup_call_cleanup(
         (   wake_open(Wake),
             subscriptions_open(port(Wake), Subscriptions)
@@ -104,7 +120,7 @@ app_substrate(Substrate, State, View, Update, Subs, Result) :-
         substrate_session(
             Substrate,
             Wake,
-            app_loop(app(View, Update, Wake, Subs, Subscriptions), State,
+            app_loop(app(View, Update, Wake, Subs, Subscriptions, Keys), State,
                      display(Substrate, stale, unknown, [], []), Result)
         ),
         goals_attempted([ subscriptions_closed(Subscriptions),
@@ -117,8 +133,8 @@ app_substrate(Substrate, State, View, Update, Subs, Result) :-
 
 % IMPURE: runs the subscriptions the state calls for (see
 % tui/subscriptions.pl).
-app_state_subscribed(app(_, _, _, none, _), _) :- !.
-app_state_subscribed(app(_, _, _, M:Goal, Subscriptions), State) :-
+app_state_subscribed(app(_, _, _, none, _, _), _) :- !.
+app_state_subscribed(app(_, _, _, M:Goal, Subscriptions, _), State) :-
     (   call(M:Goal, State, Subs)
     ->  subscriptions_running(Subscriptions, M, Subs)
     ;   throw(error(tui_callback_failed(subscriptions, State), _))
@@ -152,7 +168,7 @@ app_state_subscribed(app(_, _, _, M:Goal, Subscriptions), State) :-
 % A clear forgets them too, in case clearing deletes them.
 
 app_loop(App, State0, Display0, Result) :-
-    App = app(View, _, Wake, _, _),
+    App = app(View, _, Wake, _, _, _),
     view_state_display_painted(View, State0, Display0, Display1),
     app_state_subscribed(App, State0),
     wake_display_events(Wake, Display1, Events, Display2),
@@ -186,11 +202,32 @@ app_event_state_display_next(App, terminal_size(Cols, Rows), S, D0, Next) :- !,
         D = display(Sub, stale, Cols-Rows, [], [])
     ),
     app_event_state_display_updated(App, terminal_size(Cols, Rows), S, D, Next).
+% The redraw key: nothing is on the substrate, so all is painted again.
+app_event_state_display_next(app(_, _, _, _, _, keys(_, Redraw)), E, S, D0, Next) :-
+    Redraw \== none,
+    E == Redraw, !,
+    D0 = display(Sub0, _, Size, _, _),
+    substrate_cleared(Sub0, Sub),
+    Next = continue(S, display(Sub, stale, Size, [], [])).
+% The reload key: the code may have changed, so the view is drawn anew
+% (and painted where it differs); then update hears of it.
+app_event_state_display_next(App, E, S, D0, Next) :-
+    App = app(_, _, _, _, _, keys(Reload, _)),
+    Reload \== none,
+    E == Reload, !,
+    reloaded,
+    D0 = display(Sub, _, Size, Runs, Is),
+    app_event_state_display_updated(App, reloaded, S, display(Sub, stale, Size, Runs, Is), Next).
 app_event_state_display_next(App, E, S0, D, Next) :-
     app_event_state_display_updated(App, E, S0, D, Next).
 
+% IMPURE: reloads the modified source files. Its messages go to
+% user_error, which in a terminal session the app receives as events.
+reloaded :-
+    catch(make, E, print_message(error, E)).
+
 app_event_state_display_updated(App, E, S0, display(Sub, T0, Size, Runs, Is), Next) :-
-    App = app(View, Update, _, _, _),
+    App = app(View, Update, _, _, _, _),
     view_size_state_tracked_fresh(View, Size, S0, T0, T1),
     tracked_frame(T1, Frame),
     frame_state_shown(Frame, S0, Shown),

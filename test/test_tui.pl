@@ -387,6 +387,45 @@ test(failure_message) :-
     once(sub_atom(A, _, _, _, 'update failed on the event ctrl+x')),
     \+ sub_atom(A, _, _, _, big_state).
 
+% The redraw key clears and paints everything again; nothing sees it.
+test(redraw) :-
+    Script = [ send([terminal_size(10, 3)]),
+               expect(clear),
+               expect(runs([(1-1)-([negative]-[h]), (2-1)-([]-[i])])),
+               send([ctrl+l, a]),
+               expect(clear),
+               expect(runs([(1-1)-([negative]-[h]), (2-1)-([]-[i])]))
+             ],
+    app((1-1)-[], vcr_view, vcr_update, Result, [substrate(vcr(Script)), redraw(ctrl+l)]),
+    Result == (1-1)-[a, terminal_size(10, 3)].
+
+% The reload key runs make/0, then the view is drawn anew (here it reads
+% a global the test changes, as changed code would draw differently),
+% and update receives reloaded; the key itself reaches nothing.
+global_view(_, Text) :-
+    nb_getval(test_view_text, Text).
+
+% x changes what the view draws without changing the state, as editing
+% the code would, so nothing is painted until the reload.
+test(reload, [ setup(nb_setval(test_view_text, "ab")),
+               cleanup(nb_delete(test_view_text)) ]) :-
+    Script = [ send([terminal_size(10, 3)]),
+               expect(clear),
+               expect(runs([(1-1)-([negative]-[a]), (2-1)-([]-[b])])),
+               send([x]),
+               send([f5]),
+               expect(runs([(2-1)-([]-[c])]))
+             ],
+    app((1-1)-[], global_view, changing_update, Result,
+        [substrate(vcr(Script)), reload(f5)]),
+    Result == (1-1)-[reloaded].
+
+changing_update(x, S, S) :- !,
+    nb_setval(test_view_text, "ac").
+changing_update(reloaded, C-Es, C-[reloaded | Es]) :- !.
+changing_update(eos, S, result(S)) :- !.
+changing_update(_, S, S).
+
 test(mismatch, [throws(error(vcr_mismatch(expect(runs(_)), expect(clear)), _))]) :-
     Script = [ send([terminal_size(10, 3)]),
                expect(runs([]))
@@ -688,6 +727,8 @@ test(flushed) :-
 
 :- begin_tests(substrate).
 
+:- use_module(library(tui/wake)).
+
 % Replies are consumed; the device attributes reply ends detection and
 % becomes the terminal's properties. The Kitty push is written to output.
 replies_keyboard_keys(Replies, K, Keys) :-
@@ -714,6 +755,20 @@ test(graphics_error) :-
     replies_keyboard_keys([kitty_graphics("i=31;EINVAL:bad"), device_attributes([1])], _, Keys),
     Keys = [terminal_properties(Ps)],
     memberchk(graphics(false), Ps).
+
+% In a terminal session, user_error is captured: what any thread writes
+% is posted as stderr(Text), a line at a time; restoring posts the rest.
+test(stderr_captured) :-
+    wake_open(Wake),
+    tui_substrate:wake_stderr_captured(Wake, Stderr),
+    format(user_error, "one~n", []),
+    thread_create(format(user_error, "two~n", []), T, []),
+    thread_join(T, _),
+    format(user_error, "three", []),
+    tui_substrate:stderr_restored(Stderr),
+    wake_count_timeout_events(Wake, 3, 2, Events),
+    wake_close(Wake),
+    Events == [stderr("one\n"), stderr("two\n"), stderr("three")].
 
 :- end_tests(substrate).
 

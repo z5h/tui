@@ -26,7 +26,7 @@ This is a SWI-Prolog pack. Library modules live in `prolog/`, internal modules i
 - `prolog/tui/loop.pl` — `tui_loop`: `app/4`, `app/5` and the event loop
 - `prolog/tui/components.pl` — `tui_components`: ready-made, styled components (opt-in, not loaded by `library(tui)`)
 - `prolog/tui/assocs.pl` — `tui_assocs`
-- `examples/` — one topic each: `hello.pl`, `layout.pl`, `align.pl`, `events.pl`, `cursor.pl`, `gallery.pl` (the components), `move.pl`, `image.pl`, `async.pl` (subscriptions: a timer and a worker thread). Test files must not load examples: their `initialization(main, main)` would run the app
+- `examples/` — one topic each: `hello.pl`, `layout.pl`, `align.pl`, `events.pl`, `cursor.pl`, `gallery.pl` (the components), `move.pl`, `image.pl`, `async.pl` (subscriptions: a timer and a worker thread), `reload.pl` (hot reloading, stderr events). Test files must not load examples: their `initialization(main, main)` would run the app
 - `examples/atto.pl` — atto, a tiny text editor: key bindings and view; `examples/atto_lib.pl` is its editing model (document, cursor, scrolling, files), driven by commands
 - `app/tui.pl` — `swipl tui`: lists, runs and prints the examples (SWI-Prolog finds a pack's `app/` scripts). The list is `examples/*.pl` less `*_lib.pl`, titled by each module's `<module>` line
 - `test/test_tui.pl` — plunit tests
@@ -61,6 +61,8 @@ Everything runs in the main thread, which owns the TTY (`wait_for_input/3` on `u
 
 The app's view and update are called as by `once/1`. A failure raises `tui_callback_failed(update(Event) | view, State)` (after the substrate is restored), so an app's bug is never a silent exit.
 
+The `app/5` options `reload(Key)` and `redraw(Key)` are handled in `app_event_state_display_next/5` before any bubbling; the key reaches neither components nor update. Redraw clears the substrate (display stale, no runs). Reload runs `make/0`, marks the frame stale but keeps the runs (so the new view is painted as a diff), then updates with `reloaded`. Without marking it stale, the unchanged state would keep the frame painted with the old code.
+
 **The cursor.** Update may bind the state's cursor `X-Y`, or leave it unbound. The view may draw `cursor(Drawable)` (an alias defined in `loop.pl`), which places the cursor on the top-left cell drawn by it; because the view runs after update, this overrides any cursor update bound. If several are drawn, the top-left cell of them all wins. With neither, there is no cursor: nothing is highlighted, and events bubble through an empty stack (so only `at_event_is([], ...)` sees them) and arrows do not move anything. Arrow keys not claimed by a component move the cursor by default (the loop binds the new position). Update receives the state with the cursor as shown.
 
 A frame is `frame(Commands, EventAssoc, Extent, Cursor, Images)`, computed from a state; `Cursor` is the resolved cursor or `none`; `Images` are the `image/3` terms with a cell on screen. It is tracked as `stale`, `fresh(F)` (computed, not painted) or `painted(F)`. Each event in a batch is routed through the frame of the state it applies to, but only the last frame is painted.
@@ -76,6 +78,8 @@ The terminal substrate (`terminal(Detected, Pending, Mouse)`, from `terminal_sub
 Input: the substrate reads available codes and decodes them with `input.pl`. Codes of an incomplete escape sequence stay in `Pending`; while any are pending it waits at most 10 ms (the escape grace period) before decoding them as they are, so a lone ESC becomes `escape`. End of input is the event `eos`.
 
 Keys: plain keys are atoms (`a`, `'A'`, `up`, `return`, `f5`); modified keys are `Mods+Key` with modifiers in the order ctrl, alt, shift, super, hyper, meta, e.g. `ctrl+shift+up`. Letters with modifiers are lowercase. Unrecognised sequences arrive as `unknown_input(Codes)`.
+
+Stderr: for the session, `user_error` is rebound to a stream from `open_prolog_stream/4` (line buffered), whose callback posts `stderr(Text)` to the wake from whichever thread wrote; it is restored first in the cleanup, which posts what was still buffered. Not a pipe, which could fill and deadlock the main thread writing to it. The VCR substrate does not capture.
 
 Bracketed paste is always on: a paste arrives as one `paste(Text)` event (a string, line breaks normalised to `"\n"`), never as keystrokes. An open paste is exempt from the escape grace period and waits for its end marker.
 

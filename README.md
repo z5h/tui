@@ -59,6 +59,7 @@ swipl tui source gallery  # print its source
 - `move` — dragging with Shift+arrows or the mouse, and `moved(Direction)`
 - `image` — an image, through the Kitty graphics protocol
 - `async` — events from other threads: a timer and a worker, as subscriptions
+- `reload` — hot reloading (edit it while it runs, press F5), and stderr as events
 - `atto` — a small text editor: `swipl tui run atto FILE`
 
 The examples are in the pack's `examples/` directory. From a clone, use `swipl app/tui.pl` in place of `swipl tui`; it runs the examples with the clone's library.
@@ -120,6 +121,22 @@ worker(Port) :-
 ```
 
 Update may have side effects, such as sending a message to a thread, but must not block: an answer comes back as an event. See `examples/async.pl`.
+
+### Hot reloading
+
+Edit your app while it runs: with `app(State, View, Update, Result, [reload(f5)])`, F5 reloads the modified source files (`make/0`) and paints the view as the new code draws it, keeping the app's state. Update then receives `reloaded`, where the state can be adapted to changed code. `redraw(ctrl+l)` clears the screen and paints it again. Neither key reaches components or update. See `examples/reload.pl`.
+
+Things to know:
+
+- It reloads your app's code. Reloading `library(tui)` itself while an app runs is not supported.
+- The state survives the reload. If the code no longer accepts it (a changed model shape), view or update fails, ending the app with `tui_callback_failed(Which, State)`; adapt the state on `reloaded`.
+- A syntax error skips the broken clause and reloads the rest, so update may then fail where the clause was needed. The error message arrives as a `stderr(Text)` event (below).
+- Subscription threads already running keep their old code until they restart: when their term changes, or they leave the list and return.
+- In a reloaded file, facts asserted at runtime into its dynamic predicates are kept, and the file's own facts are added again.
+
+### Standard error
+
+While an app runs in the terminal, what is written to `user_error` (messages, warnings, `debug/3` output, `make/0`'s report; from any thread) would garble the screen. Instead, update receives it as `stderr(Text)` events, a line at a time; show it, log it, or ignore it. Output written directly to the terminal by C code is not captured; `redraw(Key)` repairs the screen.
 
 ### Custom Components
 

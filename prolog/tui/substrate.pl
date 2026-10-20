@@ -29,6 +29,7 @@ extended_keys(Bool) and graphics(Bool), in no guaranteed order.
 :- use_module(library(tui/wake)).
 :- use_module(library(tui/vcr)).
 :- use_module(library(option)).
+:- use_module(library(prolog_stream)).
 
 % How long a pending escape sequence may wait for the rest of its codes.
 escape_grace(0.01).
@@ -52,12 +53,15 @@ terminal_substrate(Options, terminal(detecting-false, [], Mouse)) :-
 %!  substrate_session(+Substrate, +Wake, :Goal)
 %
 %  IMPURE: run Goal with Substrate set up for an app, restoring it
-%  afterwards. Posted events reach the app through Wake.
+%  afterwards. Posted events reach the app through Wake. In a terminal
+%  session, what is written to user_error (by any thread) would garble
+%  the screen; it is posted instead, as stderr(Text).
 :- meta_predicate(substrate_session(+, +, 0)).
 substrate_session(terminal(_, _, Mouse), Wake, Goal) :-
     with_tty_raw(
         setup_call_cleanup(
-            (   asserta(winch_wake_(Wake)),
+            (   wake_stderr_captured(Wake, Stderr),
+                asserta(winch_wake_(Wake)),
                 on_signal(winch, Old, sig_winch),
                 ansi_reset,
                 ansi_hide_cursor,
@@ -73,7 +77,8 @@ substrate_session(terminal(_, _, Mouse), Wake, Goal) :-
                 size_posted(Wake)
             ),
             Goal,
-            goals_attempted([ on_signal(winch, _, Old),
+            goals_attempted([ stderr_restored(Stderr),
+                              on_signal(winch, _, Old),
                               retract(winch_wake_(Wake)),
                               ansi_kitty_keyboard_pop,
                               (   Mouse == true
@@ -104,6 +109,43 @@ sig_winch(_) :-
 size_posted(Wake) :-
     tty_size(Rows, Cols),
     wake_post(Wake, terminal_size(Cols, Rows)).
+
+
+'#stderr'.
+
+% IMPURE: user_error becomes a stream whose text is posted to Wake as
+% stderr(Text), a line at a time. Stderr is stderr(Original, Capture),
+% to restore.
+wake_stderr_captured(Wake, stderr(Original, Capture)) :-
+    stream_property(Original, alias(user_error)),
+    open_prolog_stream(tui_substrate, write, Capture, []),
+    set_stream(Capture, buffer(line)),
+    asserta(stderr_wake_(Capture, Wake)),
+    set_stream(Capture, alias(user_error)).
+
+% IMPURE: user_error is the original again; what was still buffered is
+% posted.
+stderr_restored(stderr(Original, Capture)) :-
+    set_stream(Original, alias(user_error)),
+    close(Capture),
+    retractall(stderr_wake_(Capture, _)).
+
+% IMPURE: mutable global — the wake of each capturing stream. The stream
+% callbacks receive only the stream.
+:- dynamic stderr_wake_/2.
+
+% Called by the capturing stream, in the thread that wrote. Must not
+% write to user_error itself.
+:- public stream_write/2, stream_read/2, stream_close/1.
+stream_write(Stream, Text) :-
+    (   stderr_wake_(Stream, Wake)
+    ->  catch(wake_post(Wake, stderr(Text)), _, true)
+    ;   true
+    ).
+
+stream_read(_, "").
+
+stream_close(_).
 
 
 '#events'.
