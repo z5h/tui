@@ -28,7 +28,6 @@
 ## 0.1.1
 
 - Documentation is PLDoc throughout, checked by a test.
-- `tag_release.pl` tags releases from `pack.pl`'s version.
 
 ## 0.1.0
 
