@@ -2,6 +2,22 @@
 
 `version/1` in `pack.pl` is the version. Releases are tagged `V<version>`.
 
+## 0.2.1
+
+### Fixed
+
+- The cursor was invisible on a cell already drawn `negative`. It now highlights its cell as `highlight/1` does: `negative` is added, or removed if the cell has it; a negative space with no underline on the default background, which would then be blank, is underlined instead.
+
+### Added
+
+- `highlight(D)`: draws D with each cell highlighted as the cursor's is. Nested highlights, and the cursor on a highlighted cell, highlight once.
+- `examples/ink.pl`: an editor for text styled with ANSI escapes. A file is replayed onto an 80-column screen (cursor movement and SGR) and saved as styled rows that `cat` shows. Overwrite typing, rectangular selection, styles toggled or set per cell, copy, cut and paste of styled cells.
+
+### Documented
+
+- `CONSIDERATIONS.md`: ISO Prolog compatibility, what is incompatible and what is only not supported, and how that was determined.
+- `TODO.md`: wide characters (CJK, most emoji) are taken to be one cell wide, so they misplace what follows them on a row.
+
 ## 0.2.0
 
 ### Changed (may break apps)

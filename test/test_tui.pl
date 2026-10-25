@@ -269,6 +269,48 @@ test(not_hovered) :-
              (3-1)-([negative]-[c]),
              (4-1)-([]-[d])].
 
+test(negative_inverted) :-
+    cursor_drawable_runs(1-1, style([negative], "ab"), Runs),
+    Runs == [(1-1)-([]-[a]),
+             (2-1)-([negative]-[b])].
+
+test(highlighted) :-
+    cursor_drawable_runs(none, highlight("ab") .> style([negative], highlight("cd")), Runs),
+    Runs == [(1-1)-([negative]-[a, b]),
+             (3-1)-([]-[c, d])].
+
+% A negative space without underline on the default background would be
+% blank: it is underlined instead, in its foreground colour.
+test(highlighted_blank_underlined) :-
+    cursor_drawable_runs(none, highlight(style([negative], " ")), R1),
+    R1 == [(1-1)-([underline]-[' '])],
+    cursor_drawable_runs(none, highlight(style([negative, fg(red)], " ")), R2),
+    R2 == [(1-1)-([fg(red), underline]-[' '])],
+    cursor_drawable_runs(none, highlight(style([negative, bg(red)], " ")), R3),
+    R3 == [(1-1)-([bg(red)]-[' '])],
+    cursor_drawable_runs(none, highlight(style([negative, underline], " ")), R4),
+    R4 == [(1-1)-([underline]-[' '])],
+    cursor_drawable_runs(none, highlight(style([negative, bg(red), bg(default)], " ")), R5),
+    R5 == [(1-1)-([bg(red), bg(default), underline]-[' '])].
+
+% Attributes before the last reset are not in effect.
+test(highlighted_after_reset) :-
+    cursor_drawable_runs(none, highlight(style([reset], style([negative], "a"))), Runs),
+    Runs == [(1-1)-([negative, reset, negative]-[a])].
+
+test(highlight_idempotent) :-
+    cursor_drawable_runs(none, highlight(highlight(style([negative], " "))), R1),
+    cursor_drawable_runs(none, highlight(style([negative], " ")), R2),
+    R1 == R2,
+    cursor_drawable_runs(1-1, highlight("a"), R3),
+    cursor_drawable_runs(none, highlight("a"), R4),
+    R3 == R4,
+    R3 == [(1-1)-([negative]-[a])].
+
+test(cursor_highlights) :-
+    cursor_drawable_runs(1-1, style([negative], " "), Runs),
+    Runs == [(1-1)-([underline]-[' '])].
+
 :- end_tests(hover).
 
 
@@ -1033,6 +1075,311 @@ test(vcr) :-
     app(_-false, image_view, image_update, _, [substrate(vcr(Script))]).
 
 :- end_tests(image).
+
+
+:- begin_tests(sgr_screen).
+
+:- use_module('../examples/sgr_screen_lib').
+
+% The first N cells of row Y.
+rows_y_n_cells(Rows, Y, N, Cells) :-
+    nth0(Y, Rows, Row),
+    length(Cells, N),
+    append(Cells, _, Row).
+
+test(overwritten) :-
+    string_rows("\e[1;1HWow\e[1;1HN", Rows),
+    Rows = [_],
+    rows_y_n_cells(Rows, 0, 3, Cells),
+    Cells == [[]-'N', []-o, []-w].
+
+test(rows_counted) :-
+    string_rows("", R0),
+    string_rows("a", R1),
+    string_rows("a\n", R2),
+    string_rows("a\n\n", R3),
+    string_rows("\e[9;1H", R4),
+    maplist(length, [R0, R1, R2, R3, R4], Ns),
+    Ns == [0, 1, 1, 2, 0].
+
+test(rows_80_wide) :-
+    string_rows("a\nb", Rows),
+    maplist(length, Rows, Ws),
+    Ws == [80, 80].
+
+test(deferred_wrap) :-
+    length(Xs, 80),
+    maplist(=(x), Xs),
+    atomic_list_concat(Xs, Line),
+    atom_concat(Line, y, A1),
+    string_rows(A1, R1),
+    rows_y_n_cells(R1, 1, 1, C1),
+    C1 == [[]-y],
+    atomic_list_concat([Line, '\ny'], A2),
+    string_rows(A2, R2),
+    length(R2, 2),
+    rows_y_n_cells(R2, 1, 1, C2),
+    C2 == [[]-y].
+
+test(cursor_kept_on_screen) :-
+    string_rows("\e[5Da\e[200Cb\e[9Ac", Rows),
+    Rows = [Row],
+    nth0(0, Row, A),
+    nth0(79, Row, B),
+    A-B == ([]-a)-([]-c).
+
+test(controls) :-
+    string_rows("abc\rX\tY\bZ", Rows),
+    rows_y_n_cells(Rows, 0, 9, Cells),
+    pairs_values(Cells, Chars),
+    Chars == ['X', b, c, ' ', ' ', ' ', ' ', ' ', 'Z'].
+
+test(save_restore) :-
+    string_rows("ab\e7\e[31m\e[3;1Hx\e8c", Rows),
+    rows_y_n_cells(Rows, 0, 3, Cells),
+    Cells == [[]-a, []-b, []-c],
+    rows_y_n_cells(Rows, 2, 1, X),
+    X == [[fg(red)]-x].
+
+test(sgr) :-
+    string_rows("\e[1;31ma\e[22mb\e[38;5;200;48;2;1;2;3mc\e[39;4md\e[mE\e[93;41mf\e[32mg", Rows),
+    rows_y_n_cells(Rows, 0, 7, Cells),
+    pairs_keys(Cells, Attrs),
+    Attrs == [[bold, fg(red)], [fg(red)], [fg(200), bg(1, 2, 3)],
+              [underline, bg(1, 2, 3)], [], [bg(red), hfg(yellow)],
+              [bg(red), fg(green)]].
+
+test(sgr_colon_form) :-
+    string_rows("\e[38:2::10:20:30;4:3ma\e[4:0;48:5:7mb", Rows),
+    rows_y_n_cells(Rows, 0, 2, Cells),
+    pairs_keys(Cells, Attrs),
+    Attrs == [[underline, fg(10, 20, 30)], [bg(7), fg(10, 20, 30)]].
+
+test(others_ignored) :-
+    string_rows("\e[2J\e]0;title\a\e[?25l\e(Ba\eP1$r\e\\b\e[6n\x7\c", Rows),
+    rows_y_n_cells(Rows, 0, 3, Cells),
+    Cells == [[]-a, []-b, []-c].
+
+test(written) :-
+    string_rows("a\e[1;31mbc\e[0m\n\n\e[44m \e[0m", Rows),
+    rows_string(Rows, S),
+    S == "a\e[0;1;31mbc\e[0m\n\n\e[0;44m \e[0m\n".
+
+test(round_trip) :-
+    string_rows("\e[3;10H\e[7mx\e[1;1H\e[38;2;1;2;3;9myz\e[0m  q\e[2;79H\e[4mlast\n", Rows),
+    rows_string(Rows, S),
+    string_rows(S, Rows1),
+    Rows1 == Rows.
+
+test(attributes_with) :-
+    attributes_with([bold, fg(red)], fg(blue), A1),
+    attributes_with([hfg(red), bg(1, 2, 3)], bg(default), A2),
+    attributes_with([bold], bold, A3),
+    A1-A2-A3 == [bold, fg(blue)]-[hfg(red)]-[bold].
+
+:- end_tests(sgr_screen).
+
+
+:- begin_tests(ink).
+
+:- use_module('../examples/ink_lib').
+
+% A new document 80x10, after Commands.
+commands_model(Commands, M) :-
+    ink_lib:path_model('/nonexistent/ink_test', M0),
+    foldl(command_update_with, [resize(80, 10) | Commands], M0, M).
+
+model_y_n_cells(M, Y, N, Cells) :-
+    model_rows(M, Rows),
+    nth0(Y, Rows, Row),
+    length(Cells, N),
+    append(Cells, _, Row).
+
+test(overwrite_keeps_style) :-
+    commands_model([type(a), type(b), move(home), style(toggle(bold)), type(x)], M),
+    model_y_n_cells(M, 0, 2, Cells),
+    Cells == [[bold]-x, []-b],
+    model_cursor(M, C),
+    C == 1-0.
+
+test(typing_stops_at_last_column) :-
+    commands_model([move(end), move(tab), move(tab), move(tab), move(tab),
+                    move(tab), move(tab), move(tab), move(tab), move(tab),
+                    move(tab), type(a), type(b)], M),
+    model_cursor(M, C),
+    C == 79-0,
+    model_y_n_cells(M, 0, 80, Cells),
+    last(Cells, Last),
+    Last == []-b.
+
+test(set_overrides_and_keeps) :-
+    commands_model([type(a), type(b), move(home), extend(right),
+                    style(set(fg(red))), escape, move(home), style(toggle(bold)),
+                    extend(right), style(set(fg(blue)))], M),
+    model_y_n_cells(M, 0, 2, Cells),
+    Cells == [[bold, fg(blue)]-a, [fg(blue)]-b].
+
+test(default_colour_omitted) :-
+    commands_model([style(set(fg(red))), style(set(bg(blue))), style(toggle(bold)),
+                    style(set(fg(default)))], M1),
+    model_y_n_cells(M1, 0, 1, C1),
+    C1 == [[bold, bg(blue)]-' '],
+    command_update_with(style(set(bg(default))), M1, M2),
+    model_y_n_cells(M2, 0, 1, C2),
+    C2 == [[bold]-' '].
+
+test(toggle_all_or_none) :-
+    commands_model([type(a), type(b), move(home), style(toggle(bold)),
+                    extend(right), style(toggle(bold))], M1),
+    model_y_n_cells(M1, 0, 2, C1),
+    C1 == [[bold]-a, [bold]-b],
+    command_update_with(style(toggle(bold)), M1, M2),
+    model_y_n_cells(M2, 0, 2, C2),
+    C2 == [[]-a, []-b].
+
+test(cursor_always_selected) :-
+    commands_model([], M0),
+    model_selection(M0, S0),
+    S0 == rect(0-0, 0-0),
+    commands_model([extend(right), style(toggle(bold))], M1),
+    model_selection(M1, S1),
+    S1 == rect(0-0, 1-0),
+    model_y_n_cells(M1, 0, 3, C1),
+    C1 == [[bold]-' ', [bold]-' ', []-' '],
+    commands_model([extend(right), escape], M2),
+    model_selection(M2, S2),
+    S2 == rect(1-0, 1-0).
+
+test(rectangle_selection) :-
+    commands_model([new_line, new_line, move(up), move(right),
+                    extend(down), extend(right), style(toggle(underline))], M),
+    model_selection(M, Sel),
+    Sel == rect(1-1, 2-2),
+    model_rows(M, Rows),
+    findall(X-Y, ( nth0(Y, Rows, Row), nth0(X, Row, [underline]-_) ), XYs),
+    XYs == [1-1, 2-1, 1-2, 2-2].
+
+test(return_new_line_delete_line) :-
+    commands_model([type(a), return], M1),
+    model_cursor(M1, C1),
+    C1 == 1-0,
+    commands_model([type(a), new_line, type(b), return, move(up), new_line, type(c)], M2),
+    model_rows(M2, R2),
+    maplist(nth0(0), R2, Firsts2),
+    Firsts2 == [[]-a, []-c, []-b],
+    command_update_with(delete_line, M2, M3),
+    model_rows(M3, R3),
+    maplist(nth0(0), R3, Firsts3),
+    Firsts3 == [[]-a, []-b],
+    commands_model([type(a), delete_line], M4),
+    model_rows(M4, [Row4]),
+    nth0(0, Row4, Cell4),
+    Cell4 == []-' '.
+
+test(erase_keeps_style) :-
+    commands_model([type(a), type(b), move(home), extend(right),
+                    style(set(bg(blue))), escape, erase_backward], M),
+    model_y_n_cells(M, 0, 2, Cells),
+    Cells == [[bg(blue)]-' ', [bg(blue)]-b],
+    model_cursor(M, C),
+    C == 0-0.
+
+test(paste_keeps_column) :-
+    commands_model([move(tab), type_text("ab\ncd")], M),
+    model_rows(M, Rows),
+    length(Rows, 2),
+    model_y_n_cells(M, 1, 10, Cells),
+    pairs_values(Cells, Chars),
+    Chars == [' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', c, d].
+
+test(gutter) :-
+    length(Ns, 8),
+    maplist(=(new_line), Ns),
+    ink_lib:path_model('/nonexistent/ink_test', M0),
+    foldl(command_update_with, [resize(82, 20) | Ns], M0, M9),
+    model_gutter(M9, G9),
+    G9 == 2,
+    command_update_with(new_line, M9, M10),
+    model_gutter(M10, G10),
+    G10 == 0,
+    command_update_with(resize(83, 20), M10, M10w),
+    model_gutter(M10w, G10w),
+    G10w == 3,
+    command_update_with(point(5-1), M10w, M),
+    model_cursor(M, C),
+    C == 2-1.
+
+test(revert_asks_first, [setup(tmp_file_stream(text, File, S)), cleanup(delete_file(File))]) :-
+    write(S, "a\n"),
+    close(S),
+    path_model(File, M0),
+    foldl(command_update_with, [resize(80, 10), type(b), revert], M0, M1),
+    model_status(M1, St1),
+    St1 == confirm(revert),
+    model_y_n_cells(M1, 0, 1, C1),
+    C1 == [[]-b],
+    command_update_with(type(c), M1, M2),
+    model_status(M2, St2),
+    St2 == none,
+    foldl(command_update_with, [revert, revert], M2, M3),
+    model_y_n_cells(M3, 0, 1, C3),
+    C3 == [[]-a],
+    model_modified(M3, Mod3),
+    Mod3 == false,
+    command_update_with(revert, M3, M4),
+    model_status(M4, St4),
+    St4 == text("Reverted to file on disk").
+
+test(copy_cut_paste) :-
+    commands_model([type(a), type(b), move(home), extend(right),
+                    style(toggle(bold)), copy], M1),
+    model_y_n_cells(M1, 0, 2, C1),
+    C1 == [[bold]-a, [bold]-b],
+    command_update_with(cut, M1, M2),
+    model_y_n_cells(M2, 0, 2, C2),
+    C2 == [[]-' ', []-' '],
+    model_selection(M2, S2),
+    S2 == rect(0-0, 0-0),
+    command_update_with(paste, M2, M3),
+    model_rows(M3, Rows3),
+    model_rows(M1, Rows1),
+    Rows3 == Rows1,
+    foldl(command_update_with, [cut, move(right), paste], M1, M4),
+    model_y_n_cells(M4, 0, 4, C4),
+    C4 == [[]-' ', [bold]-a, [bold]-b, []-' '].
+
+test(paste_clipped_and_rows_added) :-
+    length(Tabs, 10),
+    maplist(=(move(tab)), Tabs),
+    append([type(a), new_line, type(b), move(up), move(home), extend(down), copy, move(up) | Tabs],
+           [paste], Commands),
+    commands_model(Commands, M),
+    model_rows(M, Rows),
+    length(Rows, 2),
+    maplist(last, Rows, Lasts),
+    Lasts == [[]-a, []-b],
+    commands_model([type(a), new_line, type(b), move(up), move(home), extend(down),
+                    copy, move(down), paste], M3),
+    model_rows(M3, Rows3),
+    maplist(nth0(0), Rows3, Firsts3),
+    Firsts3 == [[]-a, []-a, []-b].
+
+test(nothing_to_paste) :-
+    commands_model([paste], M),
+    model_status(M, St),
+    St == text("Nothing to paste"),
+    model_modified(M, Mod),
+    Mod == false.
+
+test(scrolled_into_view) :-
+    length(Ns, 12),
+    maplist(=(new_line), Ns),
+    commands_model(Ns, M),
+    model_top(M, Top),
+    model_cursor(M, _-Y),
+    Top-Y == 3-12.
+
+:- end_tests(ink).
 
 
 :- begin_tests(doc).

@@ -20,8 +20,8 @@ drawn at.
 
 Besides the primitives in drawable//5, this module defines the core
 drawables that make no styling choices: layout (row/1, column/1,
-wrapped/2, table/2), shapes (clear/1, line/3, box/2), tagging (below)
-and cursor/1. Ready-made, styled components are in
+wrapped/2, table/2), shapes (clear/1, line/3, box/2), tagging (below),
+cursor/1 and highlight/1. Ready-made, styled components are in
 library(tui/components).
 
 ## Tagging: Key:Drawable
@@ -648,3 +648,16 @@ tui:at_event_is(Key:Inner, _-(Name-Value), Key-Value) :-
 %  top-left cell of them all wins; if Drawable draws nothing, it places
 %  no cursor.
 tui:alias_drawable(cursor(D), D).
+
+%!  highlight(+Drawable)
+%
+%  Drawable, each cell inverted so that it stands out whatever its style:
+%  negative is added, or removed if the cell is negative. A negative
+%  space without underline on the default background would then be
+%  blank, so it loses negative and is underlined instead (in its
+%  foreground colour). Only the style in effect counts, what follows the
+%  cell's last reset. Highlighting is idempotent: a cell inside several
+%  highlights is highlighted once. The cursor's cell is highlighted the
+%  same way. Like cursor/1, it changes no style here: the cells it draws
+%  carry it in their alias stack, and rendering highlights them.
+tui:alias_drawable(highlight(D), D).

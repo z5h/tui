@@ -31,6 +31,14 @@ them in red (no predicate found). find a way to document them as terms:
 e.g. a section of the module comment, or a documented type/predicate
 that enumerates them.
 
+# wide characters
+a char is assumed to take one cell everywhere: drawables, render runs,
+wrapped/2, atto's columns. wide chars (CJK, most emoji) take two cells
+and zero-width ones (combining marks, ZWJ, variation selectors) none, so
+they currently misplace everything after them on the row. needs a
+char-width relation (wcwidth-like) used by layout, cell resolution and
+the cursor.
+
 # debug / profile mode
 the old TUI_PROFILE render-time overlay was removed. revisit as a broader
 mode: highlight regions being repainted, profile specific drawables or

@@ -167,3 +167,55 @@ Screens are identical across all three. The benchmark's cursor is at the top of 
 ### Also learned
 
 `findall/3` copies each solution and loses sharing in the same way. Several components (`clear/1`, `line/3`) build cell lists with it; harmless at their sizes, but worth knowing.
+
+## ISO Prolog compatibility (surveyed October 2026, not pursued)
+
+Short answer: no. The project is SWI-Prolog code, and some of that is essential, not incidental. A port to another system would be a port, not a recompile. Nothing below is a defect; this records where we stand.
+
+Two kinds of gap, kept apart:
+
+- **Not supported**: ISO does not provide it, but a library (in Prolog, or native through the system's foreign interface) could, without changing our code. Porting means supplying libraries.
+- **Incompatible**: cannot be made to work as-is in an ISO Prolog environment, whatever libraries are added, because it depends on the engine or on syntax ISO does not have (or reads differently). Porting means changing our code, or a system that goes beyond ISO.
+
+### How this was determined
+
+A survey, not a deep dive:
+
+1. **A grep over the 36 `.pl` files** (`prolog/`, `app/`, `examples/`, `test/`, `bench/`), counting files that use features outside ISO/IEC 13211-1 (core). The counts are files, not occurrences.
+2. **Loading with `set_prolog_flag(iso, true)`**: the library loads, and all tests pass. This shows little: SWI's `iso` flag makes some built-ins stricter at runtime; it is not a conformance check, and it leaves modules, strings and libraries alone.
+3. **Running the tests under `swipl --traditional`** (double quotes read as code lists, as in ISO's usual default, and no SWI-7 strings): 78 of 151 tests fail, and the tests' backquoted code lists (`` `a` ``) do not even parse. This shows that double quotes must not be read as codes; read as atoms, the DSL is unaffected (below).
+
+Not done: loading under an ISO-focused system (e.g. Scryer, Trealla, GNU Prolog). That would be the next step if portability ever matters.
+
+### Incompatible
+
+- **Modules.** Every file is an SWI module (`module/2`, `use_module/1,2`), the hooks are module-qualified multifile predicates (`tui:alias_drawable/2`, `tui:at_event_is/3`: 12 files), and operators are exported from module export lists (4 files). A module system is part of the engine, not a library. ISO's own module standard (13211-2) is effectively unimplemented; other systems have modules, but not these.
+- **Threads.** Subscriptions run Prolog goals in threads of their own (`thread(Goal)`), signalled with `thread_signal/2` to stop, and talk to the main thread through message queues (`subscriptions.pl`, `wake.pl`, `examples/async.pl`). Running Prolog concurrently needs a multi-threaded engine; a library cannot add one.
+- **Asynchronous Prolog code.** The SIGWINCH handler (`on_signal/3`) runs a Prolog goal when the signal arrives, and `user_error` is rebound to a stream whose callback runs Prolog code (`open_prolog_stream/4`) from whichever thread writes. Both need the engine to call back into Prolog at arbitrary points. (Avoidable by design: the size could be polled, and stderr left alone.)
+- **Cleanup on cut.** `setup_call_cleanup/3` (7 files) runs its cleanup also when a cut removes the goal's choice points. ISO Prolog cannot observe that; a library can only approximate it (cleanup on success, failure and exception). Our uses would mostly survive the approximation, but it is not the same predicate.
+- **Directives ISO does not define**: `initialization(main, main)` (16 files; ISO has `initialization/1`), `det/1` and `meta_predicate/1` (9 files), and `use_module/1,2` and `module/2` above. ISO fixes the set of directives; others are errors or implementation-defined. Easily removed or rewritten, but not as-is.
+- **Syntax.** `\e` in quoted text (3 files): not an ISO escape, so a syntax error (ISO writes `\x1B\` or `\033\`). Backquoted code lists (`` `a` ``, tests): ISO has the token but gives it no meaning as a term. Trivial to change, but not as-is.
+
+### Not incompatible, if double quotes read as atoms: strings
+
+Double-quoted text is an SWI-7 string throughout (24 files). ISO has no string type, and its `double_quotes` flag offers `codes`, `chars` and `atom`. Which one matters, because a list of drawables is an overlay, every element drawn at the same origin (`drawable//5`):
+
+- **codes or chars**: `"ab"` is a list, drawn as an overlay: `b` over `a` (chars), or the numbers 98 over 97 (codes). Not the same result. This is what the `--traditional` run (codes) exposed: 78 failures.
+- **atom**: `"ab"` is the atom `ab`, which the DSL draws exactly as the string: atoms, strings and numbers are all text, and `drawable//5` (and `literal/1`) give atoms and strings the same treatment. The `string/1` branches simply never match.
+
+So with `:- set_prolog_flag(double_quotes, atom).` (an ISO directive), or a system whose default is `atom`, the drawable DSL works as-is. What remains are the string built-ins, below under "not supported". Two cautions: code that tells strings from atoms would behave differently (in the library, only those `string/1` branches, harmless without strings); and text from `format(string(S), ...)` and friends would have to come back as atoms.
+
+### Not supported (libraries could supply them)
+
+- **Native, for the terminal**: raw mode (`with_tty_raw/1`), the terminal size (`tty_size/2`), waiting on several streams (`wait_for_input/3`, the input and the wake pipe), pipes, `process_create/3` (`app/tui.pl`), files and temporary files beyond ISO's `open/3,4`. A foreign library per system could provide these; `substrate.pl`, `wake.pl` and `app/tui.pl` would be rewritten against it. The pure core (drawables, rendering, events, input decoding, the VCR) needs none of them.
+- **Destructive assignment**: `nb_setarg/3` (the running subscriptions, so cleanup sees them however the app ends). Could be native, or replaced by a dynamic predicate.
+- **In Prolog**: `format/2,3` (15 files), DCGs and `phrase/2,3` (9 files; DCGs are a draft standard, not part of core, but translation is a small library), `library(apply)` (`maplist`, `foldl`, `include`, `exclude`: 23 files; `call/N` is ISO since Cor.2), `library(lists)` (`nth0`, `last`, `sum_list`, `numlist`, `msort`: 15 files), `between/3` (14), `forall/2` (8), `atomic_list_concat/2,3` (8), `char_type/2` and `code_type/2` (4), `library(error)` (`must_be/2` and the error helpers: 8), `library(assoc)` (2), yall lambdas (3), the soft cut `*->` (1, `events.pl`, central to nondeterministic bubbling; definable with a dynamic flag, if not prettily), plunit (tests). The string built-ins (`string_concat/3`, `split_string/4`, `sub_string/5`, `string_chars/2`, `term_string/2`, `format(string(S), ...)`, `read_file_to_string/3`: 16 files) could be a library over atoms, with double quotes read as atoms (above); ISO already has `atom_concat/3`, `sub_atom/5` and `atom_chars/2` to build it on.
+- **Documentation**: PlDoc comments are comments; only the `doc` test unit needs PlDoc.
+
+### Not used
+
+No dicts, tabling, CLP(FD) or `library(reif)`. (`PROLOG_STYLE.md` prefers CLP(FD) and `if_/3`; the code does not use them yet, so they add no dependency.)
+
+### If portability is ever wanted
+
+Text would be atoms: double quotes read as atoms, and the string built-ins as a library over them. Modules and directives would follow the target system's own conventions. Threads and asynchronous callbacks would be designed out (polling, no subscription threads) or kept for systems that have them. The rest is libraries, with the pure core needing only the Prolog ones.

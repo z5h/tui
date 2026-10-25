@@ -61,6 +61,7 @@ swipl tui source gallery  # print its source
 - `async` — events from other threads: a timer and a worker, as subscriptions
 - `reload` — hot reloading (edit it while it runs, press F5), and stderr as events
 - `atto` — a small text editor: `swipl tui run atto FILE`
+- `ink` — an editor for text styled with ANSI escapes, saved so that `cat` shows it: `swipl tui run ink FILE`
 
 The examples are in the pack's `examples/` directory. From a clone, use `swipl app/tui.pl` in place of `swipl tui`; it runs the examples with the clone's library.
 
@@ -88,7 +89,7 @@ Views are built from a term-based DSL:
 - **Combinators**: `translate(DX-DY, D)`, `X-Y-D`, `port(W-H, D)`, `zone(W-H, D)`, `align(Direction, D)`, `style(Attrs, D)`
 - **Styles**: `bold`, `faint`, `italic`, `underline`, `negative`, `crossed_out`; colours `fg(C)`, `bg(C)` and the bright `hfg(C)`, `hbg(C)`, C being `black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `white`, `default` or an index 0..255; and `fg(R, G, B)`, `bg(R, G, B)`
 - **Alignment**: a zone has extent W×H whatever it draws, and an `align` directly in it (or in its list) is placed against its edges: `up_left`, `up`, `up_right`, `left`, `center`, `right`, `down_left`, `down`, `down_right`. The view is drawn in a zone the size of the terminal.
-- **Core drawables**: `row/1`, `column/1`, `table(Style, Rows)` (`empty`, `space`, `thin`, `thick`, `double`; each cell is a zone), `wrapped(Width, Chars)`, `clear(W-H)`, `line(Char, From, To)`, `box(W-H, Chars)` (`thin`, `thick`, `double`, or your own characters), `hover(Style, D)`, `cursor(D)`
+- **Core drawables**: `row/1`, `column/1`, `table(Style, Rows)` (`empty`, `space`, `thin`, `thick`, `double`; each cell is a zone), `wrapped(Width, Chars)`, `clear(W-H)`, `line(Char, From, To)`, `box(W-H, Chars)` (`thin`, `thick`, `double`, or your own characters), `hover(Style, D)`, `cursor(D)`, `highlight(D)` (each cell inverted, as the cursor's is: `negative` added, or removed; a negative space with no underline on the default background is underlined instead, as it would otherwise be blank; nested highlights highlight once)
 - **Components** (opt-in, `:- use_module(library(tui/components))`): `check_box/2`, `button/1`, `input/3`, `frame/2`, `titled_frame/3`, `scroll/3`
 - **Tagging**: `Key : Drawable` — attaches an identity for event routing
 
@@ -182,7 +183,7 @@ Each screen coordinate tracks which components produced it (the alias stack). Wh
 - `expect(runs(Runs))`: the app paints exactly Runs, or anything if Runs is unbound
 - `expect(graphics(Actions))`: the app sends exactly these image uploads and placements, before the runs of the same paint
 
-Entries are consumed in order. A run is `(X-Y)-(Attrs-Chars)`: 1-based screen coordinates, the style attributes, and the characters as a list of one-character atoms. Painting is incremental, so after the first paint `Runs` holds only the runs that changed (each whole), and erased cells appear as spaces. The cursor's cell is painted `negative`. Once the script is used up, every request for events gets `[eos]`, which a test app typically answers with `result(...)`. The terminal's properties are not reported unless the script sends them.
+Entries are consumed in order. A run is `(X-Y)-(Attrs-Chars)`: 1-based screen coordinates, the style attributes, and the characters as a list of one-character atoms. Painting is incremental, so after the first paint `Runs` holds only the runs that changed (each whole), and erased cells appear as spaces. The cursor's cell is painted highlighted, as by `highlight(D)`: usually `negative`. Once the script is used up, every request for events gets `[eos]`, which a test app typically answers with `result(...)`. The terminal's properties are not reported unless the script sends them.
 
 ```prolog
 :- use_module(library(tui)).

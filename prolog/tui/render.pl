@@ -21,10 +21,12 @@ frame needs only the runs not already on screen.
 %!  limits_cursor_commands_runs(+Limits, +Cursor, +Commands, -Runs) is det.
 %
 %  Runs are the frame's runs, (X-Y)-(Attrs-Chars), within Limits and in
-%  standard order, with the cell at Cursor (X-Y, or none) highlighted.
-%  The highlight is part of the cell's style, so the cursor cell forms
-%  its own run and moving the cursor changes the runs it touches. A
-%  cursor on a cell nothing was drawn on shows as a highlighted space.
+%  standard order. The cells drawn by highlight/1, and the cell at Cursor
+%  (X-Y, or none), are highlighted, once however many apply (see
+%  highlight/1). The highlight is part of the cell's style, so the cursor
+%  cell forms its own run and moving the cursor changes the runs it
+%  touches. A cursor on a cell nothing was drawn on shows as a negative
+%  space.
 limits_cursor_commands_runs(Limits, Cursor, Commands, Runs) :-
     include(limits_command_within(Limits), Commands, Onscreen),
     maplist(cursor_command_cell(Cursor), Onscreen, Cells0),
@@ -37,14 +39,53 @@ limits_command_within(Limits, XY-_) :-
     limits_point_within(Limits, XY).
 
 % Cells are keyed Y-X, so that sorting them by key is row-major.
-cursor_command_cell(Cursor, (X-Y)-(_-A-C), (Y-X)-(Attrs-Char)) :-
+cursor_command_cell(Cursor, (X-Y)-(Stack-A-C), (Y-X)-(Attrs-Char)) :-
     flatten(A, A1),
     raw_attributes_attributes(A1, A2),
     attributes_char_shown(A2, C, Attrs0, Char),
-    (   Cursor = X-Y
-    ->  append(Attrs0, [negative], Attrs)
+    (   (   Cursor = X-Y
+        ;   memberchk(_-highlight(_), Stack)
+        )
+    ->  char_attributes_highlighted(Char, Attrs0, Attrs)
     ;   Attrs = Attrs0
     ).
+
+% The highlight: negative added, or else removed; a space that would
+% then be blank (no underline, the default background) loses negative
+% and is underlined instead.
+char_attributes_highlighted(Char, Attrs0, Attrs) :-
+    attributes_effective(Attrs0, Effective),
+    (   memberchk(negative, Effective)
+    ->  exclude(==(negative), Attrs0, Attrs1),
+        (   Char == ' ',
+            \+ memberchk(underline, Effective),
+            effective_background_default(Effective)
+        ->  append(Attrs1, [underline], Attrs)
+        ;   Attrs = Attrs1
+        )
+    ;   append(Attrs0, [negative], Attrs)
+    ).
+
+% The attributes in effect: those after the last reset, as the terminal
+% applies them in order.
+attributes_effective(Attrs, Effective) :-
+    (   append(_, [reset | After], Attrs),
+        \+ memberchk(reset, After)
+    ->  Effective = After
+    ;   Effective = Attrs
+    ).
+
+% The last background set, if any, is the default.
+effective_background_default(Effective) :-
+    include(is_background_attribute, Effective, Bgs),
+    (   last(Bgs, Bg)
+    ->  Bg == bg(default)
+    ;   true
+    ).
+
+is_background_attribute(bg(_)).
+is_background_attribute(bg(_, _, _)).
+is_background_attribute(hbg(_)).
 
 limits_cursor_cells_shown(Limits, X-Y, Cells, [(Y-X)-([negative]-' ') | Cells]) :-
     limits_point_within(Limits, X-Y),

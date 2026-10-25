@@ -28,6 +28,7 @@ This is a SWI-Prolog pack. Library modules live in `prolog/`, internal modules i
 - `prolog/tui/assocs.pl` — `tui_assocs`
 - `examples/` — one topic each: `hello.pl`, `layout.pl`, `align.pl`, `events.pl`, `cursor.pl`, `gallery.pl` (the components), `move.pl`, `image.pl`, `async.pl` (subscriptions: a timer and a worker thread), `reload.pl` (hot reloading, stderr events). Test files must not load examples: their `initialization(main, main)` would run the app
 - `examples/atto.pl` — atto, a tiny text editor: key bindings and view; `examples/atto_lib.pl` is its editing model (document, cursor, scrolling, files), driven by commands
+- `examples/ink.pl` — ink, an editor for ANSI-styled text on an 80-column screen: key bindings and view; `examples/ink_lib.pl` is its editing model (cells, rectangular selection, styles, clipboard, files), and `examples/sgr_screen_lib.pl` replays a file's text (cursor movement and SGR) onto rows of styled cells and writes them back. Both libraries are tested in `test/test_tui.pl`
 - `app/tui.pl` — `swipl tui`: lists, runs and prints the examples (SWI-Prolog finds a pack's `app/` scripts). The list is `examples/*.pl` less `*_lib.pl`, titled by each module's `<module>` line
 - `test/test_tui.pl` — plunit tests
 - `pack.pl` — pack metadata
@@ -36,6 +37,7 @@ This is a SWI-Prolog pack. Library modules live in `prolog/`, internal modules i
 
 - **Run an example**: `swipl app/tui.pl run gallery` (`swipl tui run gallery` once installed; `examples`, `source NAME` too). It runs `swipl -p library=prolog examples/gallery.pl -- ARGS` in a child process, the `--` keeping swipl from loading a `.pl` argument as code
 - **Run the atto editor**: `swipl app/tui.pl run atto FILE`
+- **Run the ink editor**: `swipl app/tui.pl run ink FILE`
 - **Verify an example loads**: `swipl -p library=prolog -g "list_undefined, halt" examples/gallery.pl` (`-g` goals run before the example's main)
 - **Painting benchmark** (needs a real terminal): `swipl -p library=prolog bench/paint.pl [FRAMES]` — how long the terminal takes to draw prepared runs, synced with a device-attributes round trip
 - **Pipeline benchmark** (runs anywhere): `swipl -p library=prolog bench/pipeline.pl [REPEATS]` — per-stage cost of turning a view into runs
@@ -108,7 +110,7 @@ Drawables are a term-based DSL rendered via the DCG `drawable//5`. Key drawable 
   - `.\/` — vertical concat (top then bottom)
   - `./\` — vertical concat, bottom-aligned first
 - **Combinators**: `translate(DX-DY, D)`, `port(W-H, D)`, `style(Attrs, D)`, `X-Y-D` (shorthand for translate), `zone(W-H, D)` (extent W×H regardless of D; no clipping), `align(Dir, D)` (placed against the edges of the zone it is directly in, or in that zone's list; elsewhere just D). The loop draws the view as `zone(Cols-Rows, View)`, so the frame's extent, and the cursor's range, is the terminal. Aligns are measured once with `drawable_raw`; `table/2` measures each cell once and places it as an already-aligned zone, merging the borders of per-cell boxes with `corners_unified/2`.
-- **Core drawables**: `row/1`, `column/1`, `wrapped(Width, Chars)`, `clear(W-H)`, `line(Char, From, To)`, `box(W-H, Chars)` (Chars is `box_chars(H, V, TL, TR, BL, BR)` or `thin`/`thick`/`double`), `hover(Style, D)`, `cursor(D)`
+- **Core drawables**: `row/1`, `column/1`, `wrapped(Width, Chars)`, `clear(W-H)`, `line(Char, From, To)`, `box(W-H, Chars)` (Chars is `box_chars(H, V, TL, TR, BL, BR)` or `thin`/`thick`/`double`), `hover(Style, D)`, `cursor(D)`, `highlight(D)`. `cursor/1` and `highlight/1` are identity aliases: what they mean is found in the cells' alias stacks (the loop places the cursor, `render.pl` highlights the cursor's cell and the cells drawn by `highlight/1`, once however many apply), not in their attributes, which are SGR only
 - **Tagging**: `Key : Drawable` — annotates a drawable with a tag for event routing (see below)
 
 Expansion produces a flat list of `(X-Y)-(Stack-Attrs-Char)` commands, deduplicated (last wins). `render.pl` resolves each cell (hover, conceal, cursor highlight) and groups cells into runs `(X-Y)-(Attrs-Chars)`.
