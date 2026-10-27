@@ -24,8 +24,27 @@ true under the cursor turns the hover style on for the whole group.
 %  component, Style attributes are applied.
 tui:alias_drawable(hover(Style, Term), hover(Style, Term, _Group)).
 
+%!  hover(+Style, +Term, ?Group)
+%
+%  As hover/2, in the hover group Group: an unbound variable that
+%  hovers sharing it turn on together, when the cursor is over any of
+%  them. For example, a button whose end caps change shape on focus:
+%
+%      tui:alias_drawable(button(Text), hover([negative], Content, G)) :-
+%          Content = hover([char('▌')], '┃', G) .> Text
+%                 .> hover([char('▐')], '┃', G).
 tui:alias_drawable(hover(Style, Term, Group), HoverTerm) :-
     HoverTerm = style([style_hovergroup(Style, Group)], Term).
+
+%!  unhovered(+Style, +Term, ?Group)
+%
+%  The other state of hover/3: Style applies while Group is off, and is
+%  dropped when the cursor turns it on. For example, a field underlined
+%  except when focused, where it is negative:
+%
+%      hover([negative], unhovered([underline], Field, G), G)
+tui:alias_drawable(unhovered(Style, Term, Group), UnhoveredTerm) :-
+    UnhoveredTerm = style([style_unhovergroup(Style, Group)], Term).
 
 
 '#focus'.
@@ -51,12 +70,18 @@ stack_focused([_ | Tail]) :-
 %!  raw_attributes_attributes(+Raw, -Attrs) is det.
 %
 %  Attrs is Raw with each hover group replaced by its style when on, and
-%  dropped when off. Groups still unbound are off.
+%  dropped when off; an unhovered group the other way round. Groups still
+%  unbound are off.
 raw_attributes_attributes([], []).
 raw_attributes_attributes([style_hovergroup(_, false)|T], Attr) :- !,
     raw_attributes_attributes(T, Attr).
 raw_attributes_attributes([style_hovergroup(S, true)|T], Attr) :- !,
     append(S, T, ST),
     raw_attributes_attributes(ST, Attr).
+raw_attributes_attributes([style_unhovergroup(S, false)|T], Attr) :- !,
+    append(S, T, ST),
+    raw_attributes_attributes(ST, Attr).
+raw_attributes_attributes([style_unhovergroup(_, true)|T], Attr) :- !,
+    raw_attributes_attributes(T, Attr).
 raw_attributes_attributes([H|T], [H|A]) :- !,
     raw_attributes_attributes(T, A).

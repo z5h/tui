@@ -83,33 +83,49 @@ command((X-Y)-(Stack-Attrs-C)) :-
 
 %!  attributes_char_shown(+Attrs0, +Char0, -Attrs, -Char) is det.
 %
-%  Attrs and Char are what a cell drawn as Char0 in Attrs0 shows. A
-%  concealed cell (conceal, not undone by a later reveal) shows a space
-%  in its remaining style.
-attributes_char_shown(Attrs0, C, Attrs, Char) :-
-    attributes_revealed(Attrs0, Attrs1),
-    revealed_char_attributes_shown(Attrs1, C, Attrs, Char).
-
-attributes_revealed(A, R) :-
-    exclude('='(conceal), A, A1),
-    (   A1 = A
-    ->  R  = A
-    ;   exclude('='(reveal), A1, A2),
-        (   A2 = A1
-        ->  R = [conceal | A1]
-        ;   R = A2
-        )
+%  Attrs and Char are what a cell drawn as Char0 in Attrs0 shows. Attrs0
+%  is applied in order, outermost style first. Char is that of the last
+%  char(C), or else Char0; Attrs is Attrs0 without char/1, its SGR
+%  attributes only.
+attributes_char_shown(Attrs0, C0, Attrs, Char) :-
+    partition(char_attribute, Attrs0, Chars, Attrs),
+    (   last(Chars, char(C))
+    ->  Char = C
+    ;   Char = C0
     ).
 
-revealed_char_attributes_shown([conceal | Attrs], _, Attrs, ' ') :- !.
-revealed_char_attributes_shown(Attrs, C, Attrs, C).
+char_attribute(char(_)).
 
 
 '#attributes'.
 
-is_stlye_attribute(A) :-
-    member(A, [reset,
-               bold,
+% An attribute is an SGR attribute, which reaches the terminal, or a
+% special one, resolved before it: a hover or unhovered group
+% (tui/hover.pl);
+% char(C), which draws the single-column character C in place of what
+% was drawn; or cursor_hidden, under which the cursor is not shown
+% (tui/render.pl).
+is_attribute(A) :-
+    is_sgr_attribute(A).
+is_attribute(A) :-
+    is_special_attribute(A).
+
+is_sgr_attribute(A) :- is_sgr_style_attribute(A).
+is_sgr_attribute(A) :- is_color_attribute(A).
+
+% NOTE: hover is not a drawable concern; style_hovergroup leaks in from
+% tui/hover.pl.
+is_special_attribute(style_hovergroup(Style, _G)) :-
+    maplist(is_attribute, Style).
+is_special_attribute(style_unhovergroup(Style, _G)) :-
+    maplist(is_attribute, Style).
+is_special_attribute(char(C)) :-
+    atom(C),
+    atom_length(C, 1).
+is_special_attribute(cursor_hidden).
+
+is_sgr_style_attribute(A) :-
+    member(A, [bold,
                italic,
                underline,
                negative,
@@ -127,17 +143,6 @@ is_color_attribute(A) :-
     ; A = hfg(Color)
     ),
     my_color(Color).
-
-ansi_attribute(A) :- is_stlye_attribute(A).
-ansi_attribute(A) :- is_color_attribute(A).
-
-is_attribute(hide_cursor).
-% NOTE: hover is not a drawable concern; style_hovergroup leaks in from
-% tui/hover.pl.
-is_attribute(style_hovergroup(Style, _G)) :-
-    maplist(ansi_attribute, Style).
-is_attribute(A) :-
-    ansi_attribute(A).
 
 % The colours tui/terminal.pl encodes: a name, or an index 0..255.
 my_color(C) :-
@@ -532,9 +537,10 @@ style_table_border(Style, Xs, Ws, Ys, Hs, raw(Merged)) :-
 
 %!  clear(+Size)
 %
-%  A W×H rectangle of spaces with reset styling, Size being W-H. Used to
-%  erase a region before drawing over it.
-tui:alias_drawable(clear(W-H), style([reset, bg(default)], Spaces)) :-
+%  A W×H rectangle of spaces, Size being W-H, in the enclosing style: it
+%  covers what is under it with the surrounding background, before
+%  drawing over it.
+tui:alias_drawable(clear(W-H), Spaces) :-
     W1 is W - 1,
     H1 is H - 1,
     findall((X-Y)-' ',
@@ -655,8 +661,7 @@ tui:alias_drawable(cursor(D), D).
 %  negative is added, or removed if the cell is negative. A negative
 %  space without underline on the default background would then be
 %  blank, so it loses negative and is underlined instead (in its
-%  foreground colour). Only the style in effect counts, what follows the
-%  cell's last reset. Highlighting is idempotent: a cell inside several
+%  foreground colour). Highlighting is idempotent: a cell inside several
 %  highlights is highlighted once. The cursor's cell is highlighted the
 %  same way. Like cursor/1, it changes no style here: the cells it draws
 %  carry it in their alias stack, and rendering highlights them.

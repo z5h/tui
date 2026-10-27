@@ -2,6 +2,33 @@
 
 `version/1` in `pack.pl` is the version. Releases are tagged `V<version>`.
 
+## Unreleased
+
+### Changed (may break apps)
+
+- **Nested styles: the innermost now wins.** In `style(Outer, style(Inner, D))`, Inner was applied first and Outer last, so Outer won: `style([fg(red)], style([fg(blue)], a))` showed red, and an outer `reset` cancelled every style inside it. Inner is now applied last. A component's own styles are no longer overridden by the styles around it; to restyle a whole view, change its commands' attributes.
+- **`reset` is no longer a style attribute.** Each run is painted from the default style anyway, and with the innermost winning, an inner `reset` could only cancel the styles around it. Leave it out, or set the attributes wanted.
+- **`clear(W-H)` draws its spaces in the enclosing style**, instead of resetting it: it covers what is under it with the surrounding background, unless a background is set explicitly.
+- **The components are restyled** (`library(tui/components)`, design in `QUIET_GRID.md`). Focus is shown negative instead of bold, and faint no longer marks unset values:
+  - `frame/2-3`, `titled_frame/3-4`: rules across the full width above and below, no side walls; the viewport is still (W-2)×(H-2) from 1-1, between blank columns. The whole frame is cleared. The title sits in the top rule from its first column, without the `╴ ╶` ends.
+  - `button/1`: `┃Label┃`, and focused a negative `▌Label▐`, instead of `[ Label ]`.
+  - `check_box/2`: `[x] Title` instead of `[x]: Title`, in normal video whether checked or not. A third value, `partial`, shows `[-]` and toggles to `true`.
+  - Buttons and check boxes hide the cursor, and left and right move it out of them in one keypress.
+  - `input/3`: a bold `> `; the placeholder in angle brackets, italic. Focused, prompt and field are negative and the field loses its underline; the placeholder is then not shown.
+  - `scroll/3`: only the thumb is drawn, no track: in the frame's right column (right-half blocks) and in its bottom rule (lower-half blocks, still underlined).
+
+### Added
+
+- `char(C)` as a style attribute: every cell drawn under it shows the character C (one column wide) in place of what was drawn. The innermost wins. Its main use is in a hover style, where glyphs change on focus: hovers sharing a group variable, `hover(Style, D, Group)`, turn on together.
+- `cursor_hidden` as a style attribute: the cursor is not shown on cells drawn under it. It keeps its position, and events bubble as before; only its highlight is not drawn (cells drawn by `highlight/1` still are). For components that move the cursor out in one keypress, such as buttons.
+- `unhovered(Style, D, Group)`: the other state of `hover(Style, D, Group)`. Style applies while the group is off, and is dropped when the cursor turns it on.
+- `rule(Width)` (components): a horizontal rule, spaces drawn underlined.
+- `examples/gallery.pl`: laid out for 80×24, with a partial check box and a status line (the last event, and key hints).
+
+### Removed
+
+- The unused `conceal` and `reveal` handling, and the `hide_cursor` attribute. No drawable could use them: they were not accepted as attributes. `char(' ')` conceals.
+
 ## 0.2.1
 
 ### Fixed

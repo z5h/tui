@@ -23,41 +23,63 @@ tagging, cursor) are core, in library(tui/drawable).
 
 %!  check_box(+Title, +Bool)
 %
-%  A toggleable checkbox. Displays [x] or [ ] followed by Title, faint
-%  when unchecked, bold with the cursor on it.
+%  A toggleable checkbox: [x], [ ] or [-] (Bool true, false or
+%  partial), then Title. With the cursor on it, box and title are
+%  negative as one unit. The cursor is hidden on it, and left and right
+%  move it out of the check box in one keypress.
 %
 %  Events produced:
-%    * check_box-NewBool on space, return or a left click (toggles Bool)
-tui:alias_drawable(check_box(Title, Bool), hover([bold], Check)) :-
-    (  Bool = true
-    -> Check = style([     ], ('[x]' .> ': ' .> Title))
-    ;  Check = style([faint], ('[ ]' .> ': ' .> Title))
-    ).
+%    * check_box-NewBool on space, return or a left click: true becomes
+%      false, false and partial become true
+tui:alias_drawable(check_box(Title, Bool), style([cursor_hidden], hover([negative], Box .> ' ' .> Title))) :-
+    bool_box(Bool, Box).
 
-not(true, false).
-not(false, true).
+bool_box(true, '[x]').
+bool_box(false, '[ ]').
+bool_box(partial, '[-]').
 
-tui:at_event_is(check_box(_Title, Bool), _-' ', check_box-T) :- not(Bool, T).
-tui:at_event_is(check_box(_Title, Bool), _-return, check_box-T) :- not(Bool, T).
-tui:at_event_is(check_box(_Title, Bool), _-mouse(press, left), check_box-T) :- not(Bool, T).
+bool_toggled(true, false).
+bool_toggled(false, true).
+bool_toggled(partial, true).
+
+tui:at_event_is(check_box(_Title, Bool), _-' ', check_box-T) :- bool_toggled(Bool, T).
+tui:at_event_is(check_box(_Title, Bool), _-return, check_box-T) :- bool_toggled(Bool, T).
+tui:at_event_is(check_box(_Title, Bool), _-mouse(press, left), check_box-T) :- bool_toggled(Bool, T).
+tui:at_event_is(check_box(_, _), (X-_)-left, cursor_by(DX-0)) :-
+    DX is -(X + 1).
+tui:at_event_is(check_box(Title, _), (X-_)-right, cursor_by(DX-0)) :-
+    phrase(drawable(Title, [], [], 0-0, MX-_), _),
+    DX is MX + 5 - X.
 
 %!  button(+Label)
 %
-%  A button, shown as [ Label ], bold with the cursor on it.
+%  A button, shown as ┃Label┃. With the cursor on it, it is negative
+%  and its caps become ▌ and ▐, a pill with half-cell padding. The
+%  cursor is hidden on it, and left and right move it out of the button
+%  in one keypress.
 %
 %  Events produced:
 %    * button-pressed on space, return or a left click
-tui:alias_drawable(button(Label), hover([bold], '[ ' .> Label .> ' ]')).
+tui:alias_drawable(button(Label), style([cursor_hidden], hover([negative], Content, G))) :-
+    Content = hover([char('▌')], '┃', G) .> Label .> hover([char('▐')], '┃', G).
 
 tui:at_event_is(button(_), _-' ', button-pressed).
 tui:at_event_is(button(_), _-return, button-pressed).
 tui:at_event_is(button(_), _-mouse(press, left), button-pressed).
+tui:at_event_is(button(_), (X-_)-left, cursor_by(DX-0)) :-
+    DX is -(X + 1).
+tui:at_event_is(button(Label), (X-_)-right, cursor_by(DX-0)) :-
+    phrase(drawable(Label, [], [], 0-0, MX-_), _),
+    DX is MX + 3 - X.
 
 %!  input(+Width, +Placeholder, ?Value)
 %
-%  A one-line text field Width wide, after a faint '> ', bold with the
-%  cursor on it. Shows Value underlined, or while Value is unbound, the
-%  Placeholder faint and underlined. Text beyond Width is not shown.
+%  A one-line text field Width wide, underlined, after a bold '> '. Shows
+%  Value, or while Value is unbound, the Placeholder in angle brackets,
+%  italic (none if Placeholder is empty). Text beyond Width is not shown.
+%  With the cursor on it, prompt and field are negative and the field
+%  loses its underline (a negative underline would show as a slice cut
+%  from the bar); the cursor is shown in it, and the placeholder is not.
 %
 %  The cursor stays where text can be edited: arriving by arrow or click
 %  past the end of the text (trailing spaces are text; the padding to
@@ -71,16 +93,20 @@ tui:at_event_is(button(_), _-mouse(press, left), button-pressed).
 %  Events produced:
 %    * input-NewValue, a string, followed by cursor_by(DX-0) if the
 %      cursor must move to stay after the edit
-tui:alias_drawable(input(W, PlaceholderA, ValueA), hover([bold], D)) :-
+tui:alias_drawable(input(W, PlaceholderA, ValueA), hover([negative], D, G)) :-
     atomics_to_string([PlaceholderA], Placeholder),
     (  var(ValueA)
-    -> string_length_adjusted(Placeholder, W, Displayed),
-       Field = style([underline, faint], 0-0-Displayed)
+    -> (   Placeholder == ""
+       ->  Shown = ""
+       ;   atomics_to_string(["<", Placeholder, ">"], Shown)
+       ),
+       string_length_adjusted(Shown, W, Displayed),
+       Field = unhovered([underline], hover([char(' ')], style([italic], Displayed), G), G)
     ;  atomics_to_string([ValueA], Value),
        string_length_adjusted(Value, W, Displayed),
-       Field = style([underline], 0-0-Displayed)
+       Field = unhovered([underline], Displayed, G)
     ),
-    D = [style([faint], 0-0-'> '),
+    D = [style([bold], '> '),
          2-0-Field].
 
 % Arriving past the end of the text, or on the prompt, the cursor moves
@@ -167,57 +193,62 @@ string_index_inserted_edited(S, I, Value, Edited) :-
 
 '#containers'.
 
+%!  rule(+Width)
+%
+%  A horizontal rule Width cells long: spaces drawn underlined, a
+%  hairline along the baseline.
+tui:alias_drawable(rule(W), style([underline], Spaces)) :-
+    repeat_char_string(W, ' ', Spaces).
+
 %!  frame(+Size, +Contents)
 %
-%  A thin-bordered box of size W×H, Size being W-H, containing Contents
-%  in a viewport. The interior is cleared before rendering.
+%  A frame W×H, Size being W-H, containing Contents in a viewport. Its
+%  top and bottom rows are rules across the full width; it has no side
+%  walls. The viewport is (W-2)×(H-2), from 1-1, leaving a blank column
+%  either side (the right one takes a vertical scrollbar, see scroll/3).
+%  The whole frame is cleared before rendering.
 tui:alias_drawable(frame(W-H, Contents), frame(W-H, Contents, _)).
 
 %!  frame(+Size, +Contents, -Extent)
 %
 %  As frame/2; Extent is unified with the MaxX-MaxY of the content
 %  (useful for scrolling).
-tui:alias_drawable(frame(W-H, Contents, Extent), [Clear, Box, Port]) :-
+tui:alias_drawable(frame(W-H, Contents, Extent), [clear(W-H), Top, Bottom, Port]) :-
     (  W > 1, H > 1
     -> true
     ;  domain_error(valid_window_size, W-H)
     ),
-    Box = box(W-H, thin),
+    HM1 is H - 1,
+    Top = rule(W),
+    Bottom = 0-HM1-rule(W),
     PW is W - 2,
     PH is H - 2,
-    Clear = 1-1-clear(PW-PH),
-    Port =  1-1-port(PW-PH, Contents, Extent).
+    Port = 1-1-port(PW-PH, Contents, Extent).
 
 %!  titled_frame(+Size, +Title, +Contents)
 %
-%  A frame (see frame/2) with Title in its top border, cut off at the
-%  frame's edge. Title is any drawable.
+%  A frame (see frame/2) with Title in its top rule, from its first
+%  column, underlined and cut off at the frame's edge. Title is any
+%  drawable.
 tui:alias_drawable(titled_frame(W-H, Title, Contents), titled_frame(W-H, Title, Contents, _)).
 
 %!  titled_frame(+Size, +Title, +Contents, -Extent)
 %
 %  As titled_frame/3, with Extent as in frame/3.
-tui:alias_drawable(titled_frame(W-H, Title, Contents, Extent), [FramePart, 1-0-TitlePart]) :-
-    title_l(TL),
-    title_r(TR),
+tui:alias_drawable(titled_frame(W-H, Title, Contents, Extent), [FramePart, TitlePart]) :-
     FramePart = frame(W-H, Contents, Extent),
-    MaxTitleLength is W - 2,
-    TitlePart = port(MaxTitleLength-1, TL .> Title .> TR).
-
-title_l('╴').
-title_r('╶').
+    TitlePart = style([underline], port(W-1, Title)).
 
 
 '#scrolling'.
 
 %!  scroll(+Size, +Offset, +Content)
 %
-%  A scrollable frame. Content is rendered inside a W×H bordered
+%  A scrollable frame (see frame/2). Content is rendered in a W×H frame's
 %  viewport (Size being W-H), offset by Offset, ScrollX-ScrollY (each 0
-%  or negative). On each axis where
-%  the content does not fit, a scrollbar replaces that edge of the border
-%  (bottom for horizontal, right for vertical), drawn with half-cell
-%  resolution.
+%  or negative). On each axis where the content does not fit, a
+%  scrollbar shows its thumb, with half-cell resolution and no track:
+%  vertical in the frame's right column, horizontal in its bottom rule.
 %
 %  Shift+arrows drag what is under the cursor, as with a mouse:
 %
@@ -251,7 +282,7 @@ tui:alias_drawable(scroll(W-H, X-Y, Content), scroll_view(X-Y, MaxH-MaxV, PH, [F
     (   CW > PW
     ->  port_content_offset_axis_scrollbar(PW, CW, X, h, HScroll),
         port_content_step(PW, CW, StepH),
-        HBars = [1-HM1-hscroll(HScroll, StepH, PW-CW)]
+        HBars = [1-HM1-hscroll(style([underline], HScroll), StepH, PW-CW)]
     ;   HBars = []
     ),
     (   CH > PH
@@ -343,18 +374,21 @@ string_length_adjusted(S, L, A) :-
        string_chars(A, AC)
     ).
 
-% Scroll indicator characters: each cell shows two halves, thin (s) or
-% thick (f), so the thumb has half-cell resolution.
+% Scroll thumb characters: each cell shows two halves, the thumb (f) or
+% nothing (s), so the thumb has half-cell resolution. There is no track.
+% The vertical thumb takes the right half of its column, a half-cell gap
+% from the content; the horizontal one the lower half of its row, on the
+% rule.
 
-scroll_char(h, s, s, '─').
-scroll_char(h, f, f, '━').
-scroll_char(h, s, f, '╼').
-scroll_char(h, f, s, '╾').
+scroll_char(h, s, s, ' ').
+scroll_char(h, f, f, '▄').
+scroll_char(h, s, f, '▗').
+scroll_char(h, f, s, '▖').
 
-scroll_char(v, s, s, '│').
-scroll_char(v, f, f, '┃').
-scroll_char(v, s, f, '╽').
-scroll_char(v, f, s, '╿').
+scroll_char(v, s, s, ' ').
+scroll_char(v, f, f, '▐').
+scroll_char(v, s, f, '▗').
+scroll_char(v, f, s, '▝').
 
 % The scrollbar along axis S (h or v) for a port PD cells long, showing
 % content CD long (CD > PD) scrolled to offset CO (0 or negative). Its

@@ -1,11 +1,3 @@
-# revisit focus/hover
-make it so a style element can have hover(style) and that is when it is applied.
-under the hood, we'll do hover(style, Group), then process the list
-to map hover(style,true) -> style, and to remove the others
-
-hover currently leaks into drawable.pl: is_attribute/1 accepts
-style_hovergroup (commented there).
-
 # input decoding
 done: tui/input.pl decodes legacy xterm and the Kitty keyboard protocol,
 which is detected and enabled at startup.
@@ -38,6 +30,12 @@ and zero-width ones (combining marks, ZWJ, variation selectors) none, so
 they currently misplace everything after them on the row. needs a
 char-width relation (wcwidth-like) used by layout, cell resolution and
 the cursor.
+
+# ascii glyph fallback
+the components (QUIET_GRID.md) use Unicode glyphs only. an ASCII
+fallback, for terminals or fonts without them (the Linux text console,
+a non-UTF-8 locale), would need a choice of glyph set, and a way to make
+it (detected, or an option).
 
 # debug / profile mode
 the old TUI_PROFILE render-time overlay was removed. revisit as a broader

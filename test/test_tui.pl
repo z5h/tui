@@ -293,10 +293,33 @@ test(highlighted_blank_underlined) :-
     cursor_drawable_runs(none, highlight(style([negative, bg(red), bg(default)], " ")), R5),
     R5 == [(1-1)-([bg(red), bg(default), underline]-[' '])].
 
-% Attributes before the last reset are not in effect.
-test(highlighted_after_reset) :-
-    cursor_drawable_runs(none, highlight(style([reset], style([negative], "a"))), Runs),
-    Runs == [(1-1)-([negative, reset, negative]-[a])].
+% The innermost style wins: it is applied last.
+test(innermost_wins) :-
+    cursor_drawable_runs(none, style([fg(red)], style([fg(blue)], "a")), R1),
+    R1 == [(1-1)-([fg(red), fg(blue)]-[a])].
+
+% char(C) draws C in place of each character; the innermost wins.
+test(char_replaced) :-
+    cursor_drawable_runs(none, style([bold, char(x)], "ab"), R1),
+    R1 == [(1-1)-([bold]-[x, x])],
+    cursor_drawable_runs(none, style([char(x)], style([char(y)], "a")), R2),
+    R2 == [(1-1)-([]-[y])].
+
+% Cleared cells take the enclosing style.
+test(clear_in_enclosing_style) :-
+    cursor_drawable_runs(none, style([bg(blue)], clear(2-1)), Runs),
+    Runs == [(1-1)-([bg(blue)]-[' ', ' '])].
+
+% Hovers sharing a group turn on together.
+test(char_hovered) :-
+    D = hover([negative], hover([char('▌')], '┃', G) .> "ok" .> hover([char('▐')], '┃', G), G),
+    copy_term(D, D1),
+    cursor_drawable_runs(none, D1, R1),
+    R1 == [(1-1)-([]-['┃', o, k, '┃'])],
+    copy_term(D, D2),
+    cursor_drawable_runs(4-1, D2, R2),
+    R2 == [(1-1)-([negative]-['▌', o, k]),
+           (4-1)-([]-['▐'])].
 
 test(highlight_idempotent) :-
     cursor_drawable_runs(none, highlight(highlight(style([negative], " "))), R1),
@@ -306,6 +329,28 @@ test(highlight_idempotent) :-
     cursor_drawable_runs(none, highlight("a"), R4),
     R3 == R4,
     R3 == [(1-1)-([negative]-[a])].
+
+% unhovered/3 styles the other state: on while its group is off.
+test(unhovered) :-
+    D = hover([negative], unhovered([underline], "ab", G), G),
+    copy_term(D, D1),
+    cursor_drawable_runs(none, D1, R1),
+    R1 == [(1-1)-([underline]-[a, b])],
+    copy_term(D, D2),
+    cursor_drawable_runs(1-1, D2, R2),
+    R2 == [(1-1)-([]-[a]), (2-1)-([negative]-[b])].
+
+% Under cursor_hidden the cursor is not shown, but highlight/1 still is;
+% the cursor keeps its position.
+test(cursor_hidden) :-
+    cursor_drawable_runs(1-1, style([cursor_hidden], "ab"), R1),
+    R1 == [(1-1)-([]-[a, b])],
+    cursor_drawable_runs(1-1, style([cursor_hidden], highlight("a")), R2),
+    R2 == [(1-1)-([negative]-[a])],
+    cursor_drawable_runs(2-1, "a" .> style([cursor_hidden], "b"), R3),
+    R3 == [(1-1)-([]-[a, b])],
+    cursor_drawable_runs(1-1, "a" .> style([cursor_hidden], "b"), R4),
+    R4 == [(1-1)-([negative]-[a]), (2-1)-([]-[b])].
 
 test(cursor_highlights) :-
     cursor_drawable_runs(1-1, style([negative], " "), Runs),
@@ -591,6 +636,23 @@ test(wheel) :-
     drawable_point_event_bubbled(Top, 3-3, mouse(scroll, up), Es3),
     Es3 == [noop].
 
+% Only the thumb is drawn: vertical in the right column, horizontal in
+% the bottom rule, which stays underlined. "line 10" is 7 wide, the
+% port 8: no horizontal scrollbar. A port 3 of 20 rows, or 2 of 6
+% columns, has a thumb one half-cell long.
+test(scroll_shown) :-
+    lines_scroll(0-0, S),
+    drawable_cursor_runs(S, none, R1),
+    R1 == [(1-1)-([underline]-[' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ']),
+           (1-2)-([]-[' ', l, i, n, e, ' ', '1', ' ', ' ', '▝']),
+           (1-3)-([]-[' ', l, i, n, e, ' ', '2', ' ', ' ', ' ']),
+           (1-4)-([]-[' ', l, i, n, e, ' ', '3', ' ', ' ', ' ']),
+           (1-5)-([underline]-[' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' ', ' '])],
+    drawable_cursor_runs(scroll(4-3, 0-0, "abcdef"), none, R2),
+    R2 == [(1-1)-([underline]-[' ', ' ', ' ', ' ']),
+           (1-2)-([]-[' ', a, b, ' ']),
+           (1-3)-([underline]-[' ', '▖', ' ', ' '])].
+
 test(thumb_to_mouse) :-
     lines_scroll(0-(-5), S),
     drawable_point_event_bubbled(S, 10-2, mouse(press, left), Es1),
@@ -690,14 +752,71 @@ test(button, [forall(member(E, [' ', return]))]) :-
     drawable_point_event_bubbled(ok : button("OK"), 3-1, E, Es),
     Es == [ok-pressed].
 
+% The placeholder is in angle brackets, italic; focused, the input is
+% negative without underline, the placeholder is not shown, and the
+% cursor is (a space no longer negative, so underlined).
+test(input_placeholder) :-
+    drawable_cursor_runs(input(5, "f", _), none, R1),
+    R1 == [(1-1)-([bold]-['>', ' ']),
+           (3-1)-([underline, italic]-['<', f, '>', ' ', ' '])],
+    drawable_cursor_runs(input(5, "f", _), 3-1, R2),
+    R2 == [(1-1)-([negative, bold]-['>', ' ']),
+           (3-1)-([italic, underline]-[' ']),
+           (4-1)-([negative, italic]-[' ', ' ', ' ', ' '])].
+
+drawable_cursor_runs(D, Cursor, Runs) :-
+    drawable__normalized_commands__end(D, Commands, _),
+    once(tui_hover:apply_focus(Cursor, Commands)),
+    tui_render:limits_cursor_commands_runs(80-25, Cursor, Commands, Runs).
+
+% Focused, a button is a negative pill and the cursor is hidden on it.
+test(button_shown) :-
+    drawable_cursor_runs(button("OK"), none, R1),
+    R1 == [(1-1)-([]-['┃', 'O', 'K', '┃'])],
+    drawable_cursor_runs(button("OK"), 2-1, R2),
+    R2 == [(1-1)-([negative]-['▌', 'O', 'K', '▐'])].
+
+% Left and right leave a button in one keypress. "a" then ┃OK┃: the
+% button spans x 2 to 5.
+test(button_left) :-
+    drawable_point_event_bubbled("a" .> ok : button("OK"), 3-1, left, Es),
+    Es == [cursor_by((-2)-0)].
+
+test(button_right) :-
+    drawable_point_event_bubbled("a" .> ok : button("OK"), 3-1, right, Es),
+    Es == [cursor_by(3-0)].
+
 test(check_box) :-
     drawable_point_event_bubbled(c : check_box("a", false), 1-1, ' ', Es),
     Es == [c-true].
 
-test(clear_inside_frame) :-
+test(check_box_partial) :-
+    drawable_point_event_bubbled(c : check_box("a", partial), 1-1, ' ', Es),
+    Es == [c-true].
+
+% "[ ] ab": left and right leave it in one keypress.
+test(check_box_leaves) :-
+    drawable_point_event_bubbled("z" .> c : check_box("ab", false), 4-1, left, Es1),
+    Es1 == [cursor_by((-3)-0)],
+    drawable_point_event_bubbled("z" .> c : check_box("ab", false), 4-1, right, Es2),
+    Es2 == [cursor_by(4-0)].
+
+% A frame is cleared whole: rules above and below, blank sides.
+test(frame) :-
     drawable__normalized_commands__end(frame(4-3, []), Commands, _),
-    forall(member((X-Y)-(_-_-' '), Commands),
-           ( X == 2, Y == 2 ; X == 3, Y == 2 )).
+    tui_render:limits_cursor_commands_runs(80-25, none, Commands, Runs),
+    Runs == [(1-1)-([underline]-[' ', ' ', ' ', ' ']),
+             (1-2)-([]-[' ', ' ', ' ', ' ']),
+             (1-3)-([underline]-[' ', ' ', ' ', ' '])].
+
+% The title is in the top rule, from the first column, cut off at the
+% frame's edge.
+test(titled_frame) :-
+    drawable__normalized_commands__end(titled_frame(4-3, "abcdef", "x"), Commands, _),
+    tui_render:limits_cursor_commands_runs(80-25, none, Commands, Runs),
+    Runs == [(1-1)-([underline]-[a, b, c, d]),
+             (1-2)-([]-[' ', x, ' ', ' ']),
+             (1-3)-([underline]-[' ', ' ', ' ', ' '])].
 
 :- end_tests(input_component).
 

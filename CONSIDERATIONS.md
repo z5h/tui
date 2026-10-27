@@ -114,6 +114,20 @@ Absolute times vary between sessions (a whole run can be ~2x faster or slower); 
 - On kitty, tui's own logic dominates: ~7-23 ms per full 120x40 frame after the sort fix, versus ~1 ms to paint.
 - Expansion (drawables into commands) is now most of the remaining cost: 237 of 244 ms for atto with 2000 lines. The port clips after the whole document is expanded, so every line is expanded on every frame. Candidates: `memoize(Drawable)` (opt-in, keyed on ground drawables), and atto drawing only lines that can be visible.
 
+### Pipeline baseline after innermost-wins styles and `char/1` (26 October 2026)
+
+Cell resolution changed: nested styles are reversed before flattening (innermost wins), and `char(C)` replaced the conceal/reveal handling. Measured after the change, as the baseline for later comparisons. ms, median of 10; scenes 120x40, except `gallery` 80x25.
+
+| scene | cells | runs | view | expand | dedupe | map | assoc | cursor | images | runs | diff | total |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| text | 4800 | 41 | 0.10 | 1.45 | 0.80 | 0.37 | 0.64 | 2.84 | 0.35 | 4.74 | 0.01 | 11.29 |
+| styled | 4800 | 4800 | 3.02 | 2.96 | 0.81 | 0.37 | 0.65 | 0.54 | 0.35 | 5.24 | 0.76 | 14.70 |
+| gallery | 952 | 95 | 0.09 | 1.73 | 0.22 | 0.07 | 0.14 | 0.30 | 0.07 | 1.02 | 0.02 | 3.66 |
+| atto, 100 lines | 5160 | 108 | 0.02 | 6.13 | 1.23 | 0.39 | 0.65 | 2.59 | 0.39 | 5.99 | 0.02 | 17.40 |
+| atto, 2000 lines | 5160 | 105 | 0.06 | 4.98 | 1.20 | 0.39 | 0.65 | 2.35 | 0.39 | 5.58 | 0.02 | 15.60 |
+
+No before figures were taken in the same run, so the change's own cost is not isolated here (absolute times vary between sessions).
+
 
 ## memoize(Drawable) (Attempted, Reverted)
 
