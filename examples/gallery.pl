@@ -14,9 +14,8 @@ page up and down page it. OK prints the model, Cancel and q quit. The
 status line shows the last event and the keys.
 
 The mouse is on (app/5 option mouse(true)): a click moves the cursor
-and presses or toggles what it is on, the wheel scrolls, and pressing or
-dragging on a scrollbar moves its thumb. Hold shift (option on macOS)
-to select text with the mouse instead.
+and presses or toggles what it is on, and the wheel scrolls. Hold shift
+(option on macOS) to select text with the mouse instead.
 
     swipl tui run gallery
 */

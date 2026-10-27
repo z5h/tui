@@ -6,7 +6,8 @@
 
 Apps are tested headless, against the VCR substrate (see tui/vcr.pl).
 The doc unit runs test/doc_check.pl, which checks that the
-documentation is PLDoc.
+documentation is PLDoc, and tools/tui_doc.pl check, which checks the
+alias comments and their transcription (tools/TUI_PLDOC.md).
 */
 
 :- use_module(library(plunit)).
@@ -653,12 +654,13 @@ test(scroll_shown) :-
            (1-2)-([]-[' ', a, b, ' ']),
            (1-3)-([underline]-[' ', '▖', ' ', ' '])].
 
-test(thumb_to_mouse) :-
+% A left press or drag on a scrollbar does not scroll: it bubbles on.
+test(no_thumb_to_mouse) :-
     lines_scroll(0-(-5), S),
     drawable_point_event_bubbled(S, 10-2, mouse(press, left), Es1),
-    Es1 == [scroll-(0-0)],
+    Es1 == [mouse(press, left)],
     drawable_point_event_bubbled(S, 10-4, mouse(drag, left), Es2),
-    Es2 == [scroll-(0-(-17))].
+    Es2 == [mouse(drag, left)].
 
 % What E at point X-Y becomes, on an input showing Value.
 value_point_event_bubbled(Value, XY, E, Es) :-
@@ -1529,4 +1531,122 @@ test(pldoc) :-
         fail
     ).
 
+% tools/tui_doc.pl check, in a process of its own (it loads the whole
+% library, and halts): the alias comments are complete, and their
+% transcription into prolog/tui.pl is up to date. Its report is printed
+% if there is one.
+test(alias_docs) :-
+    module_property(test_tui, file(File)),
+    file_directory_name(File, TestDir),
+    file_directory_name(TestDir, Repo),
+    directory_file_path(Repo, 'tools/tui_doc.pl', Tool),
+    current_prolog_flag(executable, Swipl),
+    setup_call_cleanup(
+        process_create(Swipl, [Tool, check],
+                       [cwd(Repo), stdout(pipe(Out)), stderr(std), process(Pid)]),
+        read_string(Out, _, Report),
+        close(Out)),
+    process_wait(Pid, Status),
+    (   Status == exit(0)
+    ->  true
+    ;   format(user_error, "~s", [Report]),
+        fail
+    ).
+
 :- end_tests(doc).
+
+
+:- begin_tests(tui_doc).
+
+:- use_module('../tools/tui_doc_lib').
+
+% A file of tools/tui_doc_lib.pl, from its lines and alias clauses.
+doc_file(Group, Lines, Clauses, file('f.pl', Group, Lines, Clauses)).
+
+test(comments) :-
+    lines_comments(["x.", "/*<tui> hover(Style, Term)", "Body.", "", "More.", "*/",
+                    "/*<tui> open(X)", "never closed"], Cs),
+    Cs == [comment(2, "hover(Style, Term)", ["Body.", "", "More."], 6), unclosed(7)].
+
+test(no_problems) :-
+    doc_file(core, ["/*<tui> a(X)", "A.", "*/", "tui:alias_drawable(a(X), X).",
+                    "tui:alias_drawable(a(_), []).", "/*<tui> Key:D", "Tag.", "*/",
+                    "tui:alias_drawable(_:D, D)."],
+             [a/1-4, a/1-5, (:)/2-9], F),
+    files_problems([F], Ps),
+    Ps == [].
+
+test(not_directly_above) :-
+    doc_file(core, ["/*<tui> a(X)", "*/", "", "tui:alias_drawable(a(X), X)."], [a/1-4], F),
+    files_problems([F], Ps),
+    Ps = [problem(_, 1, Format, _)|_],
+    once(sub_string(Format, _, _, _, "not directly above")).
+
+test(key_mismatch) :-
+    doc_file(core, ["/*<tui> a(X, Y)", "*/", "tui:alias_drawable(a(X), X)."], [a/1-3], F),
+    files_problems([F], Ps),
+    memberchk(problem(_, 1, _, [_, a/2, a/1]), Ps).
+
+test(not_first_clause) :-
+    doc_file(core, ["tui:alias_drawable(a([]), []).", "/*<tui> a(X)", "*/",
+                    "tui:alias_drawable(a(X), X)."], [a/1-1, a/1-4], F),
+    files_problems([F], Ps),
+    Ps = [problem(_, 2, Format, _)],
+    once(sub_string(Format, _, _, _, "first clause")).
+
+test(undocumented) :-
+    doc_file(core, ["tui:alias_drawable(a(X), X)."], [a/1-1], F),
+    files_problems([F], [problem(_, 1, _, [a/1])]).
+
+test(documented_twice) :-
+    doc_file(core, ["/*<tui> a(X)", "*/", "tui:alias_drawable(a(X), X)."], [a/1-3], F1),
+    doc_file("library(tui/x)", ["/*<tui> a(X)", "*/", "tui:alias_drawable(a(X), X)."], [a/1-3], F2),
+    files_problems([F1, F2], Ps),
+    Ps = [problem(_, 1, Format, _)],
+    once(sub_string(Format, _, _, _, "more than one")).
+
+test(pldoc_above) :-
+    doc_file(core, ["%!  a(+X)", "%", "%  A.", "tui:alias_drawable(a(X), X)."], [a/1-4], F),
+    files_problems([F], Ps),
+    memberchk(problem(_, 4, "`%!` comment above an alias clause", []), Ps).
+
+test(bad_key) :-
+    doc_file(core, ["/*<tui> a(", "*/", "tui:alias_drawable(a(X), X)."], [a/1-3], F),
+    files_problems([F], Ps),
+    memberchk(problem(_, 1, "key `~s` is not a term", _), Ps).
+
+test(doc_lines) :-
+    doc_file("library(tui/components)", ["/*<tui> button(Label)", "A button.", "*/"], [], F1),
+    doc_file(core, ["/*<tui> row(Ds)", "", "Side by side.  ", "", "  - list", "", "*/",
+                    "/*<tui> box(Size, Chars)", "A box.", "*/"], [], F2),
+    files_doc_lines([F1, F2], "  ", Lines),
+    Lines == [ "%",
+               "%  ### Core", "%",
+               "%  #### `box(Size, Chars)`", "%", "%  A box.", "%",
+               "%  #### `row(Ds)`", "%", "%  Side by side.", "%", "%    - list", "%",
+               "%  ### library(tui/components)", "%",
+               "%  #### `button(Label)`", "%", "%  A button.", "%" ].
+
+test(replaced) :-
+    doc_file(core, ["/*<tui> a(X)", "A.", "*/"], [], F),
+    Lines0 = [ ":- x.", "%!  alias_drawable(+A, -D) is semidet.", "%", "%  Hook.", "%",
+               "%  ## Aliases", "%  old", "%", "%  @see b/1", "y." ],
+    lines_doc_lines_replaced(Lines0, [F], Lines),
+    Lines == [ ":- x.", "%!  alias_drawable(+A, -D) is semidet.", "%", "%  Hook.", "%",
+               "%  ## Aliases",
+               "%", "%  ### Core", "%", "%  #### `a(X)`", "%", "%  A.", "%",
+               "%  @see b/1", "y." ],
+    lines_doc_lines_replaced(Lines, [F], Again),
+    Again == Lines.
+
+test(replaced_to_end) :-
+    doc_file(core, ["/*<tui> a(X)", "A.", "*/"], [], F),
+    lines_doc_lines_replaced(["%!  alias_drawable(+A, -D)", "%  ## Aliases", "%  old", "", "y."],
+                             [F], Lines),
+    Lines == ["%!  alias_drawable(+A, -D)", "%  ## Aliases",
+              "%", "%  ### Core", "%", "%  #### `a(X)`", "%", "%  A.", "%", "", "y."].
+
+test(no_slot, [fail]) :-
+    lines_doc_lines_replaced(["%!  alias_drawable(+A, -D)", "%  Hook.", "y."], [], _).
+
+:- end_tests(tui_doc).

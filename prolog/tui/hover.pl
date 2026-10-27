@@ -18,31 +18,35 @@ true under the cursor turns the hover style on for the whole group.
 
 '#component'.
 
-%!  hover(+Style, +Term)
-%
-%  Wrap Term with a hover highlight. When the cursor is over this
-%  component, Style attributes are applied.
+/*<tui> hover(Style, Term)
+Wrap Term with a hover highlight. When the cursor is over this
+component, Style attributes are applied.
+*/
 tui:alias_drawable(hover(Style, Term), hover(Style, Term, _Group)).
 
-%!  hover(+Style, +Term, ?Group)
-%
-%  As hover/2, in the hover group Group: an unbound variable that
-%  hovers sharing it turn on together, when the cursor is over any of
-%  them. For example, a button whose end caps change shape on focus:
-%
-%      tui:alias_drawable(button(Text), hover([negative], Content, G)) :-
-%          Content = hover([char('▌')], '┃', G) .> Text
-%                 .> hover([char('▐')], '┃', G).
+/*<tui> hover(Style, Term, Group)
+As `hover(Style, Term)`, in the hover group Group: an unbound variable
+that hovers sharing it turn on together, when the cursor is over any of
+them. For example, a button whose end caps change shape on focus:
+
+```
+tui:alias_drawable(button(Text), hover([negative], Content, G)) :-
+    Content = hover([char('▌')], '┃', G) .> Text
+           .> hover([char('▐')], '┃', G).
+```
+*/
 tui:alias_drawable(hover(Style, Term, Group), HoverTerm) :-
     HoverTerm = style([style_hovergroup(Style, Group)], Term).
 
-%!  unhovered(+Style, +Term, ?Group)
-%
-%  The other state of hover/3: Style applies while Group is off, and is
-%  dropped when the cursor turns it on. For example, a field underlined
-%  except when focused, where it is negative:
-%
-%      hover([negative], unhovered([underline], Field, G), G)
+/*<tui> unhovered(Style, Term, Group)
+The other state of `hover(Style, Term, Group)`: Style applies while
+Group is off, and is dropped when the cursor turns it on. For example, a
+field underlined except when focused, where it is negative:
+
+```
+hover([negative], unhovered([underline], Field, G), G)
+```
+*/
 tui:alias_drawable(unhovered(Style, Term, Group), UnhoveredTerm) :-
     UnhoveredTerm = style([style_unhovergroup(Style, Group)], Term).
 

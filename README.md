@@ -95,7 +95,7 @@ Views are built from a term-based DSL:
 
 ### Mouse
 
-With `app(State, View, Update, Result, [mouse(true)])`, the terminal reports the mouse. Events are `(X-Y)-mouse(Action, Button)` (Action `press`, `release`, `drag` or `move`; Button `left`, `middle`, `right`, ...) and `(X-Y)-mouse(scroll, Dir)`, with modifiers as for keys (`ctrl+mouse(press, left)`). A mouse event bubbles at its own position, so components see it relative to themselves; a press also moves the cursor there. The ready-made components take clicks, the wheel, and drags on a scrollbar. While reporting is on, select text with shift held (option on macOS). Off by default.
+With `app(State, View, Update, Result, [mouse(true)])`, the terminal reports the mouse. Events are `(X-Y)-mouse(Action, Button)` (Action `press`, `release`, `drag` or `move`; Button `left`, `middle`, `right`, ...) and `(X-Y)-mouse(scroll, Dir)`, with modifiers as for keys (`ctrl+mouse(press, left)`). A mouse event bubbles at its own position, so components see it relative to themselves; a press also moves the cursor there. The ready-made components take clicks and the wheel. While reporting is on, select text with shift held (option on macOS). Off by default.
 
 ### Images
 

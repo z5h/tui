@@ -28,6 +28,13 @@
 ### Removed
 
 - The unused `conceal` and `reveal` handling, and the `hide_cursor` attribute. No drawable could use them: they were not accepted as attributes. `char(' ')` conceals.
+- `scroll/3`: a left press or drag on a scrollbar no longer moves the thumb to the mouse; it was not a good experience. The wheel, Shift+arrows and page up and down scroll as before.
+
+### Documented
+
+- The aliases are documented in the PLDoc of `alias_drawable/2`: a section for the core aliases, then one per opt-in library, each alias with its full description. They were `%!` comments, which PLDoc took for predicates that do not exist. Each alias now has a `/*<tui>` comment in its source, which `tools/tui_doc.pl` transcribes (format: `tools/TUI_PLDOC.md`); the `doc` test unit checks that every alias has one and that the transcription is up to date.
+- The components' descriptions name the exact events they take and produce (`' '`, `return`, `mouse(press, left)`, `noop`, ...).
+- `scroll_view/4`, `vscroll/2` and `hscroll/2` are documented, as aliases meant for `scroll/3`: its events find what they need through them, and events reach components only through aliases. `vscroll` and `hscroll` lost their third argument with the mouse dragging.
 
 ## 0.2.1
 

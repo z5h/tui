@@ -63,7 +63,7 @@ main :-
 % from git, which CI images may lack.
 repository_files(Files) :-
     findall(F,
-            (   member(Dir, [prolog, app, examples, bench, test]),
+            (   member(Dir, [prolog, app, examples, bench, test, tools]),
                 exists_directory(Dir),
                 directory_member(Dir, F0, [extensions([pl]), recursive(true)]),
                 absolute_file_name(F0, F)

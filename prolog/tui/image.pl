@@ -25,26 +25,25 @@ sent to the terminal.
 
 '#drawable'.
 
-%!  image(+Id, +Source, +Size)
-%
-%  The image Source, under Id, shown in W×H cells, Size being W-H. Id is
-%  an integer from
-%  1 to 16777215, unique to the image; W and H are from 1 to 297. Source
-%  is one of:
-%
-%    * png(Bytes)        — a PNG file's contents
-%    * rgba(PW-PH, Bytes) — PW×PH pixels, 4 bytes each
-%    * rgb(PW-PH, Bytes)  — PW×PH pixels, 3 bytes each
-%    * file(Path)        — a file the terminal reads itself (PNG); only
-%                          when the terminal runs on the same machine
-%
-%  Bytes is a string or code list of octets (0..255), as read from a
-%  binary stream. Text decoded on reading (e.g. as UTF-8) gives a
-%  corrupted image; this cannot be detected.
-%
-%  Only terminals supporting the Kitty graphics protocol show images; see
-%  graphics(Bool) in terminal_properties/1. Elsewhere the placeholders
-%  show as unknown characters.
+/*<tui> image(Id, Source, Size)
+The image Source, under Id, shown in W×H cells, Size being W-H. Id is
+an integer from 1 to 16777215, unique to the image; W and H are from 1
+to 297. Source is one of:
+
+  - `png(Bytes)`: a PNG file's contents
+  - `rgba(PW-PH, Bytes)`: PW×PH pixels, 4 bytes each
+  - `rgb(PW-PH, Bytes)`: PW×PH pixels, 3 bytes each
+  - `file(Path)`: a file the terminal reads itself (PNG); only when the
+    terminal runs on the same machine
+
+Bytes is a string or code list of octets (0..255), as read from a
+binary stream. Text decoded on reading (e.g. as UTF-8) gives a
+corrupted image; this cannot be detected.
+
+Only terminals supporting the Kitty graphics protocol show images; see
+`graphics(Bool)` in the `terminal_properties(Properties)` event.
+Elsewhere the placeholders show as unknown characters.
+*/
 tui:alias_drawable(image(Id, _, W-H), style([fg(R, G, B)], column(Rows))) :-
     must_be(between(1, 16777215), Id),
     diacritics(Ds),

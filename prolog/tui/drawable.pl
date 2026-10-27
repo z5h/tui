@@ -19,23 +19,10 @@ first, each as Origin-Alias: Origin is the X-Y offset the alias was
 drawn at.
 
 Besides the primitives in drawable//5, this module defines the core
-drawables that make no styling choices: layout (row/1, column/1,
-wrapped/2, table/2), shapes (clear/1, line/3, box/2), tagging (below),
-cursor/1 and highlight/1. Ready-made, styled components are in
-library(tui/components).
-
-## Tagging: Key:Drawable
-
-Key:Drawable draws Drawable, tagged with Key for event routing; Key does
-not affect drawing. When a component event Name-Value bubbles through
-Key:Component, and Name is the functor of Component, the event becomes
-Key-Value: the component's own name is replaced by the tag. Events from
-components nested deeper (other names) and raw events (up, ' ', ...)
-pass through unchanged. For example,
-
-    scroll(Id) : scroll(20-15, Offset, Content)
-
-turns scroll-(0-5) from the scroll into scroll(Id)-(0-5).
+aliases that make no styling choices: layout (row, column, wrapped,
+table), shapes (clear, line, box), tagging (Key:Drawable), cursor and
+highlight. They are documented with tui:alias_drawable/2. Ready-made,
+styled components are in library(tui/components).
 */
 
 :- use_module(library(tui/utils)).
@@ -388,25 +375,25 @@ drawable_raw_extent(D, raw(Raw), W-H) :-
 
 '#layout'.
 
-%!  column(+Drawables)
-%
-%  Drawables stacked top to bottom, using .\/.
+/*<tui> column(Drawables)
+Drawables stacked top to bottom, using ``.\/``.
+*/
 tui:alias_drawable(column([H]), H) :- !.
 tui:alias_drawable(column([]), []) :- !.
 tui:alias_drawable(column([H|T]), (H .\/ column(T))) :- !.
 
-%!  row(+Drawables)
-%
-%  Drawables side by side, left to right, using .>.
+/*<tui> row(Drawables)
+Drawables side by side, left to right, using ``.>``.
+*/
 tui:alias_drawable(row([H]), H) :- !.
 tui:alias_drawable(row([]), []) :- !.
 tui:alias_drawable(row([H|T]), (H .> row(T))) :- !.
 
-%!  wrapped(+Width, +Chars)
-%
-%  Chars broken into rows of Width characters, top to bottom. N chars
-%  take N // Width + 1 rows, so the position just after the last char
-%  always lies on a row (the last row may be empty).
+/*<tui> wrapped(Width, Chars)
+Chars broken into rows of Width characters, top to bottom. N chars
+take N // Width + 1 rows, so the position just after the last char
+always lies on a row (the last row may be empty).
+*/
 tui:alias_drawable(wrapped(W, Chars), column(Rows)) :-
     width_chars_rows(W, Chars, Rows).
 
@@ -418,14 +405,14 @@ width_chars_rows(W, Chars, [chars(Row) | Rows]) :-
         Rows = []
     ).
 
-%!  table(+Style, +Rows)
-%
-%  Rows, lists of drawables, laid out as a grid: each column as wide as
-%  its widest cell, each row as tall as its tallest. Shorter rows have
-%  trailing empty cells. Each cell is drawn as a zone of its column's
-%  width and its row's height, so an align in a cell aligns within it.
-%  Style is empty (cells abut), space (a blank between cells), or a box
-%  style, thin, thick or double (a border around and between cells).
+/*<tui> table(Style, Rows)
+Rows, lists of drawables, laid out as a grid: each column as wide as
+its widest cell, each row as tall as its tallest. Shorter rows have
+trailing empty cells. Each cell is drawn as a zone of its column's
+width and its row's height, so an align in a cell aligns within it.
+Style is empty (cells abut), space (a blank between cells), or a box
+style, thin, thick or double (a border around and between cells).
+*/
 tui:alias_drawable(table(Style, Rows0), Table) :-
     style_border_gap(Style, B, G),
     rows_padded(Rows0, Rows),
@@ -535,11 +522,11 @@ style_table_border(Style, Xs, Ws, Ys, Hs, raw(Merged)) :-
 
 '#shapes'.
 
-%!  clear(+Size)
-%
-%  A W×H rectangle of spaces, Size being W-H, in the enclosing style: it
-%  covers what is under it with the surrounding background, before
-%  drawing over it.
+/*<tui> clear(Size)
+A W×H rectangle of spaces, Size being W-H, in the enclosing style: it
+covers what is under it with the surrounding background, before
+drawing over it.
+*/
 tui:alias_drawable(clear(W-H), Spaces) :-
     W1 is W - 1,
     H1 is H - 1,
@@ -548,10 +535,10 @@ tui:alias_drawable(clear(W-H), Spaces) :-
               between(0, H1, Y) ),
             Spaces).
 
-%!  line(+Char, +From, +To)
-%
-%  Char repeated from point From to point To, inclusive. The line must
-%  be horizontal or vertical.
+/*<tui> line(Char, From, To)
+Char repeated from point From to point To, inclusive. The line must
+be horizontal or vertical.
+*/
 tui:alias_drawable(line(Char, From, To), Line) :-
     char_from_to_line(Char, From, To, Line).
 
@@ -572,12 +559,12 @@ at_towards_next(At, Towards, Next) :-
     ;   fail
     ).
 
-%!  box(+Size, +Chars)
-%
-%  The border of a W×H box, Size being W-H; the inside is not drawn.
-%  Chars is either
-%  box_chars(Horizontal, Vertical, TopLeft, TopRight, BottomLeft,
-%  BottomRight), or one of the standard sets thin, thick, double.
+/*<tui> box(Size, Chars)
+The border of a W×H box, Size being W-H; the inside is not drawn.
+Chars is either `box_chars(Horizontal, Vertical, TopLeft, TopRight,
+BottomLeft, BottomRight)`, or one of the standard sets `thin`, `thick`,
+`double`.
+*/
 tui:alias_drawable(box(W-H, Style), box(W-H, Chars)) :-
     atom(Style), !,
     style_box_chars(Style, Chars).
@@ -638,7 +625,20 @@ group_merged(XY-Drawn, XY-(Stack-Attrs-C)) :-
 
 '#tagging'.
 
-% Key:Drawable, documented in the module comment.
+/*<tui> Key:Drawable
+Draws Drawable, tagged with Key for event routing; Key does not affect
+drawing. When a component event Name-Value bubbles through
+Key:Component, and Name is the functor of Component, the event becomes
+Key-Value: the component's own name is replaced by the tag. Events from
+components nested deeper (other names) and raw events (up, ' ', ...)
+pass through unchanged. For example,
+
+```
+scroll(Id) : scroll(20-15, Offset, Content)
+```
+
+turns scroll-(0-5) from the scroll into scroll(Id)-(0-5).
+*/
 tui:alias_drawable(_:D, D).
 
 tui:at_event_is(Key:Inner, _-(Name-Value), Key-Value) :-
@@ -647,22 +647,22 @@ tui:at_event_is(Key:Inner, _-(Name-Value), Key-Value) :-
 
 '#cursor'.
 
-%!  cursor(+Drawable)
-%
-%  Drawable, with the cursor on its top-left cell. This overrides any
-%  cursor in the state update produced. If several are drawn, the
-%  top-left cell of them all wins; if Drawable draws nothing, it places
-%  no cursor.
+/*<tui> cursor(Drawable)
+Drawable, with the cursor on its top-left cell. This overrides any
+cursor in the state update produced. If several are drawn, the
+top-left cell of them all wins; if Drawable draws nothing, it places
+no cursor.
+*/
 tui:alias_drawable(cursor(D), D).
 
-%!  highlight(+Drawable)
-%
-%  Drawable, each cell inverted so that it stands out whatever its style:
-%  negative is added, or removed if the cell is negative. A negative
-%  space without underline on the default background would then be
-%  blank, so it loses negative and is underlined instead (in its
-%  foreground colour). Highlighting is idempotent: a cell inside several
-%  highlights is highlighted once. The cursor's cell is highlighted the
-%  same way. Like cursor/1, it changes no style here: the cells it draws
-%  carry it in their alias stack, and rendering highlights them.
+/*<tui> highlight(Drawable)
+Drawable, each cell inverted so that it stands out whatever its style:
+negative is added, or removed if the cell is negative. A negative
+space without underline on the default background would then be
+blank, so it loses negative and is underlined instead (in its
+foreground colour). Highlighting is idempotent: a cell inside several
+highlights is highlighted once. The cursor's cell is highlighted the
+same way. Like `cursor(Drawable)`, it changes no style here: the cells
+it draws carry it in their alias stack, and rendering highlights them.
+*/
 tui:alias_drawable(highlight(D), D).

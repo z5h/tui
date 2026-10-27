@@ -31,6 +31,7 @@ This is a SWI-Prolog pack. Library modules live in `prolog/`, internal modules i
 - `examples/ink.pl` — ink, an editor for ANSI-styled text on an 80-column screen: key bindings and view; `examples/ink_lib.pl` is its editing model (cells, rectangular selection, styles, clipboard, files), and `examples/sgr_screen_lib.pl` replays a file's text (cursor movement and SGR) onto rows of styled cells and writes them back. Both libraries are tested in `test/test_tui.pl`
 - `app/tui.pl` — `swipl tui`: lists, runs and prints the examples (SWI-Prolog finds a pack's `app/` scripts). The list is `examples/*.pl` less `*_lib.pl`, titled by each module's `<module>` line
 - `test/test_tui.pl` — plunit tests
+- `tools/` — development tools, not part of the library: `tui_doc.pl` transcribes the alias comments into `prolog/tui.pl` (`tools/TUI_PLDOC.md`)
 - `pack.pl` — pack metadata
 
 ## Commands
@@ -147,7 +148,7 @@ Lightweight association list library using plain `Key-Value` pair lists (not `li
 
 ### components.pl
 
-Ready-made, styled components, opt-in via `library(tui/components)`: `check_box/2`, `button/1`, `input/3`, `rule/1`, `frame/2-3`, `titled_frame/3-4`, `scroll/3`. Components here make styling choices; building blocks without them belong in `drawable.pl`. Their visual design is `QUIET_GRID.md`. Agreed conventions for this module: focus (the cursor on an interactive component) is shown `negative`, via `hover/3`, and only focus toggles negative; faint standing alone means disabled, and beside non-faint text marks secondary importance; set and unset are told apart by shape (`[x]`, `[ ]`, `[-]`), never by an attribute; buttons look like `┃OK┃`, and `▌OK▐` focused (glyph swap with `char/1`); buttons and check boxes hide the cursor (`cursor_hidden`), and left and right leave them in one keypress; frames are rules above and below, with no side walls; Space and Return activate; components emit `Name-Value` events; Shift+arrows drag what is under the cursor in the arrow's direction, as with a mouse (in a scroll area the content, on a scrollbar the thumb), leaving plain arrows to the cursor. With the mouse: a left press activates as Space does, the wheel scrolls, and a left press or drag on a scrollbar moves the thumb to the mouse.
+Ready-made, styled components, opt-in via `library(tui/components)`: `check_box/2`, `button/1`, `input/3`, `rule/1`, `frame/2-3`, `titled_frame/3-4`, `scroll/3`. Components here make styling choices; building blocks without them belong in `drawable.pl`. Their visual design is `QUIET_GRID.md`. Agreed conventions for this module: focus (the cursor on an interactive component) is shown `negative`, via `hover/3`, and only focus toggles negative; faint standing alone means disabled, and beside non-faint text marks secondary importance; set and unset are told apart by shape (`[x]`, `[ ]`, `[-]`), never by an attribute; buttons look like `┃OK┃`, and `▌OK▐` focused (glyph swap with `char/1`); buttons and check boxes hide the cursor (`cursor_hidden`), and left and right leave them in one keypress; frames are rules above and below, with no side walls; Space and Return activate; components emit `Name-Value` events; Shift+arrows drag what is under the cursor in the arrow's direction, as with a mouse (in a scroll area the content, on a scrollbar the thumb), leaving plain arrows to the cursor. With the mouse: a left press activates as Space does, and the wheel scrolls.
 
 ### TODO.md and CONSIDERATIONS.md
 
@@ -166,4 +167,5 @@ See `PROLOG_STYLE.md` for full conventions. Key points:
 - **Branching**: `if_/3` with reified tests preferred; `-> ;` only for ground dispatch
 - **Formatting**: 4-space indentation, no blank lines between clauses of same predicate, one blank line between predicates
 - **Documentation**: PLdoc with `%!` (preferred) and mode markers (`+`, `-`, `?`) plus `is det/semidet/nondet`. Every file has a `/** <module>` comment and every exported predicate a structured comment; mode-line arguments are plain variables (`+Size`, then "Size being W-H" in the text), and different arities get separate comments. Comments on non-exported helpers are plain `%`. The `doc` test unit runs `test/doc_check.pl` (standalone: `swipl -p library=prolog test/doc_check.pl`), which fails on any of this, and on any warning while loading
+- **Aliases** (`tui:alias_drawable/2` clauses) have a documentation format of their own, not `%!` comments: read `tools/TUI_PLDOC.md` before writing or changing one
 - **Modules**: one per file, explicit exports, ≤200 clauses
