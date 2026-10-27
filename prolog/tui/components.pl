@@ -24,8 +24,8 @@ tagging, cursor) are core, in library(tui/drawable).
 /*<tui> check_box(Title, Bool)
 A toggleable checkbox: ``[x]``, ``[ ]`` or ``[-]`` (Bool true, false or
 partial), then Title. With the cursor on it, box and title are
-negative as one unit. The cursor is hidden on it, and `left` and
-`right` move it out of the check box in one keypress.
+negative together. It is a unit (`unit(Drawable)`): the cursor is
+hidden on it, and an arrow moves it out in one keypress.
 
 Events produced:
 
@@ -33,7 +33,7 @@ Events produced:
     `mouse(press, left)`: true becomes false, false and partial become
     true
 */
-tui:alias_drawable(check_box(Title, Bool), style([cursor_hidden], hover([negative], Box .> ' ' .> Title))) :-
+tui:alias_drawable(check_box(Title, Bool), unit(hover([negative], Box .> ' ' .> Title))) :-
     bool_box(Bool, Box).
 
 bool_box(true, '[x]').
@@ -47,33 +47,23 @@ bool_toggled(partial, true).
 tui:at_event_is(check_box(_Title, Bool), _-' ', check_box-T) :- bool_toggled(Bool, T).
 tui:at_event_is(check_box(_Title, Bool), _-return, check_box-T) :- bool_toggled(Bool, T).
 tui:at_event_is(check_box(_Title, Bool), _-mouse(press, left), check_box-T) :- bool_toggled(Bool, T).
-tui:at_event_is(check_box(_, _), (X-_)-left, cursor_by(DX-0)) :-
-    DX is -(X + 1).
-tui:at_event_is(check_box(Title, _), (X-_)-right, cursor_by(DX-0)) :-
-    phrase(drawable(Title, [], [], 0-0, MX-_), _),
-    DX is MX + 5 - X.
 
 /*<tui> button(Label)
 A button, shown as ``┃Label┃``. With the cursor on it, it is negative
-and its caps become ``▌`` and ``▐``, a pill with half-cell padding. The
-cursor is hidden on it, and `left` and `right` move it out of the
-button in one keypress.
+and its caps become ``▌`` and ``▐``, a pill with half-cell padding. It
+is a unit (`unit(Drawable)`): the cursor is hidden on it, and an arrow
+moves it out in one keypress.
 
 Events produced:
 
   - `button-pressed` on `' '` (space), `return` or `mouse(press, left)`
 */
-tui:alias_drawable(button(Label), style([cursor_hidden], hover([negative], Content, G))) :-
+tui:alias_drawable(button(Label), unit(hover([negative], Content, G))) :-
     Content = hover([char('▌')], '┃', G) .> Label .> hover([char('▐')], '┃', G).
 
 tui:at_event_is(button(_), _-' ', button-pressed).
 tui:at_event_is(button(_), _-return, button-pressed).
 tui:at_event_is(button(_), _-mouse(press, left), button-pressed).
-tui:at_event_is(button(_), (X-_)-left, cursor_by(DX-0)) :-
-    DX is -(X + 1).
-tui:at_event_is(button(Label), (X-_)-right, cursor_by(DX-0)) :-
-    phrase(drawable(Label, [], [], 0-0, MX-_), _),
-    DX is MX + 3 - X.
 
 /*<tui> input(Width, Placeholder, Value)
 A one-line text field Width wide, underlined, after a bold ``> ``.
@@ -263,7 +253,10 @@ in a W×H frame's viewport (Size being W-H), offset by Offset,
 ScrollX-ScrollY (each 0 or negative). On each axis where the content
 does not fit, a scrollbar shows its thumb, with half-cell resolution
 and no track: vertical in the frame's right column, horizontal in its
-bottom rule.
+bottom rule. With the cursor on a scrollbar, its thumb is solid: the
+half blocks fill the whole width of the column, or the whole height of
+the row. A scrollbar is a unit (`unit(Drawable)`): the cursor is hidden
+on it, and an arrow moves it out in one keypress.
 
 `shift+up`, `shift+down`, `shift+left` and `shift+right` drag what is
 under the cursor, as with a mouse:
@@ -328,18 +321,22 @@ Draws Drawable, a vertical scrollbar. Meant for
 `scroll(Size, Offset, Content)`: on it, `shift+up` and `shift+down`
 become `thumb_dragged(Dir, Step)`, which the enclosing
 `scroll_view(Offset, Limits, PageHeight, Drawable)` turns into
-scrolling the content Step rows the other way.
+scrolling the content Step rows the other way. It is a unit
+(`unit(Drawable)`): the cursor is hidden on it, and an arrow moves it
+out in one keypress.
 */
-tui:alias_drawable(vscroll(D, _), D).
+tui:alias_drawable(vscroll(D, _), unit(D)).
 
 /*<tui> hscroll(Drawable, Step)
 Draws Drawable, a horizontal scrollbar. Meant for
 `scroll(Size, Offset, Content)`: on it, `shift+left` and `shift+right`
 become `thumb_dragged(Dir, Step)`, which the enclosing
 `scroll_view(Offset, Limits, PageHeight, Drawable)` turns into
-scrolling the content Step columns the other way.
+scrolling the content Step columns the other way. It is a unit
+(`unit(Drawable)`): the cursor is hidden on it, and an arrow moves it
+out in one keypress.
 */
-tui:alias_drawable(hscroll(D, _), D).
+tui:alias_drawable(hscroll(D, _), unit(D)).
 
 % On a scrollbar, Shift+arrows along its axis drag the thumb by Step.
 tui:at_event_is(vscroll(_, Step), _-(shift+D), thumb_dragged(D, Step)) :-
@@ -409,25 +406,29 @@ string_length_adjusted(S, L, A) :-
 % from the content; the horizontal one the lower half of its row, on the
 % rule.
 
-scroll_char(h, s, s, ' ').
-scroll_char(h, f, f, '▄').
-scroll_char(h, s, f, '▗').
-scroll_char(h, f, s, '▖').
+% Focused, the thumb is solid: each glyph swaps to the one filling its
+% halves across the whole cell.
 
-scroll_char(v, s, s, ' ').
-scroll_char(v, f, f, '▐').
-scroll_char(v, s, f, '▗').
-scroll_char(v, f, s, '▝').
+scroll_char(h, s, s, ' ', ' ').
+scroll_char(h, f, f, '▄', '█').
+scroll_char(h, s, f, '▗', '▐').
+scroll_char(h, f, s, '▖', '▌').
+
+scroll_char(v, s, s, ' ', ' ').
+scroll_char(v, f, f, '▐', '█').
+scroll_char(v, s, f, '▗', '▄').
+scroll_char(v, f, s, '▝', '▀').
 
 % The scrollbar along axis S (h or v) for a port PD cells long, showing
 % content CD long (CD > PD) scrolled to offset CO (0 or negative). Its
 % thumb starts at the first half at offset 0, and at the last half the
-% thumb can reach at the largest offset.
-port_content_offset_axis_scrollbar(PD, CD, CO, S, D) :-
+% thumb can reach at the largest offset. Its cells are one hover group,
+% so that the thumb is solid while the cursor is anywhere on it.
+port_content_offset_axis_scrollbar(PD, CD, CO, S, hover([], Cells, G)) :-
     port_content_thumb(PD, CD, Len, Travel),
     Start is max(0, min(Travel, round(Travel * -CO / (CD - PD)))),
     End is Start + Len,
-    axis_thumb_cells_scrollbar(S, Start-End, 0, PD, D).
+    axis_thumb_cells_scrollbar(S, Start-End, G, 0, PD, Cells).
 
 % The thumb for a port PD cells long showing content CD long (CD > PD):
 % the track is PD cells of two halves each; the thumb is Len halves long,
@@ -449,20 +450,20 @@ port_content_step(PD, CD, Step) :-
     ).
 
 % Cells N up to M of the track, with the thumb covering halves Start up
-% to (not including) End.
-axis_thumb_cells_scrollbar(_, _, M, M, []) :- !.
-axis_thumb_cells_scrollbar(S, Thumb, N, M, [X-Y-Char | Cells]) :-
+% to (not including) End, its glyphs swapped in hover group G.
+axis_thumb_cells_scrollbar(_, _, _, M, M, []) :- !.
+axis_thumb_cells_scrollbar(S, Thumb, G, N, M, [X-Y-hover([char(Solid)], Char, G) | Cells]) :-
     I is 2 * N,
     J is I + 1,
     thumb_half_weight(Thumb, I, A),
     thumb_half_weight(Thumb, J, B),
-    scroll_char(S, A, B, Char),
+    scroll_char(S, A, B, Char, Solid),
     (   S = h
     ->  X = N, Y = 0
     ;   X = 0, Y = N
     ),
     N1 is N + 1,
-    axis_thumb_cells_scrollbar(S, Thumb, N1, M, Cells).
+    axis_thumb_cells_scrollbar(S, Thumb, G, N1, M, Cells).
 
 % Half I is thick (f) inside the thumb, thin (s) outside it.
 thumb_half_weight(Start-End, I, W) :-

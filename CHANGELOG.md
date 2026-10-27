@@ -13,17 +13,22 @@
   - `frame/2-3`, `titled_frame/3-4`: rules across the full width above and below, no side walls; the viewport is still (W-2)×(H-2) from 1-1, between blank columns. The whole frame is cleared. The title sits in the top rule from its first column, without the `╴ ╶` ends.
   - `button/1`: `┃Label┃`, and focused a negative `▌Label▐`, instead of `[ Label ]`.
   - `check_box/2`: `[x] Title` instead of `[x]: Title`, in normal video whether checked or not. A third value, `partial`, shows `[-]` and toggles to `true`.
-  - Buttons and check boxes hide the cursor, and left and right move it out of them in one keypress.
+  - Buttons and check boxes are units (`unit/1`): they hide the cursor, and an arrow moves it out of them in one keypress.
   - `input/3`: a bold `> `; the placeholder in angle brackets, italic. Focused, prompt and field are negative and the field loses its underline; the placeholder is then not shown.
-  - `scroll/3`: only the thumb is drawn, no track: in the frame's right column (right-half blocks) and in its bottom rule (lower-half blocks, still underlined).
+  - `scroll/3`: only the thumb is drawn, no track: in the frame's right column (right-half blocks) and in its bottom rule (lower-half blocks, still underlined). A scrollbar is a unit, as a button is: with the cursor on it, the cursor is hidden and the thumb is solid (its half blocks fill the cell's width or height), and an arrow moves the cursor out in one keypress.
 
 ### Added
 
 - `char(C)` as a style attribute: every cell drawn under it shows the character C (one column wide) in place of what was drawn. The innermost wins. Its main use is in a hover style, where glyphs change on focus: hovers sharing a group variable, `hover(Style, D, Group)`, turn on together.
 - `cursor_hidden` as a style attribute: the cursor is not shown on cells drawn under it. It keeps its position, and events bubble as before; only its highlight is not drawn (cells drawn by `highlight/1` still are). For components that move the cursor out in one keypress, such as buttons.
 - `unhovered(Style, D, Group)`: the other state of `hover(Style, D, Group)`. Style applies while the group is off, and is dropped when the cursor turns it on.
+- `unit(D)`: draws D as a unit, its cells experienced as a single location. The cursor is hidden on it (a position within it would contradict that), and an arrow moves it out in one keypress, through the side in the arrow's direction. The cursor keeps its position, so moves through units are consistent. Buttons, check boxes and scrollbars are units.
 - `rule(Width)` (components): a horizontal rule, spaces drawn underlined.
 - `examples/gallery.pl`: laid out for 80×24, with a partial check box and a status line (the last event, and key hints).
+
+### Faster
+
+- Drawing a view takes about half the time, which keeps fast mouse-wheel scrolling smooth. Drawn cells moved as a whole (by `align`, `.<`, `./\`, a table's cells, a scroll's frame) reuse their alias stacks instead of rebuilding each cell's, and clipping to a port computes its bounds once. `library(tui/drawable)` is compiled optimised (`optimise` flag, as with `-O`) for that file only: arithmetic there is inline and cannot be traced, while apps' own code is unaffected.
 
 ### Removed
 

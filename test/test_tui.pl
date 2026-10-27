@@ -662,6 +662,23 @@ test(no_thumb_to_mouse) :-
     drawable_point_event_bubbled(S, 10-4, mouse(drag, left), Es2),
     Es2 == [mouse(drag, left)].
 
+% Focused, a scrollbar's thumb is solid, and the cursor is hidden on it:
+% on the cell after the thumb, ▖ becomes ▌.
+test(scrollbar_shown) :-
+    drawable_cursor_runs(scroll(4-3, 0-0, "abcdef"), 3-3, R),
+    R == [(1-1)-([underline]-[' ', ' ', ' ', ' ']),
+          (1-2)-([]-[' ', a, b, ' ']),
+          (1-3)-([underline]-[' ', '▌', ' ', ' '])].
+
+% Arrows along a scrollbar leave it in one keypress: the vertical one
+% spans rows 2 to 4.
+test(scrollbar_leave) :-
+    lines_scroll(0-(-5), S),
+    drawable_point_event_bubbled(S, 10-3, up, Es1),
+    Es1 == [cursor_by(0-(-2))],
+    drawable_point_event_bubbled(S, 10-3, down, Es2),
+    Es2 == [cursor_by(0-2)].
+
 % What E at point X-Y becomes, on an input showing Value.
 value_point_event_bubbled(Value, XY, E, Es) :-
     drawable_point_event_bubbled(name : input(4, "", Value), XY, E, Es).
@@ -787,6 +804,39 @@ test(button_left) :-
 test(button_right) :-
     drawable_point_event_bubbled("a" .> ok : button("OK"), 3-1, right, Es),
     Es == [cursor_by(3-0)].
+
+% An arrow leaves a unit in one keypress, keeping the other coordinate.
+% A 3×3 unit at 1-1, the cursor in its middle.
+test(unit_leave) :-
+    D = unit(["xyz", 0-1-"xyz", 0-2-"xyz"]),
+    drawable_point_event_bubbled(D, 2-2, left, Es1),
+    Es1 == [cursor_by((-2)-0)],
+    drawable_point_event_bubbled(D, 2-2, right, Es2),
+    Es2 == [cursor_by(2-0)],
+    drawable_point_event_bubbled(D, 2-2, up, Es3),
+    Es3 == [cursor_by(0-(-2))],
+    drawable_point_event_bubbled(D, 2-2, down, Es4),
+    Es4 == [cursor_by(0-2)].
+
+% On a side's own cells, the arrow through it is not taken: the usual
+% one-cell move leaves the unit, with arrived(Dir) where it lands.
+test(unit_side) :-
+    D = unit(["xyz", 0-1-"xyz"]),
+    drawable_point_event_bubbled(D, 1-1, left, Es1),
+    Es1 == [left],
+    drawable_point_event_bubbled(D, 3-2, right, Es2),
+    Es2 == [right],
+    drawable_point_event_bubbled(D, 2-1, up, Es3),
+    Es3 == [up],
+    drawable_point_event_bubbled(D, 2-2, down, Es4),
+    Es4 == [down].
+
+% The cursor is hidden on a unit.
+test(unit_shown) :-
+    drawable_cursor_runs("a" .> unit("xyz"), 3-1, R),
+    R == [(1-1)-([]-[a, x, y, z])],
+    drawable_cursor_runs("a" .> unit("xyz"), 1-1, R1),
+    R1 == [(1-1)-([negative]-[a]), (2-1)-([]-[x, y, z])].
 
 test(check_box) :-
     drawable_point_event_bubbled(c : check_box("a", false), 1-1, ' ', Es),

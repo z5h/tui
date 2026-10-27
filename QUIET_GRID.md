@@ -59,9 +59,9 @@ Open points are listed in section 10.
 
 Mockup notation used below: `{i:…}` negative, `{b:…}` bold, `{d:…}` faint, `{u:…}` underline, `{t:…}` italic. Flags combine, so `{bu:…}` is bold and underlined.
 
-**Focus.** A component you activate (button, check box, list row, text input) shows focus as `hover([negative], …)` over the whole component. In a component that shows the cursor (a text input), the cursor is the one normal-video cell (section 3). A focused component may also change glyphs, by glyph swap (section 3).
+**Focus.** A component you activate (button, check box, list row, text input, scrollbar) shows focus as solid reverse video: what it draws becomes solid. That is not the same as negative. Usually negative does it, as `hover([negative], …)` over the whole component. But where a glyph is already half solid, as a scrollbar's thumb is, negating it only swaps which half is solid; such a component fills its glyphs instead, by glyph swap (section 3). In a component that shows the cursor (a text input), the cursor is the one normal-video cell (section 3). A focused component may also change glyphs for its shape, as a button's caps do.
 
-Some interactive components hide the cursor: while it is on them, no cell is highlighted, and any arrow key moves it out of the component in that direction. Buttons and check boxes (the box with its label, one unit) do. Text inputs do not, because the cursor marks the insertion point.
+Some interactive components are units (the framework's `unit/1`): though they cover many cells of the grid, the user experiences them as a single location. Any arrow key moves the cursor out of one in that direction, in one keypress. The cursor is hidden on a unit, because showing a position within it would contradict that experience; it still keeps its position, so that moves through units are consistent. Buttons, check boxes (the box with its label) and scrollbars are units. Text inputs are not, because the cursor marks the insertion point.
 
 ### Frame
 
@@ -217,12 +217,14 @@ There is no track; draw only the thumb, in normal video, at half-cell resolution
 - **Vertical:** in the frame's right column (W−1), beside the content. Its right-half glyphs leave a half-cell gap from the content.
 - **Horizontal:** in the frame's bottom border (row H−1). Its cells stay underlined, so the border is unbroken; the thumb's lower-half glyphs sit on the rule.
 
-| Halves covered | Vertical | Horizontal |
-|---|---|---|
-| both | `▐` | `▄` |
-| leading only (top or left) | `▝` | `▖` |
-| trailing only (bottom or right) | `▗` | `▗` |
-| none | space | space |
+| Halves covered | Vertical | Horizontal | Vertical, focused | Horizontal, focused |
+|---|---|---|---|---|
+| both | `▐` | `▄` | `█` | `█` |
+| leading only (top or left) | `▝` | `▖` | `▀` | `▌` |
+| trailing only (bottom or right) | `▗` | `▗` | `▄` | `▐` |
+| none | space | space | space | space |
+
+**Focus.** With the cursor anywhere on a scrollbar, its thumb is solid (Focus, section 5): the half-width glyphs of the vertical thumb fill the column's width, and the half-height glyphs of the horizontal thumb fill the row's height, as in the focused columns above. The thumb's length and position do not change. A scrollbar is a unit (Focus, section 5): the cursor is hidden, and an arrow moves it out in one keypress.
 
 A focused row's negative stays inside the content area, so it never reaches the scrollbar's column.
 
@@ -261,7 +263,7 @@ Unicode only. An ASCII fallback is listed in `TODO.md`.
 | Spinner | `⠁⠂⠄⡀⢀⠠⠐⠈` |
 | Sparkline | `▁▂▃▄▅▆▇█` |
 | Buttons | `┃label┃`, focused `▌label▐` |
-| Scrollbar thumb | `▐▝▗` / `▄▖▗` |
+| Scrollbar thumb | `▐▝▗` / `▄▖▗`, focused `█▀▄` / `█▌▐` |
 
 **Ambiguous width.** `…`, `↵`, `⇥` and `▄▌▐` have ambiguous East Asian width. A terminal set to draw them double width (common in CJK locales) will misplace what follows them. The framework takes every character to be one cell wide (see `TODO.md`). Braille and the quadrants `▖▗▘▝` are always one column.
 
@@ -307,6 +309,6 @@ Unicode only. An ASCII fallback is listed in `TODO.md`.
 
 1. **Scope.** Phase 1 restyles what exists (`check_box`, `button`, `input`, `scroll`, `frame`, `titled_frame`, a `rule/1`) and the gallery. Phase 2 adds the new components (tabs, list, tree with a header scroll, table header, status markers, progress bar, modal, key hints, spinner, sparkline).
 2. **Tabs.** To be iterated on.
-3. **Hiding the cursor.** Done in the library: a special style attribute `cursor_hidden`. Hiding is not the absence of a cursor: the cursor still has its position, it is only not drawn. The cursor is drawn last, and its cell is not highlighted if its attributes include `cursor_hidden`. Leaving in one keypress needs no change: the component answers arrows with `cursor_by`.
+3. **Hiding the cursor.** Done in the library: a special style attribute `cursor_hidden`. Hiding is not the absence of a cursor: the cursor still has its position, it is only not drawn. The cursor is drawn last, and its cell is not highlighted if its attributes include `cursor_hidden`. Leaving in one keypress is `unit/1`, which also hides the cursor: it answers arrows with `cursor_by`.
 4. **Nested controls** (a table whose row, column or cell can be the control) are allowed, and need no change: the control knows where the cursor is, and draws the hovers for the level in use.
 5. **Highlight.** `highlight/1` is likely useful only for the cursor's cell, or for a selection the cursor is involved in (as in ink).

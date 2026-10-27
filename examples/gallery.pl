@@ -6,8 +6,8 @@ The ready-made components of library(tui/components), each tagged with
 its key in the model, so their events arrive at update as Key-Value.
 
 Arrows move the cursor; the component under it shows negative (focus).
-On a check box or a button the cursor is hidden, and left and right
-leave it in one keypress. Space or return toggles a check box (a partial
+Check boxes, buttons and scrollbars are units (unit/1): the cursor is
+hidden on them, and an arrow leaves them in one keypress. Space or return toggles a check box (a partial
 one becomes checked) or presses a button. Type into the input.
 Shift+arrows drag the scroll's content, or on a scrollbar its thumb;
 page up and down page it. OK prints the model, Cancel and q quit. The

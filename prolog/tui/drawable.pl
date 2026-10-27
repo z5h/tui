@@ -20,12 +20,17 @@ drawn at.
 
 Besides the primitives in drawable//5, this module defines the core
 aliases that make no styling choices: layout (row, column, wrapped,
-table), shapes (clear, line, box), tagging (Key:Drawable), cursor and
-highlight. They are documented with tui:alias_drawable/2. Ready-made,
+table), shapes (clear, line, box), tagging (Key:Drawable), cursor,
+highlight and unit. They are documented with tui:alias_drawable/2. Ready-made,
 styled components are in library(tui/components).
 */
 
 :- use_module(library(tui/utils)).
+
+% Compiled optimised (arithmetic inline), as if loaded with -O: this file
+% does arithmetic for every cell. The flag applies to this file only;
+% remove it to trace the arithmetic here.
+:- set_prolog_flag(optimise, true).
 
 :- multifile tui:alias_drawable/2.
 :- multifile tui:at_event_is/3.
@@ -206,22 +211,8 @@ drawable(chars_tail(T), Stack, Attr, X-Y, MX-MY) --> !,
     { NX is X + 1 },
     drawable(chars(T), Stack, Attr, NX-Y, MX-MY), !.
 
-drawable(raw([]), _, _, XY, XY) --> !,
-    [].
-
-drawable(raw([H|T]), Stack, Attr, DX-DY, MX-MY) --> !,
-    { H = (X-Y)-(StackH-AttrH-C),
-      X1 is X + DX,
-      Y1 is Y + DY,
-      append(AttrH, Attr, Attr1),
-      stack_offset_outer_placed(StackH, DX-DY, Stack, Stack1),
-      H1 = (X1-Y1)-(Stack1-Attr1-C)
-    }, !,
-    [H1],
-    drawable(raw(T), Stack, Attr, DX-DY, MTX-MTY),
-    { MX is max(X1, MTX),
-      MY is max(Y1, MTY)
-    }.
+drawable(raw(Raw), Stack, Attr, DX-DY, MX-MY) --> !,
+    raw_placed(Raw, Stack, Attr, DX-DY, []-Stack-[]-Attr, DX-DY, MX-MY).
 
 drawable(A, Stack, Attr, X-Y, MX-MY) -->
     { atom(A), atom_chars(A, Chars)
@@ -237,11 +228,12 @@ drawable([H|T], Stack, Attr, XY, MX-MY) --> !,
 
 drawable([], _, _, XY, XY) --> !, [].
 
-zone_out(X0-Y0, W-H, X-Y-_) :-
+% A command outside the cells from X0-Y0 up to (not including) X1-Y1.
+zone_out(X0-Y0, X1-Y1, X-Y-_) :-
      once(( X < X0
      ; Y < Y0
-     ; X >= X0 + W
-     ; Y >= Y0 + H
+     ; X >= X1
+     ; Y >= Y1
      )).
 
 drawable(translate(TX-TY, Drawables), Stack, Attr, DX-DY, MX-MY) --> !,
@@ -255,8 +247,9 @@ drawable(port(W-H, Drawables), Stack, Attr, DX-DY, MX-MY) --> !,
     drawable(port(W-H, Drawables, _MPX-_MPY), Stack, Attr, DX-DY, MX-MY).
 
 drawable(port(W-H, Drawables, MPX-MPY), Stack, Attr, DX-DY, MX-MY) --> !,
-    excluding(zone_out(DX-DY, W-H), drawable(Drawables, Stack, Attr, DX-DY, MPX-MPY)),
-    { MX is DX + W - 1, MY is DY + H - 1 }.
+    { X1 is DX + W, Y1 is DY + H },
+    excluding(zone_out(DX-DY, X1-Y1), drawable(Drawables, Stack, Attr, DX-DY, MPX-MPY)),
+    { MX is X1 - 1, MY is Y1 - 1 }.
 
 drawable(zone(W-H, D), Stack, Attr, DX-DY, MX-MY) --> !,
     zone_drawn(W-H, D, Stack, Attr, DX-DY),
@@ -302,6 +295,29 @@ drawable(A, Stack, Attr, DX-DY, MX-MY) -->
 
 drawable(D, _, _, _, _) -->
     { domain_error(drawable, D) }.
+
+% The commands Raw placed at offset DX-DY inside Stack and Attr; M is the
+% furthest cell placed, from M0. Neighbouring commands mostly share their
+% stack and attributes, so the last ones placed are kept (StackH-Stack1-
+% AttrH-Attr1) and reused while the next are the same.
+raw_placed([], _, _, _, _, M, M) --> [].
+raw_placed([(X-Y)-(StackH-AttrH-C) | T], Stack, Attr, DX-DY, Last, MX0-MY0, M) -->
+    { Last = StackH0-Stack0-AttrH0-Attr0,
+      (   StackH == StackH0
+      ->  Stack1 = Stack0
+      ;   stack_offset_outer_placed(StackH, DX-DY, Stack, Stack1)
+      ),
+      (   AttrH == AttrH0
+      ->  Attr1 = Attr0
+      ;   append(AttrH, Attr, Attr1)
+      ),
+      X1 is X + DX,
+      Y1 is Y + DY,
+      MX1 is max(MX0, X1),
+      MY1 is max(MY0, Y1)
+    },
+    [(X1-Y1)-(Stack1-Attr1-C)],
+    raw_placed(T, Stack, Attr, DX-DY, StackH-Stack1-AttrH-Attr1, MX1-MY1, M).
 
 % The stack of a raw command placed at offset DX-DY inside Outer: its
 % origins move with it, then Outer follows.
@@ -666,3 +682,46 @@ same way. Like `cursor(Drawable)`, it changes no style here: the cells
 it draws carry it in their alias stack, and rendering highlights them.
 */
 tui:alias_drawable(highlight(D), D).
+
+/*<tui> unit(Drawable)
+Draws Drawable as a unit: though it covers many cells of the grid, the
+user experiences them as a single location. An arrow key moves the
+cursor out of it in one keypress, through the side in the arrow's
+direction, as it would leave a single cell. For the same reason the
+cursor is hidden on it (`cursor_hidden`): showing a position within a
+unit would contradict that experience. The cursor still keeps its
+position, so that its moves through units are consistent: leaving a
+unit by `up`, it arrives above where it was placed in it.
+
+The sides are those of the extent Drawable draws, from the origin it is
+drawn at to its furthest cell. Buttons, check boxes and scrollbars are
+units.
+
+Events produced:
+
+  - `cursor_by(DX-DY)` on `up`, `down`, `left` or `right`, to the cell
+    just past the side in that direction. On a side's own cells the
+    arrow is not taken: the cursor's usual one-cell move leaves the
+    unit, and bubbles `arrived(Dir)` where it lands.
+*/
+tui:alias_drawable(unit(D), style([cursor_hidden], D)).
+
+tui:at_event_is(unit(D), XY-Dir, cursor_by(Offset)) :-
+    memberchk(Dir, [up, down, left, right]),
+    phrase(drawable(D, [], [], 0-0, Max), _),
+    point_max_direction_offset(XY, Max, Dir, Offset).
+
+% The offset from X-Y, in a drawable whose furthest cell is MX-MY, to
+% the cell just past it in direction Dir; fails if that is the next cell.
+point_max_direction_offset(X-_, _, left, DX-0) :-
+    X > 0,
+    DX is -(X + 1).
+point_max_direction_offset(X-_, MX-_, right, DX-0) :-
+    X < MX,
+    DX is MX + 1 - X.
+point_max_direction_offset(_-Y, _, up, 0-DY) :-
+    Y > 0,
+    DY is -(Y + 1).
+point_max_direction_offset(_-Y, _-MY, down, 0-DY) :-
+    Y < MY,
+    DY is MY + 1 - Y.

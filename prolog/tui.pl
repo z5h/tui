@@ -159,6 +159,28 @@ styled components are opt-in: load library(tui/components).
 %  hover([negative], unhovered([underline], Field, G), G)
 %  ```
 %
+%  #### `unit(Drawable)`
+%
+%  Draws Drawable as a unit: though it covers many cells of the grid, the
+%  user experiences them as a single location. An arrow key moves the
+%  cursor out of it in one keypress, through the side in the arrow's
+%  direction, as it would leave a single cell. For the same reason the
+%  cursor is hidden on it (`cursor_hidden`): showing a position within a
+%  unit would contradict that experience. The cursor still keeps its
+%  position, so that its moves through units are consistent: leaving a
+%  unit by `up`, it arrives above where it was placed in it.
+%
+%  The sides are those of the extent Drawable draws, from the origin it is
+%  drawn at to its furthest cell. Buttons, check boxes and scrollbars are
+%  units.
+%
+%  Events produced:
+%
+%    - `cursor_by(DX-DY)` on `up`, `down`, `left` or `right`, to the cell
+%      just past the side in that direction. On a side's own cells the
+%      arrow is not taken: the cursor's usual one-cell move leaves the
+%      unit, and bubbles `arrived(Dir)` where it lands.
+%
 %  #### `wrapped(Width, Chars)`
 %
 %  Chars broken into rows of Width characters, top to bottom. N chars
@@ -170,9 +192,9 @@ styled components are opt-in: load library(tui/components).
 %  #### `button(Label)`
 %
 %  A button, shown as ``┃Label┃``. With the cursor on it, it is negative
-%  and its caps become ``▌`` and ``▐``, a pill with half-cell padding. The
-%  cursor is hidden on it, and `left` and `right` move it out of the
-%  button in one keypress.
+%  and its caps become ``▌`` and ``▐``, a pill with half-cell padding. It
+%  is a unit (`unit(Drawable)`): the cursor is hidden on it, and an arrow
+%  moves it out in one keypress.
 %
 %  Events produced:
 %
@@ -182,8 +204,8 @@ styled components are opt-in: load library(tui/components).
 %
 %  A toggleable checkbox: ``[x]``, ``[ ]`` or ``[-]`` (Bool true, false or
 %  partial), then Title. With the cursor on it, box and title are
-%  negative as one unit. The cursor is hidden on it, and `left` and
-%  `right` move it out of the check box in one keypress.
+%  negative together. It is a unit (`unit(Drawable)`): the cursor is
+%  hidden on it, and an arrow moves it out in one keypress.
 %
 %  Events produced:
 %
@@ -211,7 +233,9 @@ styled components are opt-in: load library(tui/components).
 %  `scroll(Size, Offset, Content)`: on it, `shift+left` and `shift+right`
 %  become `thumb_dragged(Dir, Step)`, which the enclosing
 %  `scroll_view(Offset, Limits, PageHeight, Drawable)` turns into
-%  scrolling the content Step columns the other way.
+%  scrolling the content Step columns the other way. It is a unit
+%  (`unit(Drawable)`): the cursor is hidden on it, and an arrow moves it
+%  out in one keypress.
 %
 %  #### `input(Width, Placeholder, Value)`
 %
@@ -257,7 +281,10 @@ styled components are opt-in: load library(tui/components).
 %  ScrollX-ScrollY (each 0 or negative). On each axis where the content
 %  does not fit, a scrollbar shows its thumb, with half-cell resolution
 %  and no track: vertical in the frame's right column, horizontal in its
-%  bottom rule.
+%  bottom rule. With the cursor on a scrollbar, its thumb is solid: the
+%  half blocks fill the whole width of the column, or the whole height of
+%  the row. A scrollbar is a unit (`unit(Drawable)`): the cursor is hidden
+%  on it, and an arrow moves it out in one keypress.
 %
 %  `shift+up`, `shift+down`, `shift+left` and `shift+right` drag what is
 %  under the cursor, as with a mouse:
@@ -302,7 +329,9 @@ styled components are opt-in: load library(tui/components).
 %  `scroll(Size, Offset, Content)`: on it, `shift+up` and `shift+down`
 %  become `thumb_dragged(Dir, Step)`, which the enclosing
 %  `scroll_view(Offset, Limits, PageHeight, Drawable)` turns into
-%  scrolling the content Step rows the other way.
+%  scrolling the content Step rows the other way. It is a unit
+%  (`unit(Drawable)`): the cursor is hidden on it, and an arrow moves it
+%  out in one keypress.
 %
 %  @see at_event_is/3
 :- multifile alias_drawable/2.
