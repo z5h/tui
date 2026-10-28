@@ -6,11 +6,17 @@
             op(601, xfy, './\\'),
             drawable//5,
             drawable_raw/2,
+            drawable_raw_extent/3,
             drawable__normalized_commands__end/3,
             attributes_char_shown/4
           ]).
 
 /** <module> Drawables
+
+The drawables an app uses are documented in library(tui): the
+fundamental ones in its module comment, and the core aliases defined
+here (layout, shapes, tagging, cursor, highlight, unit) under
+tui:alias_drawable/2. This module is internal.
 
 A term language for drawing onto a grid of styled characters. Drawables
 expand to commands (X-Y)-(Stack-Attrs-Char), where Stack records which
@@ -18,11 +24,9 @@ aliases (see tui:alias_drawable/2) produced the character, innermost
 first, each as Origin-Alias: Origin is the X-Y offset the alias was
 drawn at.
 
-Besides the primitives in drawable//5, this module defines the core
-aliases that make no styling choices: layout (row, column, wrapped,
-table), shapes (clear, line, box), tagging (Key:Drawable), cursor,
-highlight and unit. They are documented with tui:alias_drawable/2. Ready-made,
-styled components are in library(tui/components).
+Besides the fundamental drawables in drawable//5, this module defines
+the core aliases that make no styling choices. Ready-made, styled
+components are in library(tui/components).
 */
 
 :- use_module(library(tui/utils)).
@@ -151,32 +155,12 @@ my_color(C) :-
 %
 %  DCG that renders a drawable term into a difference list of commands.
 %
-%  Term is the drawable to render — an atom, string, number, list, or
-%  one of the compound drawable terms (see below). Stack is the current
-%  alias component stack (used for event routing). Attrs is the current
-%  style attribute list. XY is the origin coordinate as X-Y. EndXY is
-%  unified with the maximum X-Y coordinate reached.
-%
-%  Drawable terms:
-%    * Atoms, strings, numbers — rendered as character sequences,
-%      always (never looked up as aliases)
-%    * literal(T)       — render any term as its printed representation
-%    * chars(List)      — render a list of characters
-%    * raw(Commands)    — embed pre-rendered commands with offset
-%    * translate(DX-DY, D) — offset D by DX-DY
-%    * X-Y-D            — shorthand for translate(X-Y, D)
-%    * port(W-H, D)     — clip D to a W×H viewport
-%    * zone(W-H, D)     — D, with extent W×H whatever D draws; aligns
-%                         directly in D (or in its list) align to it
-%    * align(Dir, D)    — D, aligned to the enclosing zone's edges
-%                         (see zone above); elsewhere just D
-%    * style(Attrs, D)  — push style attributes for D
-%    * A .> B           — horizontal concat (A left, B right)
-%    * B .< A           — horizontal concat (A rendered first for width)
-%    * A .\/ B          — vertical concat (A top, B bottom)
-%    * B ./\ A          — vertical concat (A rendered first for height)
-%    * [H|T]            — render all drawables overlaid at same origin
-%    * Any term matched by alias_drawable/2
+%  Term is the drawable to render: one of the drawables documented in
+%  the module comment of library(tui) (the clauses below), or any term
+%  matched by alias_drawable/2. Stack is the current alias component
+%  stack (used for event routing). Attrs is the current style attribute
+%  list. XY is the origin coordinate as X-Y. EndXY is unified with the
+%  maximum X-Y coordinate reached.
 %
 %  @error domain_error(drawable, T) if T, drawn anywhere within Term, is
 %         none of these.
@@ -381,8 +365,12 @@ size_alignment_extent_offset(_, start, _, 0).
 size_alignment_extent_offset(S, middle, E, O) :- O is (S - E) div 2.
 size_alignment_extent_offset(S, end, E, O) :- O is S - E.
 
-% D rendered at 0-0, and its extent: from 0-0 to the furthest cell drawn.
-% A drawable that draws nothing measures 1×1.
+%!  drawable_raw_extent(+Drawable, -Raw, -Size) is det.
+%
+%  Raw is Drawable drawn once, a drawable that draws the same wherever
+%  it is placed; Size is its extent, W-H, from its origin to the
+%  furthest cell it draws (1-1 if it draws nothing). For a component
+%  that measures what it contains, or draws it more than once.
 drawable_raw_extent(D, raw(Raw), W-H) :-
     phrase(drawable(D, [], [], 0-0, MX-MY), Raw),
     W is MX + 1,
@@ -406,9 +394,9 @@ tui:alias_drawable(row([]), []) :- !.
 tui:alias_drawable(row([H|T]), (H .> row(T))) :- !.
 
 /*<tui> wrapped(Width, Chars)
-Chars broken into rows of Width characters, top to bottom. N chars
-take N // Width + 1 rows, so the position just after the last char
-always lies on a row (the last row may be empty).
+Chars broken into rows of Width characters, top to bottom. The position
+just after the last character is always on a row, so the last row may
+be empty.
 */
 tui:alias_drawable(wrapped(W, Chars), column(Rows)) :-
     width_chars_rows(W, Chars, Rows).
@@ -423,11 +411,10 @@ width_chars_rows(W, Chars, [chars(Row) | Rows]) :-
 
 /*<tui> table(Style, Rows)
 Rows, lists of drawables, laid out as a grid: each column as wide as
-its widest cell, each row as tall as its tallest. Shorter rows have
-trailing empty cells. Each cell is drawn as a zone of its column's
-width and its row's height, so an align in a cell aligns within it.
-Style is empty (cells abut), space (a blank between cells), or a box
-style, thin, thick or double (a border around and between cells).
+its widest cell, each row as tall as its tallest, shorter rows padded
+with empty cells. An align in a cell aligns within the cell. Style is
+`empty` (cells abut), `space` (a blank between cells), or `thin`,
+`thick` or `double` (a border around and between cells).
 */
 tui:alias_drawable(table(Style, Rows0), Table) :-
     style_border_gap(Style, B, G),
@@ -539,9 +526,8 @@ style_table_border(Style, Xs, Ws, Ys, Hs, raw(Merged)) :-
 '#shapes'.
 
 /*<tui> clear(Size)
-A W×H rectangle of spaces, Size being W-H, in the enclosing style: it
-covers what is under it with the surrounding background, before
-drawing over it.
+A W×H rectangle of spaces (Size being W-H) in the enclosing style,
+covering what is under it.
 */
 tui:alias_drawable(clear(W-H), Spaces) :-
     W1 is W - 1,
@@ -642,18 +628,15 @@ group_merged(XY-Drawn, XY-(Stack-Attrs-C)) :-
 '#tagging'.
 
 /*<tui> Key:Drawable
-Draws Drawable, tagged with Key for event routing; Key does not affect
-drawing. When a component event Name-Value bubbles through
-Key:Component, and Name is the functor of Component, the event becomes
-Key-Value: the component's own name is replaced by the tag. Events from
-components nested deeper (other names) and raw events (up, ' ', ...)
-pass through unchanged. For example,
+Draws Drawable, tagged with Key, so that its events name it: an event
+Name-Value from the component Drawable, Name being its name, becomes
+Key-Value. Other events pass unchanged. For example, with
 
 ```
 scroll(Id) : scroll(20-15, Offset, Content)
 ```
 
-turns scroll-(0-5) from the scroll into scroll(Id)-(0-5).
+update receives scroll(Id)-(0-5) where the scroll produced scroll-(0-5).
 */
 tui:alias_drawable(_:D, D).
 
@@ -672,40 +655,30 @@ no cursor.
 tui:alias_drawable(cursor(D), D).
 
 /*<tui> highlight(Drawable)
-Drawable, each cell inverted so that it stands out whatever its style:
-negative is added, or removed if the cell is negative. A negative
-space without underline on the default background would then be
-blank, so it loses negative and is underlined instead (in its
-foreground colour). Highlighting is idempotent: a cell inside several
-highlights is highlighted once. The cursor's cell is highlighted the
-same way. Like `cursor(Drawable)`, it changes no style here: the cells
-it draws carry it in their alias stack, and rendering highlights them.
+Drawable, highlighted as the cursor's cell is, so that it stands out
+whatever its style. A cell in several highlights is highlighted once.
 */
 tui:alias_drawable(highlight(D), D).
 
+% Like cursor/1, highlight/1 changes no style here: the cells it draws
+% carry it in their alias stack, and rendering highlights them. A cell is
+% inverted: negative is added, or removed if the cell has it; a negative
+% space without underline on the default background would then be blank,
+% so it is underlined instead.
+
 /*<tui> unit(Drawable)
-Draws Drawable as a unit: though it covers many cells of the grid, the
-user experiences them as a single location. An arrow key moves the
-cursor out of it in one keypress, through the side in the arrow's
-direction, as it would leave a single cell. For the same reason the
-cursor is hidden on it (`cursor_hidden`): showing a position within a
-unit would contradict that experience. The cursor still keeps its
-position, so that its moves through units are consistent: leaving a
-unit by `up`, it arrives above where it was placed in it.
-
-The sides are those of the extent Drawable draws, from the origin it is
-drawn at to its furthest cell. Buttons, check boxes and scrollbars are
-units.
-
-Events produced:
-
-  - `cursor_by(DX-DY)` on `up`, `down`, `left` or `right`, to the cell
-    just past the side in that direction. On a side's own cells the
-    arrow is not taken: the cursor's usual one-cell move leaves the
-    unit, and bubbles `arrived(Dir)` where it lands.
+Draws Drawable as a single location: the user experiences its cells as
+one. An arrow key leaves it in one keypress, and the cursor is hidden on
+it, since a position within it would mean nothing. The cursor keeps its
+position, so moves through units stay consistent. Buttons, check boxes
+and scrollbars are units.
 */
 tui:alias_drawable(unit(D), style([cursor_hidden], D)).
 
+% An arrow becomes cursor_by to the cell just past the side in its
+% direction, the sides being those of the extent D draws from its
+% origin. On a side's own cells the arrow is not taken: the usual
+% one-cell move leaves the unit, and bubbles arrived(Dir) where it lands.
 tui:at_event_is(unit(D), XY-Dir, cursor_by(Offset)) :-
     memberchk(Dir, [up, down, left, right]),
     phrase(drawable(D, [], [], 0-0, Max), _),

@@ -2,12 +2,13 @@
 
 `version/1` in `pack.pl` is the version. Releases are tagged `V<version>`.
 
-## Unreleased
+## 0.3.0
 
 ### Changed (may break apps)
 
 - **Nested styles: the innermost now wins.** In `style(Outer, style(Inner, D))`, Inner was applied first and Outer last, so Outer won: `style([fg(red)], style([fg(blue)], a))` showed red, and an outer `reset` cancelled every style inside it. Inner is now applied last. A component's own styles are no longer overridden by the styles around it; to restyle a whole view, change its commands' attributes.
 - **`reset` is no longer a style attribute.** Each run is painted from the default style anyway, and with the innermost winning, an inner `reset` could only cancel the styles around it. Leave it out, or set the attributes wanted.
+- **`library(tui)` no longer exports `drawable//5` and `drawable_raw/2`**, which exposed the internal command format. It exports `drawable_raw_extent(D, Raw, W-H)` instead: D drawn once as a drawable, with its size. Both remain in `library(tui/drawable)`, which is internal.
 - **`clear(W-H)` draws its spaces in the enclosing style**, instead of resetting it: it covers what is under it with the surrounding background, unless a background is set explicitly.
 - **The components are restyled** (`library(tui/components)`, design in `QUIET_GRID.md`). Focus is shown negative instead of bold, and faint no longer marks unset values:
   - `frame/2-3`, `titled_frame/3-4`: rules across the full width above and below, no side walls; the viewport is still (W-2)×(H-2) from 1-1, between blank columns. The whole frame is cleared. The title sits in the top rule from its first column, without the `╴ ╶` ends.
@@ -38,6 +39,9 @@
 ### Documented
 
 - The aliases are documented in the PLDoc of `alias_drawable/2`: a section for the core aliases, then one per opt-in library, each alias with its full description. They were `%!` comments, which PLDoc took for predicates that do not exist. Each alias now has a `/*<tui>` comment in its source, which `tools/tui_doc.pl` transcribes (format: `tools/TUI_PLDOC.md`); the `doc` test unit checks that every alias has one and that the transcription is up to date.
+- The fundamental drawables (text, `chars/1`, `literal/1`, lists, `translate/2`, `port/2-3`, `zone/2`, `align/2`, `style/2`, `raw/1`, the four layout operators) and the style attributes are documented in the module comment of `library(tui)`, with the rule that where drawables overlap, the one drawn last wins. `.<` and `./\` lay out as `.>` and `.\/` do, and differ in which side is drawn last.
+- The module pages of `library(tui/components)`, `tui/drawable`, `tui/hover` and `tui/image` say which aliases they define and that these are documented under `alias_drawable/2`: aliases are not predicates, so those pages had no entries.
+- `TODO.md` is renamed `ROADMAP.md`: PLDoc showed a TODO file on the pack's documentation page.
 - The components' descriptions name the exact events they take and produce (`' '`, `return`, `mouse(press, left)`, `noop`, ...).
 - `scroll_view/4`, `vscroll/2` and `hscroll/2` are documented, as aliases meant for `scroll/3`: its events find what they need through them, and events reach components only through aliases. `vscroll` and `hscroll` lost their third argument with the mouse dragging.
 

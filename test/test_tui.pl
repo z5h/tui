@@ -12,6 +12,7 @@ alias comments and their transcription (tools/TUI_PLDOC.md).
 
 :- use_module(library(plunit)).
 :- use_module(library(tui)).
+:- use_module(library(tui/drawable), [drawable_raw/2]).
 :- use_module(library(tui/assocs)).
 :- use_module(library(tui/utils)).
 :- use_module(library(tui/input)).
@@ -1672,10 +1673,10 @@ test(doc_lines) :-
     files_doc_lines([F1, F2], "  ", Lines),
     Lines == [ "%",
                "%  ### Core", "%",
-               "%  #### `box(Size, Chars)`", "%", "%  A box.", "%",
-               "%  #### `row(Ds)`", "%", "%  Side by side.", "%", "%    - list", "%",
+               "%    * box(Size, Chars)", "%      A box.", "%",
+               "%    * row(Ds)", "%      Side by side.", "%", "%        - list", "%",
                "%  ### library(tui/components)", "%",
-               "%  #### `button(Label)`", "%", "%  A button.", "%" ].
+               "%    * button(Label)", "%      A button.", "%" ].
 
 test(replaced) :-
     doc_file(core, ["/*<tui> a(X)", "A.", "*/"], [], F),
@@ -1684,7 +1685,7 @@ test(replaced) :-
     lines_doc_lines_replaced(Lines0, [F], Lines),
     Lines == [ ":- x.", "%!  alias_drawable(+A, -D) is semidet.", "%", "%  Hook.", "%",
                "%  ## Aliases",
-               "%", "%  ### Core", "%", "%  #### `a(X)`", "%", "%  A.", "%",
+               "%", "%  ### Core", "%", "%    * a(X)", "%      A.", "%",
                "%  @see b/1", "y." ],
     lines_doc_lines_replaced(Lines, [F], Again),
     Again == Lines.
@@ -1694,7 +1695,7 @@ test(replaced_to_end) :-
     lines_doc_lines_replaced(["%!  alias_drawable(+A, -D)", "%  ## Aliases", "%  old", "", "y."],
                              [F], Lines),
     Lines == ["%!  alias_drawable(+A, -D)", "%  ## Aliases",
-              "%", "%  ### Core", "%", "%  #### `a(X)`", "%", "%  A.", "%", "", "y."].
+              "%", "%  ### Core", "%", "%    * a(X)", "%      A.", "%", "", "y."].
 
 test(no_slot, [fail]) :-
     lines_doc_lines_replaced(["%!  alias_drawable(+A, -D)", "%  Hook.", "y."], [], _).

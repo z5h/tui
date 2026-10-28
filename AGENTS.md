@@ -105,12 +105,12 @@ The terminal substrate needs a real TTY, so it can only be checked by running an
 Drawables are a term-based DSL rendered via the DCG `drawable//5`. Key drawable terms:
 
 - **Primitives**: atoms/strings render as characters; `chars(List)`, `literal(Term)`
-- **Layout operators** (custom ops, precedence 601):
-  - `.>` — horizontal concat (left then right)
-  - `.<` — horizontal concat, right-aligned first
-  - `.\/` — vertical concat (top then bottom)
-  - `./\` — vertical concat, bottom-aligned first
-- **Combinators**: `translate(DX-DY, D)`, `port(W-H, D)`, `style(Attrs, D)`, `X-Y-D` (shorthand for translate), `zone(W-H, D)` (extent W×H regardless of D; no clipping), `align(Dir, D)` (placed against the edges of the zone it is directly in, or in that zone's list; elsewhere just D). The loop draws the view as `zone(Cols-Rows, View)`, so the frame's extent, and the cursor's range, is the terminal. Aligns are measured once with `drawable_raw`; `table/2` measures each cell once and places it as an already-aligned zone, merging the borders of per-cell boxes with `corners_unified/2`.
+- **Layout operators** (custom ops, precedence 601). Each pair has the same layout and differs only in draw order, which decides who is in front where they overlap (the last write to a cell wins):
+  - `A .> B` — A, then B to its right; B drawn last
+  - `B .< A` — the same layout; A drawn last (it is measured first, B placed after it, then A drawn)
+  - `A .\/ B` — A, then B below it; B drawn last
+  - `B ./\ A` — the same layout; A drawn last
+- **Combinators**: `translate(DX-DY, D)`, `port(W-H, D)`, `style(Attrs, D)`, `X-Y-D` (shorthand for translate), `zone(W-H, D)` (extent W×H regardless of D; no clipping), `align(Dir, D)` (placed against the edges of the zone it is directly in, or in that zone's list; elsewhere just D). The loop draws the view as `zone(Cols-Rows, View)`, so the frame's extent, and the cursor's range, is the terminal. Aligns are measured once with `drawable_raw_extent/3` (the one part of `drawable.pl` that `library(tui)` exports, for components that measure what they contain); `table/2` measures each cell once and places it as an already-aligned zone, merging the borders of per-cell boxes with `corners_unified/2`.
 - **Core drawables**: `row/1`, `column/1`, `wrapped(Width, Chars)`, `clear(W-H)`, `line(Char, From, To)`, `box(W-H, Chars)` (Chars is `box_chars(H, V, TL, TR, BL, BR)` or `thin`/`thick`/`double`), `hover(Style, D)`, `cursor(D)`, `highlight(D)`, `unit(D)`. `cursor/1` and `highlight/1` are identity aliases: what they mean is found in the cells' alias stacks (the loop places the cursor, `render.pl` highlights the cursor's cell and the cells drawn by `highlight/1`, once however many apply), not in their attributes. `unit(D)` makes D's cells one location to the user: the cursor is hidden on it (`cursor_hidden`; a position within a unit would contradict that) but keeps its position, and an arrow is answered with `cursor_by` to the cell just past D's extent in that direction, except on that side's own cells, where the plain one-cell move (with `arrived(Dir)`) already leaves it
 - **Tagging**: `Key : Drawable` — annotates a drawable with a tag for event routing (see below)
 
@@ -150,9 +150,9 @@ Lightweight association list library using plain `Key-Value` pair lists (not `li
 
 Ready-made, styled components, opt-in via `library(tui/components)`: `check_box/2`, `button/1`, `input/3`, `rule/1`, `frame/2-3`, `titled_frame/3-4`, `scroll/3`. Components here make styling choices; building blocks without them belong in `drawable.pl`. Their visual design is `QUIET_GRID.md`. Agreed conventions for this module: focus (the cursor on an interactive component) is shown as solid reverse video: usually `negative`, via `hover/3`, but a glyph already half solid (a scrollbar's thumb) is filled by glyph swap instead, since negating it would only swap which half is solid; only focus toggles negative; faint standing alone means disabled, and beside non-faint text marks secondary importance; set and unset are told apart by shape (`[x]`, `[ ]`, `[-]`), never by an attribute; buttons look like `┃OK┃`, and `▌OK▐` focused (glyph swap with `char/1`); buttons, check boxes and scrollbars are units (`unit/1`): the cursor is hidden on them, and an arrow leaves them in one keypress; frames are rules above and below, with no side walls; Space and Return activate; components emit `Name-Value` events; Shift+arrows drag what is under the cursor in the arrow's direction, as with a mouse (in a scroll area the content, on a scrollbar the thumb), leaving plain arrows to the cursor. With the mouse: a left press activates as Space does, and the wheel scrolls.
 
-### TODO.md and CONSIDERATIONS.md
+### ROADMAP.md and CONSIDERATIONS.md
 
-`TODO.md` lists open work. `CONSIDERATIONS.md` holds design notes and analysis (the Kitty graphics design, caching experiments, etc.).
+`ROADMAP.md` lists open work. (Not `TODO.md`: PLDoc would show a file of that name on the pack's documentation page.) `CONSIDERATIONS.md` holds design notes and analysis (the Kitty graphics design, caching experiments, etc.).
 
 Design notes and analysis for future features (Kitty graphics protocol, caching experiments, etc.).
 

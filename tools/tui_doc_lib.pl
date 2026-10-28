@@ -167,8 +167,9 @@ alias_problem(PI, Places, PIComments, P) :-
 %   DocLines are the generated part of the comment of alias_drawable/2:
 %   a section for the core aliases, then one per opt-in library in
 %   alphabetical order, each listing its aliases alphabetically by key,
-%   with their comments' bodies. Each line is "%" followed by Indent, a
-%   string of spaces, or "%" alone if blank.
+%   with their comments' bodies, as a term list. Each line is "%"
+%   followed by Indent, a string of spaces, and the entries' further
+%   indentation, or "%" alone if blank.
 
 files_doc_lines(Files, Indent, DocLines) :-
     findall(Group-(Key-Body),
@@ -195,11 +196,17 @@ group_lines(Indent, Group-Entries0, Ls0, Ls) :-
 group_title(core, "Core") :- !.
 group_title(Library, Library).
 
+% An entry is an item of a PLDoc term list: "* Key", then the body
+% indented under it, rendered as a definition list. Paragraphs, lists and
+% fenced code blocks in the body stay inside the item. (A heading per
+% alias would look like the section headings: PLDoc styles all levels
+% alike.)
 entry_lines(Indent, Key-Body0, Ls0, Ls) :-
-    format(string(H), "%~s#### `~s`", [Indent, Key]),
+    format(string(H), "%~s  * ~s", [Indent, Key]),
+    string_concat(Indent, "    ", BodyIndent),
     trimmed_blank_lines(Body0, Body),
-    maplist(doc_line(Indent), Body, BodyLines),
-    append([[H, "%"], BodyLines, ["%"]], Entry),
+    maplist(doc_line(BodyIndent), Body, BodyLines),
+    append([[H], BodyLines, ["%"]], Entry),
     append(Entry, Ls, Ls0).
 
 trimmed_blank_lines(Lines0, Lines) :-

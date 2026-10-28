@@ -85,7 +85,7 @@ The loop talks to a *substrate*: a real terminal, or a VCR that replays a script
 Views are built from a term-based DSL:
 
 - **Primitives**: atoms, strings, numbers always render as text; `literal(Term)` for any term
-- **Layout**: `.>` (horizontal), `.<` (horizontal, right-aligned first), `.\/` (vertical), `./\` (vertical, bottom-aligned first)
+- **Layout**: `A .> B` (A, then B to its right), `A .\/ B` (A, then B below it). `B .< A` and `B ./\ A` lay out the same, but draw A last. Drawables are drawn in order, and where two draw the same cell, the one drawn last wins, so this decides which is in front where they overlap
 - **Combinators**: `translate(DX-DY, D)`, `X-Y-D`, `port(W-H, D)`, `zone(W-H, D)`, `align(Direction, D)`, `style(Attrs, D)`
 - **Styles**: `bold`, `faint`, `italic`, `underline`, `negative`, `crossed_out`; colours `fg(C)`, `bg(C)` and the bright `hfg(C)`, `hbg(C)`, C being `black`, `red`, `green`, `yellow`, `blue`, `magenta`, `cyan`, `white`, `default` or an index 0..255; and `fg(R, G, B)`, `bg(R, G, B)`. Two special attributes: `char(C)`, which draws the one-column character C in place of each character drawn, and `cursor_hidden`, under which the cursor is not shown (it keeps its position). Styles apply in order, and nested styles apply innermost last, so the innermost wins.
 - **Alignment**: a zone has extent W×H whatever it draws, and an `align` directly in it (or in its list) is placed against its edges: `up_left`, `up`, `up_right`, `left`, `center`, `right`, `down_left`, `down`, `down_right`. The view is drawn in a zone the size of the terminal.
@@ -214,14 +214,22 @@ Anything the app does that differs from the next entry throws `error(vcr_mismatc
 
 ## Documentation
 
-After loading the pack, browse the full API docs:
+The API is documented on the page of the `tui` module, `prolog/tui.pl`:
+
+- the drawables and style attributes, in its module comment
+- every alias, core and from opt-in libraries (`button/1`, `scroll/3`, ...), under `alias_drawable/2`
+- events, under `at_event_is/3`
+- `app/4`, `app/5` and the other predicates it exports
+
+To browse it, start PLDoc's server with the library loaded:
 
 ```prolog
-?- doc_server(4000).
-?- use_module(library(tui)).
+?- doc_server(4000), use_module(library(tui)), use_module(library(tui/components)).
+?- absolute_file_name(library(tui), F, [file_type(prolog)]),
+   format("http://localhost:4000/pldoc/doc~w~n", [F]).
 ```
 
-Then open http://localhost:4000.
+and open the URL the second query prints. (The server's start page lists the files of the directory it was started in; it shows only loaded files, and refuses the others.)
 
 ## License
 

@@ -2,10 +2,17 @@
 
 /** <module> Ready-made TUI components
 
-Styled components defined via the tui:alias_drawable/2 and
-tui:at_event_is/3 hooks. Opt-in: load library(tui/components) to use
-them. The unstyled building blocks they are made of (layout, shapes,
-tagging, cursor) are core, in library(tui/drawable).
+Ready-made, styled components: `check_box(Title, Bool)`,
+`button(Label)`, `input(Width, Placeholder, Value)`, `rule(Width)`,
+`frame(Size, Contents)` (and `frame/3`), `titled_frame(Size, Title,
+Contents)` (and `titled_frame/4`) and `scroll(Size, Offset, Content)`.
+Load library(tui/components) to use them.
+
+They are aliases, not predicates: draw them as terms in a view. Each is
+documented under tui:alias_drawable/2, in the section for this library.
+
+They are defined through the hooks tui:alias_drawable/2 and
+tui:at_event_is/3, from the core drawables of library(tui).
 */
 
 :- use_module(library(tui)).
@@ -22,16 +29,12 @@ tagging, cursor) are core, in library(tui/drawable).
 '#input_controls'.
 
 /*<tui> check_box(Title, Bool)
-A toggleable checkbox: ``[x]``, ``[ ]`` or ``[-]`` (Bool true, false or
-partial), then Title. With the cursor on it, box and title are
-negative together. It is a unit (`unit(Drawable)`): the cursor is
-hidden on it, and an arrow moves it out in one keypress.
+A check box, shown as ``[x] Title``, ``[ ] Title`` or ``[-] Title`` for
+Bool `true`, `false` or `partial`, highlighted when focused. A unit (see
+`unit(Drawable)`).
 
-Events produced:
-
-  - `check_box-NewBool` on `' '` (space), `return` or
-    `mouse(press, left)`: true becomes false, false and partial become
-    true
+  - `' '`, `return` or `mouse(press, left)` become `check_box-NewBool`:
+    `true` becomes `false`, the others `true`
 */
 tui:alias_drawable(check_box(Title, Bool), unit(hover([negative], Box .> ' ' .> Title))) :-
     bool_box(Bool, Box).
@@ -49,16 +52,14 @@ tui:at_event_is(check_box(_Title, Bool), _-return, check_box-T) :- bool_toggled(
 tui:at_event_is(check_box(_Title, Bool), _-mouse(press, left), check_box-T) :- bool_toggled(Bool, T).
 
 /*<tui> button(Label)
-A button, shown as ``┃Label┃``. With the cursor on it, it is negative
-and its caps become ``▌`` and ``▐``, a pill with half-cell padding. It
-is a unit (`unit(Drawable)`): the cursor is hidden on it, and an arrow
-moves it out in one keypress.
+A button, shown as ``┃Label┃``, highlighted when focused. A unit (see
+`unit(Drawable)`).
 
-Events produced:
-
-  - `button-pressed` on `' '` (space), `return` or `mouse(press, left)`
+  - `' '`, `return` or `mouse(press, left)` become `button-pressed`
 */
 tui:alias_drawable(button(Label), unit(hover([negative], Content, G))) :-
+    % Focused, the caps swap to half blocks: in negative, a pill with
+    % half-cell padding.
     Content = hover([char('▌')], '┃', G) .> Label .> hover([char('▐')], '┃', G).
 
 tui:at_event_is(button(_), _-' ', button-pressed).
@@ -66,37 +67,22 @@ tui:at_event_is(button(_), _-return, button-pressed).
 tui:at_event_is(button(_), _-mouse(press, left), button-pressed).
 
 /*<tui> input(Width, Placeholder, Value)
-A one-line text field Width wide, underlined, after a bold ``> ``.
-Shows Value, or while Value is unbound, the Placeholder in angle
-brackets, italic (none if Placeholder is empty). Text beyond Width is
-not shown. With the cursor on it, prompt and field are negative and the
-field loses its underline (a negative underline would show as a slice
-cut from the bar); the cursor is shown in it, and the placeholder is
-not.
+A one-line text field Width wide, shown as ``> `` and an underlined
+field holding Value, or ``<Placeholder>`` while Value is unbound (nothing
+if Placeholder is `''`). Highlighted when focused, with the cursor shown
+in it; the cursor stays within the text.
 
-The cursor stays where text can be edited: on `arrived(Dir)` or
-`mouse(press, left)` past the end of the text (trailing spaces are
-text; the padding to Width is not), or on the ``> ``, it moves to the
-nearest such cell.
-
-With the cursor in the field:
-
-  - a one-character atom (code 32 or above, but not 127) is inserted
-    at the cursor (at the end of the text, if the cursor is past it),
-    and the cursor advances
+  - a printable character (a one-character atom) is inserted at the
+    cursor
   - `backspace` deletes before the cursor, `delete` at it
   - `paste(Text)` inserts Text, its line breaks as spaces
 
-Events produced:
-
-  - `input-NewValue`, NewValue a string, followed by `cursor_by(DX-0)`
-    if the cursor must move to stay after the edit
-  - `cursor_by(DX-0)` alone, moving an arriving cursor to where text can
-    be edited
-  - `noop` for an edit that changes nothing (`backspace` at the start,
-    `delete` at the end), so that it does not bubble on
+Each edit becomes `input-NewValue`, NewValue a string.
 */
 tui:alias_drawable(input(W, PlaceholderA, ValueA), hover([negative], D, G)) :-
+    % Focused, prompt and field are negative, and the field loses its
+    % underline (in negative it would show as a slice cut from the bar)
+    % and the placeholder.
     atomics_to_string([PlaceholderA], Placeholder),
     (  var(ValueA)
     -> (   Placeholder == ""
@@ -112,8 +98,12 @@ tui:alias_drawable(input(W, PlaceholderA, ValueA), hover([negative], D, G)) :-
     D = [style([bold], '> '),
          2-0-Field].
 
-% Arriving past the end of the text, or on the prompt, the cursor moves
-% to the nearest cell where text can be edited.
+% The cursor is kept where text can be edited (trailing spaces are text,
+% the padding to Width is not). Arriving (arrived(Dir), a left press)
+% past the end of the text, or on the prompt, it moves to the nearest
+% such cell; after an edit, cursor_by keeps it after the edit. An edit
+% that changes nothing (backspace at the start, delete at the end) is
+% noop, so that it does not bubble on.
 tui:at_event_is(input(_, _, ValueA), (X-_)-E, cursor_by(DX-0)) :-
     arrival_event(E),
     value_string(ValueA, Value),
@@ -197,25 +187,21 @@ string_index_inserted_edited(S, I, Value, Edited) :-
 '#containers'.
 
 /*<tui> rule(Width)
-A horizontal rule Width cells long: spaces drawn underlined, a
-hairline along the baseline.
+A horizontal rule Width cells long, a hairline along the baseline.
 */
 tui:alias_drawable(rule(W), style([underline], Spaces)) :-
     repeat_char_string(W, ' ', Spaces).
 
 /*<tui> frame(Size, Contents)
-A frame W×H, Size being W-H, containing Contents in a viewport. Its
-top and bottom rows are rules across the full width; it has no side
-walls. The viewport is (W-2)×(H-2), from 1-1, leaving a blank column
-either side (the right one takes a vertical scrollbar, see
-`scroll(Size, Offset, Content)`). The whole frame is cleared before
-rendering.
+A W×H frame (Size being W-H): rules above and below, no side walls, and
+Contents clipped to the (W-2)×(H-2) inside, from 1-1. It covers what is
+under it.
 */
 tui:alias_drawable(frame(W-H, Contents), frame(W-H, Contents, _)).
 
 /*<tui> frame(Size, Contents, Extent)
-As `frame(Size, Contents)`; Extent is unified with the MaxX-MaxY of the
-content (useful for scrolling).
+As `frame(Size, Contents)`, with Extent unified with the furthest cell
+Contents draws, MaxX-MaxY.
 */
 tui:alias_drawable(frame(W-H, Contents, Extent), [clear(W-H), Top, Bottom, Port]) :-
     (  W > 1, H > 1
@@ -230,9 +216,8 @@ tui:alias_drawable(frame(W-H, Contents, Extent), [clear(W-H), Top, Bottom, Port]
     Port = 1-1-port(PW-PH, Contents, Extent).
 
 /*<tui> titled_frame(Size, Title, Contents)
-A frame (see `frame(Size, Contents)`) with Title in its top rule, from
-its first column, underlined and cut off at the frame's edge. Title is
-any drawable.
+A frame (see `frame(Size, Contents)`) with Title, any drawable, at the
+start of its top rule.
 */
 tui:alias_drawable(titled_frame(W-H, Title, Contents), titled_frame(W-H, Title, Contents, _)).
 
@@ -248,38 +233,24 @@ tui:alias_drawable(titled_frame(W-H, Title, Contents, Extent), [FramePart, Title
 '#scrolling'.
 
 /*<tui> scroll(Size, Offset, Content)
-A scrollable frame (see `frame(Size, Contents)`). Content is rendered
-in a W×H frame's viewport (Size being W-H), offset by Offset,
-ScrollX-ScrollY (each 0 or negative). On each axis where the content
-does not fit, a scrollbar shows its thumb, with half-cell resolution
-and no track: vertical in the frame's right column, horizontal in its
-bottom rule. With the cursor on a scrollbar, its thumb is solid: the
-half blocks fill the whole width of the column, or the whole height of
-the row. A scrollbar is a unit (`unit(Drawable)`): the cursor is hidden
-on it, and an arrow moves it out in one keypress.
+Content in a frame (see `frame(Size, Contents)`), scrolled by Offset,
+X-Y (each 0 or negative), with a scrollbar on each axis where it does
+not fit. A scrollbar is highlighted when focused, and is a unit (see
+`unit(Drawable)`).
 
-`shift+up`, `shift+down`, `shift+left` and `shift+right` drag what is
-under the cursor, as with a mouse:
+  - `shift+up`, `shift+down`, `shift+left` and `shift+right` drag what
+    is under the cursor: the content a row or column, or on a scrollbar
+    its thumb
+  - `page_up` and `page_down` scroll a page
+  - `mouse(scroll, Dir)` scrolls a row or column
 
-  - anywhere in the frame, the content, one row or column per press
-  - on a scrollbar, along its axis, the thumb, one half-cell per press
-
-`page_up` and `page_down` move by a page (the viewport's height less
-one row, at least one), anywhere in the frame. With the mouse (see
-app/5), `mouse(scroll, Dir)` scrolls the content a row or column at a
-time.
-
-Events produced:
-
-  - `scroll-(NewX-NewY)`, the new offset
-  - `noop` for an event that would move past the limits, so that it
-    does not bubble on
+Each becomes `scroll-NewOffset`; at the limits, nothing.
 */
 tui:alias_drawable(scroll(W-H, X-Y, Content), scroll_view(X-Y, MaxH-MaxV, PH, [FramePart | Bars])) :-
     HM1 is H - 1,
     WM1 is W - 1,
 
-    drawable_raw(frame(W-H, X-Y-Content, EX-EY), FramePart),
+    drawable_raw_extent(frame(W-H, X-Y-Content, EX-EY), FramePart, _),
 
     % The content's size: inside the frame its port starts at 1-1, and
     % the content is offset from there by X-Y.
@@ -307,36 +278,28 @@ tui:alias_drawable(scroll(W-H, X-Y, Content), scroll_view(X-Y, MaxH-MaxV, PH, [F
     append(HBars, VBars, Bars).
 
 /*<tui> scroll_view(Offset, Limits, PageHeight, Drawable)
-Draws Drawable. Meant for `scroll(Size, Offset, Content)`, which draws
-its frame and scrollbars with it, so that its events find, on the alias
-stack, what they need: Offset, the content's offset; Limits, MaxH-MaxV,
-how far the content can scroll on each axis (0 or positive); and
-PageHeight, the viewport's height. The events it takes are those of
-`scroll(Size, Offset, Content)`.
+Part of `scroll(Size, Offset, Content)`; not meant to be drawn directly.
 */
 tui:alias_drawable(scroll_view(_, _, _, D), D).
 
 /*<tui> vscroll(Drawable, Step)
-Draws Drawable, a vertical scrollbar. Meant for
-`scroll(Size, Offset, Content)`: on it, `shift+up` and `shift+down`
-become `thumb_dragged(Dir, Step)`, which the enclosing
-`scroll_view(Offset, Limits, PageHeight, Drawable)` turns into
-scrolling the content Step rows the other way. It is a unit
-(`unit(Drawable)`): the cursor is hidden on it, and an arrow moves it
-out in one keypress.
+Part of `scroll(Size, Offset, Content)`; not meant to be drawn directly.
 */
 tui:alias_drawable(vscroll(D, _), unit(D)).
 
 /*<tui> hscroll(Drawable, Step)
-Draws Drawable, a horizontal scrollbar. Meant for
-`scroll(Size, Offset, Content)`: on it, `shift+left` and `shift+right`
-become `thumb_dragged(Dir, Step)`, which the enclosing
-`scroll_view(Offset, Limits, PageHeight, Drawable)` turns into
-scrolling the content Step columns the other way. It is a unit
-(`unit(Drawable)`): the cursor is hidden on it, and an arrow moves it
-out in one keypress.
+Part of `scroll(Size, Offset, Content)`; not meant to be drawn directly.
 */
 tui:alias_drawable(hscroll(D, _), unit(D)).
+
+% These are aliases, not helpers, because events find components only on
+% the alias stack. scroll_view/4 is drawn around the frame and the bars,
+% carrying what the scroll's events need: the offset, Limits MaxH-MaxV
+% (how far the content can scroll on each axis, 0 or positive), and the
+% viewport's height. vscroll/2 and hscroll/2 are the bars, each a unit;
+% on one, Shift+arrows along its axis become thumb_dragged(Dir, Step),
+% which scroll_view/4 turns into scrolling the content Step rows or
+% columns the other way.
 
 % On a scrollbar, Shift+arrows along its axis drag the thumb by Step.
 tui:at_event_is(vscroll(_, Step), _-(shift+D), thumb_dragged(D, Step)) :-

@@ -253,7 +253,7 @@ row ...   ▝
 
 ## 6. Glyphs
 
-Unicode only. An ASCII fallback is listed in `TODO.md`.
+Unicode only. An ASCII fallback is listed in `ROADMAP.md`.
 
 | Element | Glyph |
 |---|---|
@@ -265,7 +265,7 @@ Unicode only. An ASCII fallback is listed in `TODO.md`.
 | Buttons | `┃label┃`, focused `▌label▐` |
 | Scrollbar thumb | `▐▝▗` / `▄▖▗`, focused `█▀▄` / `█▌▐` |
 
-**Ambiguous width.** `…`, `↵`, `⇥` and `▄▌▐` have ambiguous East Asian width. A terminal set to draw them double width (common in CJK locales) will misplace what follows them. The framework takes every character to be one cell wide (see `TODO.md`). Braille and the quadrants `▖▗▘▝` are always one column.
+**Ambiguous width.** `…`, `↵`, `⇥` and `▄▌▐` have ambiguous East Asian width. A terminal set to draw them double width (common in CJK locales) will misplace what follows them. The framework takes every character to be one cell wide (see `ROADMAP.md`). Braille and the quadrants `▖▗▘▝` are always one column.
 
 **Do not use:**
 - Nerd Font or Powerline (Private Use Area) glyphs.

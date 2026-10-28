@@ -5,6 +5,9 @@
 
 /** <module> Images
 
+The core alias `image(Id, Source, Size)`, documented under
+tui:alias_drawable/2. This module is internal.
+
 Images through the Kitty graphics protocol, using its Unicode
 placeholders: https://sw.kovidgoyal.net/kitty/graphics-protocol/
 
@@ -42,7 +45,7 @@ corrupted image; this cannot be detected.
 
 Only terminals supporting the Kitty graphics protocol show images; see
 `graphics(Bool)` in the `terminal_properties(Properties)` event.
-Elsewhere the placeholders show as unknown characters.
+Elsewhere its cells show as unknown characters.
 */
 tui:alias_drawable(image(Id, _, W-H), style([fg(R, G, B)], column(Rows))) :-
     must_be(between(1, 16777215), Id),

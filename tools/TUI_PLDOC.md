@@ -25,6 +25,19 @@ tui:alias_drawable(hover(Style, Term), hover(Style, Term, _Group)).
 - It stands immediately before the alias's first clause. An alias with
   several clauses (`row/1`) has one comment; aliases with the same name and
   different arities (`frame/2`, `frame/3`) have one each.
+- Write for the app author using the alias, not for whoever maintains it.
+  Say what they see, how it shows focus, and which events it takes and
+  what they become, as briefly as that allows. How the alias achieves
+  it (which attributes, glyph swaps, hover groups) belongs in plain `%`
+  comments by the code.
+
+  ```
+  A button, shown as ``┃Label┃``, highlighted when focused. A unit (see
+  `unit(Drawable)`).
+
+    - `' '`, `return` or `mouse(press, left)` become `button-pressed`
+  ```
+
 - The text is PLDoc wiki markup: paragraphs, lists, fenced code blocks.
   It is transcribed as written, so write it as the full documentation.
 - Single backticks make code only of text that reads as a Prolog term
@@ -46,8 +59,10 @@ tui:alias_drawable(hover(Style, Term), hover(Style, Term, _Group)).
 
   The exception is an alias drawn only so that events can find it:
   events reach components through the aliases on the alias stack, so it
-  must be an alias. Document it as public, and say which alias it is
-  meant for (as `scroll_view/4` says it is meant for `scroll/3`).
+  must be an alias. Document it in one line as part of the alias it
+  serves, as `scroll_view/4` is ("Part of `scroll(Size, Offset,
+  Content)`; not meant to be drawn directly."), and explain it in a `%`
+  comment by the code.
 
 - Never put a `%!` comment above an alias clause.
 

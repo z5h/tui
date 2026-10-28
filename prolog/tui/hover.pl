@@ -6,7 +6,12 @@
 
 /** <module> Hover
 
-Styling that applies when the cursor is over a component. Every cell of
+Styling that applies when the cursor is over a component: the core
+aliases `hover(Style, Term)`, `hover(Style, Term, Group)` and
+`unhovered(Style, Term, Group)`. They are documented under
+tui:alias_drawable/2. This module is internal.
+
+Every cell of
 one hover/2 instance shares an unbound group variable; binding it to
 true under the cursor turns the hover style on for the whole group.
 */
@@ -19,8 +24,7 @@ true under the cursor turns the hover style on for the whole group.
 '#component'.
 
 /*<tui> hover(Style, Term)
-Wrap Term with a hover highlight. When the cursor is over this
-component, Style attributes are applied.
+Draws Term, with the attributes Style added while the cursor is on it.
 */
 tui:alias_drawable(hover(Style, Term), hover(Style, Term, _Group)).
 
